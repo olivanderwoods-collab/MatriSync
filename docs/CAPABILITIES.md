@@ -1,28 +1,19 @@
-# Phase 1 capability inventory
+# Capability inventory — 22 October 2026
 
-| Capability | UI location | Status | Dependency for future activation |
-|---|---|---|---|
-| Role selection, route navigation, Back/Forward, reload | All roles | Working | None |
-| Guest start, reset, logout, session preferences | Public/auth/settings | Working; memory fallback disclosed | None |
-| Mother journey stages | Mother / My Journey | Working preview | Approved clinical/profile persistence scope |
-| Maternal records and child-specific tabs | Mother / My Health, My Children | Read-only synthetic preview | Authorized data model, provenance, consent |
-| Sample patient profiles and prescription layouts | Professional, Organization | Read-only synthetic preview | Professional verification, least-privilege records |
-| Email/password signup/login/restoration/logout | Auth screens | Configured implementation; successful live session unverified | Existing Firebase Auth project; no additional backend |
-| Light/Dark/System | Settings | Working | None |
-| Five preferred languages | Settings | Working selector; explicit English fallback | Reviewed bundled translations |
-| Public offline shell, update notice | Production build | Desktop browser offline test passed | Device/browser install acceptance |
-| AI companion / MatriSathi | Mother | Coming Soon; topic navigation works | Approved educational scope, content/model evaluation |
-| Documentation extraction / MatriBridge | Professional | Coming Soon; workflow preview | Source provenance, human review, approved service |
-| Referrals / MatriFlow / Patient Received | All roles | Coming Soon; example timeline and directions | Authorized handoff workflow, recipient access |
-| MatriWatch | Professional | Coming Soon; operational examples | Defined timers/recipients, validated operations |
-| Follow-up scheduling/reminders/completion | All roles | Coming Soon; reason/tests/date preview | Clinician input, approved delivery channels |
-| Drug/herb search, recognition, interaction reference | Professional / Drug Safety Assistant | Coming Soon; no answers or calculations | Reviewed sources/licensing; resolved clinical scope |
-| MatriVitals | Professional | Coming Soon | Device specifications, validation, data provenance |
-| MatriSync Bridge / MatriBand | Professional, Organization | Coming Soon; static device/workflow preview | ESP32 Bluetooth protocol, external NFC, encryption/trust |
-| Staff invite, verification, membership | Organization | Coming Soon | Verified affiliations and access model |
-| Uploads, edits, exports, search, merge/pairing | Relevant record screens | Coming Soon | Separately approved data/security design |
-| Live analytics, notifications, payments | Activity/future roadmap | Coming Soon | Separate scope and cost authorization |
+| Area | Working now | Remaining |
+|---|---|---|
+| Auth / Guest | Email/password Auth; synthetic Guest stays session-only, no service calls | Verified clinician/facility privileges and live-account acceptance |
+| Navigation | Latest mother/professional tab removals, exact More cleanup, compact language selector, merged Profile/Settings, Back and legacy redirects | Organization inventory remains its approved preview |
+| Private patients | Signed-in professionals can create, edit and search device-owned profiles | Shared access, consent, facility membership and clinical verification |
+| Documents | Encrypted on-device reports and prescription copies, original-byte download, source/date metadata; mother's own uploads | Cloud photo/report uploads deliberately disabled; backup/export and recovery UI |
+| Encryption | PBKDF2-SHA256 + AES-GCM; key in memory only; lock on idle, reload and account exit; atomic saves and stale-write rejection | Passphrase rotation/recovery and multi-device migration |
+| Firebase records | Structured-record encryption adapter, transactional concurrency checks, prototype owner-only Firestore rules tested locally | Live activation and backup/restore/conflict UI; no rules deployment |
+| MatriSathi | Topic browsing/search and draft medicine lookup in explicit testing build | Reviewed articles/video links, verified references, gated Gemini/Tavily connections and mic/camera recognition |
+| AI foundation | Optional Qwen worker, settings, separate usage views, independent safety routing and remote gates | Real-device/clinical/language validation; App Check and secure shared quota/proxy integration |
+| Clinical workflows | Existing labelled previews, uploaded prescription copies | Prescribing, clinical approval, referrals and follow-up scheduling |
+| Children / organization / distributor | Approved navigation and synthetic previews | Verified caregiver linkage, staff/stock/device/financial operations |
+| PWA | Static shell, consent-based update, offline Guest/reference tests; local upload tested offline in active account session | Real-device acceptance; no automatic cloud synchronization |
 
-No Supabase, Firestore, Realtime Database, Storage client, Functions, Analytics, Messaging, AI API, Bluetooth/NFC API, push, SMS, payments, or patient-data sync queue is initialized. Future buttons open an informational dialog; they never simulate success or request permissions. Fixture prescription/medication previews omit medicine names/doses, and report previews omit interpreted clinical values.
+Original artwork and exact Medical Green tokens are preserved. No paid services, cloud file uploads, clinical AI, hardware or payment connections were activated. Role selection cannot grant access to another account. Private uploads are stored as unverified source documents, not clinically interpreted or approved records.
 
-The full conceptual roadmap remains in the supplied Master Development Guide. This implementation stops at Phase 1. Unresolved: final tagline acceptance, reviewed translations, professional subroles, clinical content quality, competition acceptance of advanced drug/AI features, device specifics, and future follow-up delivery channels.
+See [Phased development](PHASED-DEVELOPMENT.md) and [storage design](FIRESTORE-MODEL.md) for explicit limits.

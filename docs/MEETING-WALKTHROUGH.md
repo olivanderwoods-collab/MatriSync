@@ -1,26 +1,17 @@
-# MatriSync · 11 am meeting walkthrough
+# MatriSync v2 meeting walkthrough
 
-## Open before the meeting
+Open http://127.0.0.1:5173/ for the development preview. If stopped, run `pnpm dev` from this `app` checkout. The production/offline preview is http://127.0.0.1:4173/ after `pnpm build` and `node scripts/serve.mjs`; `Start-MatriSync.ps1` launches the existing build on Windows. These are local URLs, not a deployed service.
 
-Use the running local preview at `http://127.0.0.1:5173/`. If it has stopped, run `pnpm dev` in this repository. For the production/offline build, run `Start-MatriSync.ps1` from PowerShell or `node scripts/serve.mjs`, then open `http://127.0.0.1:4173/`. This URL works on this computer; it is not a public site.
+Use Continue as Guest. All records are fictional and every future operation is labelled Coming Soon.
 
-Use **Guest** for the meeting. It is fully independent of account setup or cloud connectivity. Keep this browser tab open. Use Reset Demo before presenting if you have changed preferences. All people and dates are synthetic examples.
+1. Mother: Home has stage, unavailable recorded vitals, example follow-up/referral status, notifications and education. The six named shortcuts open the specified read-only areas.
+2. My Health: explore the eight internal sections. Missing measurements say Not recorded; medicines/reports contain no generated treatment or interpretation.
+3. MatriSathi: exactly Information & Education and AI Companion. Drug/herb reference is contextual; AI Companion explains reviewed sources, external lookup labelling, uncertainty and opt-in preferences. Buttons explain future functionality; no chat or lookup runs.
+4. Children: switch between Tara and Arun, open Reports and Medicines, and reload. Child records keep distinct identities. Vaccinations is only an informational placeholder.
+5. Professional: Home, Patients, Referrals, Follow-ups, More. Inside a patient, open Prescriptions for the planned reviewed reference workflow. Referrals shows clinical preparation, approval and submission to the organization; there is no professional Initiate Referral control.
+6. Organization: Home, Referrals, Patients, Inventory, More. Compare connected-facility acceptance/arrival/handoff/closure with External Referrals' paper, soft-copy and compact NFC package. No external live tracking is claimed.
+7. Inventory: review stock, issue, return/refund, damage, transfers, Bluetooth devices, financial records and history. All operations are informational only. The engraved asset ID is separate from patient/referral IDs and from the clinical NFC payload.
+8. More > Distributor Coordination: a restricted synthetic preview with Home, Stock, Transfers, Settlements, More. It contains no patient records and grants no actual entitlement.
+9. Preferences: Mother More > Appearance / Language / Privacy and Data Controls; Professional or Organization More > Settings. Show Light/Dark/System, English fallback, Reset Demo and Exit Guest.
 
-## Six-minute tour
-
-1. **Brand and roles (30 sec):** Show the supplied icon, Medical Green theme, and three role cards. Explain the goal: maternal care continuity from conceiving through parenting.
-2. **Mother/Caregiver (90 sec):** Continue as Guest. Show the overview, My Journey’s four selectable stages, and My Health’s record tabs. Open Tara’s test reports, then switch to Arun: the child name and record change together. Reload to demonstrate same-tab continuity.
-3. **Care coordination (45 sec):** Open Follow-up: doctor’s reason, required tests, and due date. Open Care journey: fictional sending/receiving facilities and handoff timeline. Click a future action to show its honest Coming Soon dialog.
-4. **Professional (90 sec):** Exit Guest, select Healthcare Professional, and continue as Guest. Open a sample patient, prescription preview, MatriBridge workflow, MatriFlow handoff, MatriWatch operational examples, Drug Safety Assistant reference tabs, and Bridge Manager. These are explanations and previews, not clinical engines.
-5. **Organization (60 sec):** Exit Guest, select Organization/Facility, and continue as Guest. Show staff verification preview, read-only patient records, incoming/outgoing referrals, follow-up, and device inventory.
-6. **Preferences and boundary (45 sec):** Switch Light/Dark/System and a preferred language. Point out the English fallback. Explain that the working milestone is navigation, Guest sessions, preferences, PWA shell, and configured account integration. All future services remain Coming Soon.
-
-## Honest answers
-
-- “Is this real patient data?” **No. All profiles and records are fictional, including after account sign-in.**
-- “Does the AI/Bridge work?” **These are workflow previews. No AI model, device connection, upload, or clinical interpretation is active.**
-- “Does the demo work offline?” **The production public shell does after its first online load. Account sign-in needs internet. Real-device install/airplane-mode acceptance is still pending.**
-- “Is it deployed?” **No. This is the local meeting build. Source synchronization is separate from publishing.**
-- “Does selecting Professional verify a doctor?” **No. Authentication proves account identity only; credentials and record authorization are future work.**
-
-Avoid showing live account signup as a confirmed feature until a successful end-to-end account session has been checked. The Firebase project is configured, but the meeting can proceed entirely through Guest.
+Working: UI navigation, read-only fixtures, temporary Guest sessions, preferences and the public offline shell. Existing Firebase Auth integration is preserved; successful real-account signup/login remains unverified. AI, clinical workflows, database writes, BLE/NFC, stock/finance operations and delivery/notifications are not active. Nothing has been deployed.

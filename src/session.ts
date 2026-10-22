@@ -16,6 +16,7 @@ export interface DemoSession {
   role: Role;
   theme: Theme;
   language: Language;
+  profile?: { name: string; photo: string };
 }
 export interface StorageLike {
   length: number;
@@ -34,8 +35,16 @@ export function valid(value: unknown): value is DemoSession {
     v.version === 1 &&
     roles.includes(v.role as Role) &&
     ["light", "dark", "system"].includes(v.theme as string) &&
-    languages.includes(v.language as Language)
+    languages.includes(v.language as Language) &&
+    (v.profile === undefined || validProfile(v.profile))
   );
+}
+export function validProfile(value: unknown): value is { name: string; photo: string } {
+  if (!value || typeof value !== "object") return false;
+  const p = value as Record<string, unknown>;
+  return typeof p.name === "string" && p.name.trim().length > 0 && p.name.length <= 80 &&
+    typeof p.photo === "string" && p.photo.length <= 250000 &&
+    (p.photo === "" || /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(p.photo));
 }
 export function createDemoStore(getStorage: () => StorageLike) {
   let memory: DemoSession | null = null;
@@ -68,6 +77,7 @@ export function createDemoStore(getStorage: () => StorageLike) {
           role: parsed.role,
           theme: parsed.theme,
           language: parsed.language,
+          ...(parsed.profile ? { profile: parsed.profile } : {}),
         };
       } catch {
         clear();

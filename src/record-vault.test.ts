@@ -1,0 +1,168 @@
+import "fake-indexeddb/auto";
+import { describe, expect, it } from "vitest";
+import { RecordVault } from "./record-vault";
+import { cloudRecords, patientInput, validatedDocument } from "./records-model";
+import { readVault, commitVault, VAULT_DB } from "./vault-storage";
+import { deriveVaultKey, newSalt, seal, unseal } from "./vault-crypto";
+const pass = "a separate test vault phrase";
+const authorize = async () => {};
+
+describe("encrypted device records", () => {
+  it("persists patients and original documents encrypted and survives reopening", async () => {
+    const uid = crypto.randomUUID();
+    const vault = new RecordVault(uid, authorize);
+    await vault.unlock(pass, true);
+    const id = await vault.savePatient({
+      name: "Private Patient",
+      birthDate: "2000-02-29",
+      history: "Confidential history",
+    });
+    const file = new File(
+      ["%PDF-1.7\nPrivate report contents"],
+      "Secret report.pdf",
+      { type: "application/pdf" },
+    );
+    await vault.addDocument(
+      id,
+      "reports",
+      file,
+      "Private Facility",
+      "2026-10-20",
+    );
+    const doc = vault.data!.documents[0];
+    const before = await vault.document(doc.id);
+    expect(new TextDecoder().decode(before.bytes)).toBe(await file.text());
+    const storage = await new Promise<unknown[]>((resolve) => {
+      const request = indexedDB.open(VAULT_DB);
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction(["files", "vaults"], "readonly");
+        const a = tx.objectStore("files").getAll();
+        const b = tx.objectStore("vaults").getAll();
+        tx.oncomplete = () => {
+          db.close();
+          resolve([a.result, b.result]);
+        };
+      };
+    });
+    for (const plaintext of [
+      "Private Patient",
+      "Private Facility",
+      "Secret report.pdf",
+      "Confidential history",
+      "Private report contents",
+      pass,
+    ])
+      expect(JSON.stringify(storage)).not.toContain(plaintext);
+    const cloud = JSON.stringify(cloudRecords(vault.data!));
+    expect(cloud).toContain("Private Patient");
+    expect(cloud).not.toContain("Secret report.pdf");
+    expect(cloud).not.toContain("documents");
+    expect(cloud).not.toContain(doc.id);
+    vault.lock();
+    expect(vault.data).toBeUndefined();
+    await expect(vault.document(doc.id)).rejects.toThrow("Unlock");
+    await expect(vault.unlock("wrong vault passphrase", false)).rejects.toThrow(
+      "Unable to unlock",
+    );
+    expect(vault.data).toBeUndefined();
+    await vault.unlock(pass, false);
+    expect(vault.data!.patients[0].name).toBe("Private Patient");
+    expect((await vault.document(doc.id)).bytes).toEqual(before.bytes);
+  });
+  it("rejects account substitution, tampering and exporting the encryption key", async () => {
+    const key = await deriveVaultKey(pass, newSalt());
+    await expect(crypto.subtle.exportKey("raw", key)).rejects.toThrow();
+    const bytes = new TextEncoder().encode("private");
+    const a = await seal(key, bytes, "owner:file:1");
+    const b = await seal(key, bytes, "owner:file:1");
+    expect(a.iv).not.toBe(b.iv);
+    expect(a.ciphertext).not.toBe(b.ciphertext);
+    await expect(unseal(key, a, "stranger:file:1")).rejects.toThrow();
+    await expect(
+      unseal(
+        key,
+        {
+          ...a,
+          ciphertext: `${a.ciphertext[0] === "A" ? "B" : "A"}${a.ciphertext.slice(1)}`,
+        },
+        "owner:file:1",
+      ),
+    ).rejects.toThrow();
+  });
+  it("does not overwrite concurrent changes or partially commit files", async () => {
+    const uid = crypto.randomUUID();
+    const one = new RecordVault(uid, authorize);
+    const two = new RecordVault(uid, authorize);
+    await one.unlock(pass, true);
+    await two.unlock(pass, false);
+    await one.savePatient({ name: "First change", birthDate: "", history: "" });
+    await expect(
+      two.savePatient({ name: "Stale change", birthDate: "", history: "" }),
+    ).rejects.toThrow("another tab");
+    two.lock();
+    await two.unlock(pass, false);
+    expect(two.data!.patients.map((p) => p.name)).toEqual(["First change"]);
+    const envelope = (await readVault(uid))!;
+    await expect(commitVault(uid, "stale", envelope)).rejects.toThrow(
+      "another tab",
+    );
+    expect(await readVault(uid)).toEqual(envelope);
+  });
+  it("checks account ownership again on every save and download", async () => {
+    let allowed = true;
+    const vault = new RecordVault(crypto.randomUUID(), async () => {
+      if (!allowed) throw Error("Account changed");
+    });
+    await vault.unlock(pass, true);
+    const id = await vault.savePatient({
+      name: "Owner",
+      birthDate: "",
+      history: "",
+    });
+    await vault.addDocument(
+      id,
+      "prescriptions",
+      new File(["%PDF-1.7\noriginal"], "original.pdf", {
+        type: "application/pdf",
+      }),
+      "",
+      "",
+    );
+    allowed = false;
+    await expect(
+      vault.savePatient({ name: "Unauthorized", birthDate: "", history: "" }),
+    ).rejects.toThrow("Account changed");
+    await expect(vault.document(vault.data!.documents[0].id)).rejects.toThrow(
+      "Account changed",
+    );
+    expect(vault.data!.patients).toHaveLength(1);
+  });
+  it("cancels an unlock that completes after a lock", async () => {
+    const vault = new RecordVault(crypto.randomUUID(), authorize);
+    const opening = vault.unlock(pass, true);
+    vault.lock();
+    await expect(opening).rejects.toThrow("locked");
+    expect(vault.data).toBeUndefined();
+    expect(await vault.exists()).toBe(false);
+  });
+  it("validates impossible dates and file signatures without claiming clinical verification", async () => {
+    expect(() => patientInput("Name", "2025-02-31", "")).toThrow();
+    expect(() => patientInput(" ", "", "")).toThrow();
+    await expect(
+      validatedDocument(
+        new File(["<script>evil()</script>"], "report.pdf", {
+          type: "application/pdf",
+        }),
+      ),
+    ).rejects.toThrow("content");
+    await expect(
+      validatedDocument(
+        new File(["%PDF-1.7"], "picture.jpg", { type: "image/jpeg" }),
+      ),
+    ).rejects.toThrow("content");
+    await expect(
+      validatedDocument(new File([], "empty.pdf", { type: "application/pdf" })),
+    ).rejects.toThrow("10 MB");
+  });
+});

@@ -5,8 +5,9 @@ import hooks from "eslint-plugin-react-hooks";
 export default ts.config(
   {
     ignores: [
-      '**/*.local.*',
+      "**/*.local.*",
       "dist/**",
+      ".local-tools/**",
       "node_modules/**",
       "test-results/**",
       "playwright-report/**",

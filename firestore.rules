@@ -1,0 +1,36 @@
+rules_version = '2';
+// Prototype model: recordOwners/{uid}/vaults/patients only.
+// Required: version=1, kind=patient-records, salt=24 base64 chars (immutable);
+// iv=16 base64 chars, ciphertext=24..700000 base64 chars, revision=UUID;
+// generation=1..1000000000 (increments by one), updatedAt=server timestamp.
+// No plaintext fields, list queries, roles, shares, attachments or deletes.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+    function isValidVault(d) {
+      let fields = ['version', 'kind', 'salt', 'iv', 'ciphertext', 'revision', 'generation', 'updatedAt'];
+      return d.keys().hasAll(fields) && d.keys().hasOnly(fields)
+        && d.version == 1 && d.kind == 'patient-records'
+        && d.salt is string && d.salt.size() == 24 && d.salt.matches('[A-Za-z0-9+/]{22}==')
+        && d.iv is string && d.iv.size() == 16 && d.iv.matches('[A-Za-z0-9+/]{16}')
+        && d.ciphertext is string && d.ciphertext.size() >= 24 && d.ciphertext.size() <= 700000
+        && d.ciphertext.matches('[A-Za-z0-9+/]+={0,2}')
+        && d.revision is string && d.revision.size() == 36 && d.revision.matches('[a-f0-9-]{36}')
+        && d.generation is int && d.generation >= 1 && d.generation <= 1000000000
+        && d.updatedAt is timestamp && d.updatedAt == request.time;
+    }
+    match /recordOwners/{uid}/vaults/patients {
+      allow get: if isOwner(uid);
+      allow create: if isOwner(uid) && isValidVault(request.resource.data) && request.resource.data.generation == 1;
+      allow update: if isOwner(uid) && isValidVault(request.resource.data)
+        && request.resource.data.salt == resource.data.salt
+        && request.resource.data.generation == resource.data.generation + 1
+        && request.resource.data.iv != resource.data.iv
+        && request.resource.data.revision != resource.data.revision;
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

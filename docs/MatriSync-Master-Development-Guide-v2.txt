@@ -1,0 +1,477 @@
+MatriSync — Master Development Guide v2.0
+Codex Update Specification for the Existing Application
+Date: 20 October 2026 (Asia/Kolkata)
+Supersedes: MatriSync_Master_Development_Guide(1).md v1.0 for product naming, referral ownership, user journeys, and UI/navigation.
+Reference repository: https://github.com/olivanderwoods-collab/MatriSync.git — verify against the actual connected checkout before making changes.
+Status: Product and UI update specification; not a claim that features are already built, clinically verified, regulatory-approved, tested, or deployed.
+Immediate authorization: Update/align the existing Phase 1 PWA's UI, role navigation, synthetic screen content, and documentation as specified below, while preserving already functioning code and original Phase 1 functionality. Do not activate future clinical/hardware/backend features merely because they are described here.
+CRITICAL INSTRUCTION FOR CODEX
+Do not invent or add ANY extra tab, navigation entry, section, dashboard card, quick-action button, form field, dialog action, feature, or user role that is not explicitly specified in this guide. Do not auto-populate screens using generic healthcare templates. Use the exact named menus and action inventories below. Shared accessibility and navigation controls explicitly permitted in §12.1 are the sole exceptions. If a requested screen is ambiguous, retain the closest existing implementation, document the ambiguity, and do not fabricate a decision. Do not begin future service/hardware/clinical implementation without separate explicit authorization.
+
+1. Instructions for Updating Existing Work — Read First
+1. Inspect, do not replace. Read the actual repository status, branches, config, tests, routes, styles, dependencies, and existing UI. The old v1 inspection reported a remote 404 at that time; this is historical only, not evidence of current repository state. Do not reinitialize, delete, recreate, or overwrite a working app.
+2. Preserve all working implementations, including login/signup, Firebase Authentication, role selection, synthetic Guest mode, PWA shell, theming, routes, and any user changes. Modify only where the new requirements expressly differ or where necessary for navigation consistency.
+3. Inventory first. Produce an existing-versus-target route/tab/action comparison; identify obsolete labels and duplicated features. Do not delete feature logic or data merely to remove an obsolete label. Retire obsolete UI navigation safely, and report any data migration issue before changing schemas.
+4. Maintain current Phase 1 scope: real functionality is limited to app UI/navigation, necessary state for those UI interactions, configured Firebase email/password Authentication, synthetic session-only Guest mode, light/dark/system settings and language selector, and public PWA app-shell offline support.
+5. All clinical records, AI answers, drug search/interactions, clinical data searches, report upload, referral initiation/acknowledgement, real device connections, inventory/finance transactions, cloud synchronization, messaging, reminders, and other Phase 2+ activities are Coming Soon in this update.
+6. Never imply success for a function that isn't implemented. Do not display fabricated live patient data, fake AI results, fake referral acknowledgements, fake NFC success, or fake stock reconciliation. Read-only fixtures should be prominently labelled Guest Demo · Synthetic data or Synthetic example.
+7. Do not upgrade Firebase, change project billing, add paid APIs, create backend collections, initialize Firestore/Storage, enable Cloud Functions, connect external AI, implement BLE/NFC, run payments, or deploy without separate authorization. No Supabase.
+8. Respect existing Git state: feature branch where appropriate, no force-push, no destructive resets, no credential leaks, no unrequested deployment. Run applicable build/typecheck/lint/tests. Report files touched, changes, issues, tests, and any unimplemented roadmap features. Verify pushes if push is authorized and possible.
+9. If current app functionality exceeds Phase 1 already, do not remove or disable it silently. Audit and report the discrepancy; avoid new mutations of sensitive functionality until specifically authorized.
+10. This guide is a source of truth for the new UI and product direction. Keep the old v1 technical safeguards wherever they do not conflict with v2. Where specifications conflict, the later confirmed v2 decisions take precedence.
+2. Precise Change Log — v1 versus v2
+v1 design / wording	v2 required direction	Action for Codex now
+MatriFlow, MatriWatch, MatriBridge, MatriVitals, MatriBand, MatriSync Bridge, separate branded Drug Safety Assistant	Use functional labels Referrals, Referral Monitoring, AI Documentation, Vitals, NFC Band, Bluetooth NFC Reader/Writer, Drug & Herb Information in context. Only MatriSync (platform) and MatriSathi (mother-facing area) remain names.	Rename UI labels/routes safely; avoid duplicate branded modules.
+Clinical professional starts operational referral	Doctor prepares/clinically approves; organization initiates and manages referral	Change read-only demo workflow and future authorization map.
+Generic receiving workflow	Two options: Connected facility (digital send, accept, arrival, handoff acknowledgement, closure) and External facility (doctor-approved paper + organized soft copy + compact NFC handoff, optionally destination named)	Update organization Referrals UI.
+AI documentation only generic OCR/transcription	AI-assisted source-preserving extraction, completeness checks, structured handoff drafts, revisions; clinician confirmation	Represent as planned, not working AI.
+Separate Drug Safety Assistant top-level screen	Mother: drug/herb education within MatriSathi Information; Professional: reviewed reference/interaction information within prescription workflow. No independent main navigation drug tab.	Remove duplicate UI navigation only.
+MatriSathi basic education/chat	Information & Education plus exclusive AI Companion, friendly conversation, reviewed sourced answers, clearly labelled external lookup, bounded consent-based preferences	Rework mother MatriSathi preview. No functional AI in Phase 1.
+Basic ESP32/NFC device preview	Facility-owned ESP32 BLE reader and writer, small screen/buttons, data-size/ready/verification states; app itself does not use device NFC	Update device preview; no hardware connections in Phase 1.
+NFC tag and device ownership noted	Three separate IDs: patient ID, referral ID, permanent printed/engraved band asset ID. Chip holds only essential encrypted clinical handoff; inventory ID stays outside clinical payload.	Update copy/data mockups.
+Little inventory detail	Facility device/band stock, issuance, returns, damaged stock, deposits/refunds, central distributor collection/reimbursement, redistribution	New specified organization Inventory and restricted distribution dashboard preview.
+Mother navigation ambiguous	Fixed five tabs: Home · My Health · MatriSathi · Children · More	Align UI exactly.
+Professional navigation ambiguous	Fixed five tabs: Home · Patients · Referrals · Follow-ups · More	Align UI exactly.
+Organization navigation ambiguous	Fixed five tabs: Home · Referrals · Patients · Inventory · More	Align UI exactly.
+Distribution role unspecified	Special verified organizational entitlement, not a public fourth signup role; nested distributor workspace: Home · Stock · Transfers · Settlements · More	Read-only preview only; no real new auth privilege.
+Conditional drug permission unresolved	Organizer verbally allows drug details/interactions conditional on proper professional validation/authorization. A group of doctors may review; review documentation to follow.	Show planned verified reference; never claim it is already verified/certified.
+Phase 1 guest and auth rules	Unchanged: Firebase Auth only; synthetic sessionStorage Guest; all future actions Coming Soon	Preserve existing behavior and constraints.
+Color palette	Unchanged exact Medical Green in §13	Preserve tokens, no unauthorized restyling.
+
+
+3. Product Definition and Names
+MatriSync is an AI-assisted, offline-first maternal and child healthcare continuity system. It aims to reduce loss or fragmentation of critical information and referral responsibility when care moves between healthcare professionals/facilities, including in low-connectivity settings. It also supports longer-term maternal/child records, clinician-scheduled follow-ups, and mother-facing education.
+Core problem: A physical referral slip may travel with a patient while advance communication, completeness, arrival acknowledgement, prior treatment context and feedback to the sending facility remain uncertain. Paper documents still matter and must not be discarded. MatriSync complements them.
+Retained name: MatriSathi — mother/caregiver-only educational and supportive area. The conversational subfeature is called AI Companion until specifically named later.
+Do not use MatriFlow, MatriWatch, MatriBridge, MatriVitals, MatriBand, or other proprietary sub-brand names anywhere in the visible UI, unless preserving an old source-code identifier temporarily is required to prevent breakage; if so, the visible label must use the v2 term and remaining internal renaming is documented.
+Provisional tagline: Every Mother. Every Step. — candidate only; trademark clearance and final approval not established. Store in one configurable brand constant. Do not state that it is registered or finalized.
+Safety boundary: AI and software assist with documentation, validated reference lookup, approved follow-up instructions and administrative workflow. Neither AI nor app autonomously diagnoses, selects treatment/hospital, prescribes medication, adjusts doses, generates clinical risk scores, or makes clinical decisions. Patient-specific interaction alerts need documented approval, validation and applicable regulatory review before activation; renaming them “educational” does not negate their clinical-decision-support character.
+4. Roles, Identity and Access
+Three public role families only:
+1. Mother / Caregiver — own authorized health information, linked child profiles, follow-ups and MatriSathi; never facility inventory controls.
+2. Healthcare Professional — verified future clinician/worker functions; medical records, clinician-authorized prescriptions, professional approval of referral package. Exact doctor/nurse/ANM/ASHA privileges must be implemented through future approved verified credentials, not role-picker trust.
+3. Healthcare Organization — verified facility staff/operations: referral initiation and receiving workflow, facility patients (authorized view), staff management, NFC stock, device inventory, refunds and transactions; no automatic clinical editing rights.
+Distribution Management is a restricted organizational capability, not a fourth public role choice. It can be previewed from Organization > More for the synthetic demo; production access requires verified distributor entitlement and cannot be granted from a public role selector.
+Auth account UID ≠ clinical Patient ID ≠ Referral ID ≠ engraved NFC band Inventory ID. Child IDs must be distinct from mother IDs; patient-entered information is distinguished from professionally verified records.
+Phase 1: role choice selects only a synthetic demonstration workspace. Firebase account creation authenticates identity, not a clinician license, hospital affiliation, or access to patient records.
+5. Locked Top-Level Navigation (Mobile)
+Use exactly these five bottom tabs, in this exact order. All secondary areas appear within these tabs or under More, not as additional sixth/seventh bottom tabs. Desktop sidebars show the same information architecture, with nested entries as listed below; do not create extras.
+Role	Tab 1	Tab 2	Tab 3	Tab 4	Tab 5
+Mother / Caregiver	Home	My Health	MatriSathi	Children	More
+Healthcare Professional	Home	Patients	Referrals	Follow-ups	More
+Healthcare Organization	Home	Referrals	Patients	Inventory	More
+Restricted Distributor workspace	Home	Stock	Transfers	Settlements	More
+
+
+Global shell: MatriSync brand, page title, non-misleading online/offline indication, notifications entry if present in the approved role menu, user/account entry through More; do not create a large duplicated header action bar. Mobile bottom navigation; desktop sidebar. Rounded, restrained clinical-green cards and accessible layout. Use read-only sample data; label it clearly. Home cards must only show information explicitly listed in the respective role definition.
+5.1 Mother / Caregiver — Exact UI Inventory
+Bottom tabs: Home | My Health | MatriSathi | Children | More.
+Home — information cards
+- Greeting/profile and My Journey stage: preconception, pregnancy (week if documented), postpartum, parenting as relevant.
+- Latest recorded vitals: BP, pulse/heart rate, SpO2, temperature, weight only when a recorded sample exists. Show date/source and Not recorded otherwise. Do not classify mock vitals as clinically normal/abnormal.
+- Upcoming clinician-entered follow-up/visit, most recent referral status, important notifications and educational suggestions.
+- Only Home quick-action labels: View Health Record, View All Vitals, My Reports, Follow-ups, Track Referral, Open AI Companion. These navigate to existing read-only destinations/Coming Soon previews; do not add extra shortcuts.
+My Health — internal sections and action labels
+Internal section	Display	Allowed actions
+Overview	Identity, pregnancy/stage, latest authorized records	View Details
+Vitals	Timestamped recorded values/trends	View Trend
+Medical History	Maternal, pregnancy, known allergies/conditions	View Details
+Medicines	Prescribed medication history	View Prescription
+Reports	Issued tests with source/date	Open Report, Download Document
+Visits	Consultation record	View Details
+Referrals	Active/previous handoff status	View Referral
+Follow-ups	Doctor-entered reason/tests/date	View Details
+
+
+Share with Authorization is a Coming Soon action in an authorized record context, not a global share button. No patient-driven clinical editing controls in this phase.
+MatriSathi — exactly two internal sections
+1. Information & Education — topic browsing/search, maternal education (preconception, pregnancy, food/nutrition, sleep, postpartum, breastfeeding, newborn/childcare, wellbeing); drug, herb and interaction reference is integrated here. Future curated YouTube links live in topic details. Allowed future action labels: Search Topics, Browse Categories, Read Article, Related Topics, View Source, Watch Video, Ask AI Companion. Drug/Herb lookup uses the section's contextual search, not a separate global tab.
+2. AI Companion — warm, friendly ordinary conversation; positive but non-dismissive support; sourced general educational answers; normal chat; reviewed local reference first. Online external lookup only when available and must explicitly say External information — Not MatriSync-verified, display links and uncertainty, and recommend clinician review for clinical decisions. If knowledge unavailable, admit uncertainty—do not hallucinate. Bounded opt-in personalization may learn language, tone, response length and topics, not alter medical facts or secretly profile mental health. Future action labels: New Chat, Ask Question, Explore Topic, View Sources, Search Online, Personalization Settings, Reset Preferences, Chat History. No actual AI/chat model in Phase 1.
+No standalone mother Drug Safety Assistant, Drug Information, or third MatriSathi tab. AI Companion is exclusive to the Mother/Caregiver workspace, not a professional/organization chat assistant.
+Children — internal sections
+- Child selector/list with two separate synthetic child profiles for the Guest demo; no fabricated linkage of clinical records.
+- Within a child: Overview, Vitals, Medical History, Vaccinations (future informational placeholder only, not an implemented immunization scheduler), Medicines, Reports, Visits, Follow-ups.
+- Allowed actions: Switch Child, View Health Record, View Reports, View Medicines, View Follow-up, View Education. New child creation/editing remains Coming Soon; no buttons invented to perform it unless later approved.
+More — exact menu
+My Referrals, Appointments & Follow-ups, Notifications, My Documents, Connected Accounts and Permissions, Language, Appearance, Privacy and Data Controls, Help and Support, Profile Settings, Log Out.
+An issued band may have read-only return/deposit status within the relevant My Referrals detail, not a facility inventory tab.
+5.2 Healthcare Professional — Exact UI Inventory
+Bottom tabs: Home | Patients | Referrals | Follow-ups | More.
+Home — cards and quick actions
+Cards: assigned patients, recent consultations, pending notes, referrals awaiting clinical approval, AI draft reviews, scheduled follow-ups, facility notices, and sync state. Only quick actions: Find Patient, Register Patient, New Consultation, Prepare Referral, Review AI Drafts, Today's Follow-ups.
+Patients — list and profile
+- Patient list shows patient name, clinical ID, recorded age/pregnancy stage if present, last encounter, assigned facility and record availability.
+- Allowed list actions: Search Patient, Register Patient, Open Profile, New Consultation, Find Possible Duplicates.
+- Patient profile internal sections and buttons:
+Internal section	Allowed UI controls
+Overview	New Consultation, Edit Authorized Fields
+History	Add History, Review Record
+Vitals	Record Vitals, View Trends
+Reports	Add Report, View Original, Verify Source
+Prescriptions	Create Prescription, Review Interactions
+Visits	New Visit, Add Clinical Notes
+Referrals	Prepare Referral, View Status
+Follow-ups	Schedule Follow-up, Review Status
+
+
+Prescription subflow (future): Add Medication, Search Reviewed Database, View Medicine Information, Review Interactions, Save Draft, Review & Authorize Prescription. This is where professional drug/herb reference checking belongs; no extra main Drug Safety tab.
+Referrals — clinical preparation/approval only
+Sections: Draft Referrals, Pending Clinical Review, Approved Referrals, Submitted to Organization, Initiated Referrals (read-only status), Completed Referrals, Returned for Correction.
+Allowed buttons: New Referral, Attach Report, Check Completeness, Generate Summary, View Sources, Edit Draft, Save Draft, Approve Referral, Submit to Organization.
+Workflow: select patient → clinician enters referral reason/history/reports/treatment → AI-assisted documentation completeness preview → professional reviews/corrects → approves referral → submits to facility operations. The professional does not press Initiate Referral to send it to another facility. Emergency referral must not be blocked by optional missing fields. All actual workflow actions Coming Soon this milestone.
+Follow-ups
+Sections: Today's Follow-ups, Upcoming, Overdue, Completed, Patient Instructions, Required Investigations.
+Allowed buttons: Create Follow-up, Select Patient, Enter Reason, Add Required Tests, Set Date, Set Reminder, Mark Reviewed, Mark Completed. Doctor specifies why/what/when; app does not infer clinical tasks.
+More — exact menu
+Prescriptions, Reports and Investigations, Vitals Monitoring, AI Documentation Reviews, Bluetooth NFC Device Manager, Referral History, Notifications, Professional Verification, Facility Affiliation, Profile, Settings, Help, Log Out.
+Bluetooth NFC Device Manager planned controls: Connect Device, Device Status, Prepare NFC Handoff, Read NFC Handoff, Verify Transfer, Transfer History — preview only now. No phone-native NFC API and no active Web Bluetooth during Phase 1. Only authorized clinical handoffs; don't let an unapproved professional issue a handoff.
+5.3 Healthcare Organization — Exact UI Inventory
+Bottom tabs: Home | Referrals | Patients | Inventory | More.
+Home
+Cards: outgoing referrals pending action, incoming requests, accepted referrals awaiting arrival, arrivals awaiting clinical handoff acknowledgement, other pending administrative work, available bands, low stock, reader/writer status, refunds/settlements pending. Only quick actions: Initiate Referral, Incoming Referrals, Confirm Arrival, View Patients, Issue NFC Band, Return Band, View Inventory.
+Referrals — operational coordination
+Subsections: Ready to Initiate, Outgoing, Incoming, Awaiting Acceptance, In Transit, Arrived, Completed, External Referrals.
+Allowed actions: Select Approved Referral, Initiate Referral, Choose Destination, Send Digitally, Generate Documents, Prepare NFC Handoff, View Status, Record Verified Update.
+Route A — Connected Facility: after doctor's approval, authorized sending organization chooses destination and sends approved referral; receiving organization can Review Referral, Accept Referral, Decline with Reason, Contact Sending Facility, Confirm Patient Arrival, Acknowledge Handoff, Record Outcome. Referral accepted ≠ patient arrived ≠ clinical handoff acknowledged ≠ closed. When appropriately authorized, patient-facing status mirrors updates once delivered/synced.
+Route B — External / Non-participating Facility: facility generates clinician-approved AI-organized referral (paper), complete approved soft-copy package and compact clinical NFC handoff; may name intended destination. Print hard copy and hand to patient party; share soft copy using an authorized secure channel if they have a phone. No automatic acceptance/arrival confirmation from outside facilities; verified manual/telephone updates may be recorded. Do not show fake live tracking.
+AI document creation is source-linked, subject to clinician final verification; don't say AI clinically validates reports. In Phase 1, buttons are informational Coming Soon, not actual PDF generation, export, messages, NFC writing or network sends.
+Patients
+Facility-associated patient overview and authorized operational records only. Allowed actions: Find Patient, View Record, View Visits, Referral History, Assigned Professional. No organization-level autonomous editing of clinical prescriptions or diagnoses.
+Inventory
+Subsections: NFC Band Stock, Issue Band, Return Band, Defective Bands, Stock Transfers, Bluetooth Devices, Financial Records, Inventory History.
+Inventory subsection	Exactly allowed future controls
+NFC Band Stock	View Stock, Add Received Stock, Request Stock
+Issue Band	Enter Band Code, Record Issue, Record Deposit
+Return Band	Enter Band Code, Inspect Condition, Record Return, Process Refund
+Defective Bands	Report Damage, Send for Replacement, Retire Band
+Stock Transfers	Request Transfer, Transfer Surplus, Confirm Receipt
+Bluetooth Devices	Register Device, Assign Device, Report Fault
+Financial Records	View Deposits, View Refunds, Reimbursement Claims
+Inventory History	View Transactions, Export Report
+
+
+Physical printed/engraved Band Inventory ID is used for stock/deposit/return/refund; never read clinical NFC content to run the inventory process. Record ID, model/batch, facility, status, condition, issue/return, refund and distributor settlement as future conceptual records; do not create actual schemas in Phase 1. Functional returned bands require clearance, hygiene checking and verification before reuse; damaged/defective bands go to replacement or retirement.
+More — exact menu
+Staff Management, Professional Verification, Facility Profile, Device Management, Reports and Analytics, Referral Monitoring, Follow-up Operations, Distributor Coordination, Financial Settlements, Notifications, Settings, Help and Support, Log Out.
+Staff Management (future buttons): Invite Staff, Verify Affiliation, Assign Permissions, Suspend Access, View Activity History. No permission is granted by simply tapping demo controls.
+5.4 Restricted Distribution Management UI
+Not a public role. Available only as a synthetic preview nested inside Organization > More > Distributor Coordination in Phase 1. Future production access needs separate verified entitlements. The distributor cannot see patients, clinical handoff content, or referral medical data.
+Exactly five distributor workspace tabs: Home, Stock, Transfers, Settlements, More.
+Tab	Content	Allowed buttons
+Home	Facility stock levels, shortages, returns, outstanding reimbursements	View Shortages, Review Requests
+Stock	Bands by model/batch/condition, warehouse stock, devices, returns	Add Stock, Assign Stock, Inspect Returns
+Transfers	Replenishment, surplus requests, shipment and collection tracking	Approve Transfer, Dispatch, Confirm Delivery
+Settlements	Refund reimbursement requests and reconciled payouts	Verify Claim, Approve Reimbursement, Mark Settled
+More	Partner facilities, damaged stock, reports, preferences	Manage Facilities, Export Report
+
+
+Settlement model: participating return facility refunds the patient where applicable; distributor collects returned bands and reimburses facility for valid reconciled claims. Record prevention of duplicate refund/claims, offline pending state and responsibility for logistics/defective bands before production. Government/NGO-issued bands can be free to patient; private deposit target equals manufacturing cost. These policies are proposed and untested, not operational legal/financial guarantees.
+6. Exact Clinical Referral & Information Workflows (Future, Not Live Yet)
+6.1 Doctor-side clinical preparation
+1. Verified doctor assesses patient, captures reason, relevant medical/pregnancy history, prescriptions/treatments, vital observations and supporting reports.
+2. AI drafts structured referral and checks missing/unclear/inconsistent documentation. It cites original reports with time, units, source and author, and flags unknowns. It does not decide treatment or destination.
+3. Doctor reviews and approves; preserve audit/version history. Clinical decisions are never silently replaced by an AI draft. Urgent transfer remains possible when fields are unavailable.
+4. Approved package enters organization's Ready to Initiate queue.
+6.2 Connected-facility operational referral
+1. Sending organization selects approved package, picks permitted destination, and initiates digital transfer.
+2. Receiving facility accepts/declines with a reason where authorized. Pre-arrival awareness requires connectivity or another communication path.
+3. Patient arrives; authorized staff verify identity and record arrival.
+4. Clinical handoff reviewed and acknowledged as a separate event; professional controls clinical decisions.
+5. Referral closure/outcome documented; sending facility and authorized patient profile show synced status. Pending/in-transit statuses are not proofs of patient location. Distinguish server-synced events from local pending events.
+6.3 External/non-participating destination referral
+1. After clinical approval, organization prepares comprehensive printed hard copy, complete organized digital soft copy, and essential NFC handoff.
+2. Paper goes to patient/caregiver; authorized digital copy sent only if family has a phone and a suitable secure route. Patient smartphone not required.
+3. Facility uses approved BLE ESP32 read/write device to write essential handoff and verify read-back. NFC band does not store the full report, PDF or historical record.
+4. Patient transports documentation. A hospital without MatriSync and without reader equipment can still use paper/soft copy.
+5. No fabricated acceptance/arrival statuses. Document verified follow-up by phone/other channels when legitimately available.
+6.4 Repeat investigations and trust
+- Store original issuing laboratory/hospital, collection/report dates, units, source attachments, professional verification and updated versions.
+- Show previous results to the receiving professional. Never guarantee a receiving facility will accept prior reports or prevent medically necessary repeat tests. Repeat decisions remain clinical.
+6.5 Handoff readiness and responsive updates
+- Handoff document completeness checklist and clinician approvals; sensitive fields may be unavailable with explicit acknowledgement. Never stop emergency care solely for form completion.
+- If a document changes, mark the previously prepared summary/version as potentially outdated and require review and re-approval.
+- Offline handoff and remote network acknowledgement are separate, with clear local and server status.
+7. NFC Device, Tags and Inventory Architecture (Future)
+Facility-owned Bluetooth NFC Reader/Writer: proposed ESP32 MCU with BLE, compatible NFC read/write module, small screen, physical controls and portable power. The app/web communicates by BLE where available; browser Web Bluetooth is platform-limited; native adapter needed for broader supported devices. ESP32 receives compact encrypted payload, shows size/ready, writes tag after physical confirmation, reads back to verify and returns success/error to app. It also reads authorized tags and transfers encrypted payload to app for review/decryption. Do not include direct NFC phone APIs in the app.
+Patient-carried NFC band: passive, no battery, issued by facility. Only compact essential encrypted clinical handoff resides in the writable clinical NFC payload, sized to tag capacity. It may contain minimal necessary patient identification, patient clinical ID, referral/handoff ID, approved urgent history/warnings and metadata. Not entire history or PDFs. The asset serial is printed/engraved on the outside only and is not put into the clinical payload. Permanent asset ID is never a permanent patient ID.
+Separate identities:
+- patient_id: stable clinical person identity.
+- referral_id: a particular care-transition/handoff.
+- band_asset_code: durable printed/engraved physical identifier for stock; no clinical meaning.
+Band lifecycle: manufacture/receive → warehouse/facility stock → issue and optional deposit → clinical use → return at participating facility → condition check and refund where applicable → distributor collection and facility reimbursement → secure erase/reinitialize + hygiene verification → reuse OR replace/retire. Stock may move between surplus and shortage facilities through authorized transfers and central distributor oversight; transaction ordering/reconciliation must survive offline queued events.
+Safety before clinical rollout: per-facility offline decryption/authorized keys, data minimization, tag capacity and write endurance, cryptographic integrity and freshness, lost band/device response, reuse clearance, infection control, device authentication and BLE pairing, patient matching, audit, refunds and fraud safeguards. These are not implemented in Phase 1.
+8. MatriSathi Knowledge and AI Companion (Future)
+Mother/Caregiver only. Two nested sections: Information & Education and AI Companion.
+- Reviewed, versioned knowledge: maternal health before/during/after pregnancy, everyday food/sleep questions, breastfeeding, parenting, child education, drug and herbal reference and reviewed interactions. Topic search/filter/browse, source links; later curated YouTube links. A doctor-reviewed database is planned but not yet validated/approved.
+- Companion: conversationally warm, supportive, normal chatting, encouragement and non-dismissive help with stress/tension. Do not claim psychotherapy or replace clinicians/human support. If serious distress/urgent signs arise, encourage suitable human/professional help rather than superficial positivity.
+- Retrieval sequence: search reviewed internal source → answer from citation-backed content if supported → if absent and online, offer clearly labelled external search with exact source URLs and warning External information — Not MatriSync-verified → if uncertain, say information cannot be established. Avoid invented medical facts and unsupported dose/prescription recommendations.
+- Medication/brand outside local database: optional external search clearly flagged unverified by MatriSync; absence of known interaction record must never mean proven safe.
+- Personalization: opt-in bounded preferences only (language, tone, length, topics), reset/delete possible; no uncontrolled continual training, no updating clinical facts from conversations, no undisclosed mental-health profiling.
+- Future offline on-device model target on at least a 4 GB RAM device was discussed; compatibility, latency, safety, language, model license and thermal/battery performance require testing. No actual offline AI or downloaded model in Phase 1.
+9. Clinical Records, Doctor-entered Follow-ups, Drug Content (Future)
+- Longitudinal maternal pregnancy/medical history, allergies, observations, prescriptions, reports, author/source dates, clinician verification, referral history and separate mother/child contexts. Children have distinct patient identities and separate visits/medications/reports. Linkage/duplicate checks require explicit professional confirmation.
+- Follow-ups: clinician enters reason, which tests, and date/time; app schedules/displays/tracks that instruction, never invents care requirements. Notifications/reminders are future only.
+- Reviewed drug reference and interaction rules are planned, with documented sources, reviewers, versions, approval process and change control; generic/brand/herb references where supportable. The prior draft 162-drug catalogue and pairwise interaction work were not independently inspected or medically validated by this guide. Do not import or run them in Phase 1.
+- Organizer feedback reported by user: drug/interaction modules may be allowed subject to validation/authorization; the proposed reviewer group consists of doctors. Do not state that a government board has endorsed data; do not claim it is already verified before formal review. Use Planned reviewed database in UI previews.
+- MatriSathi presents accessible educational information; clinician's prescription workflow may later consult professional reference rules with separately approved clinical-safety requirements.
+- Source provenance, original files, timestamps and corrections must be preserved. Repeat testing is clinician-directed; prior results are not automatically accepted.
+10. PWA, Offline and Future Mobile Architecture
+Present scope: React/TypeScript responsive PWA (or current repo framework if already implemented), Firebase Authentication, static public PWA shell with manifest/service worker, synthetically seeded Guest views. Cached shell offline does not mean real records work offline, and cached UI never makes online login work without internet. No real sync engine yet.
+Future design only: platform-neutral data service/adapters; encrypted IndexedDB locally on browsers where appropriately supported; controlled record access; SQLite/native adapter for Capacitor mobile app; secure operation queue and conflict resolution; BLE Web Bluetooth adapter for supported browsers and native BLE adapter for packaged Android app; Firebase as eventual authorized synchronization backend, not a prerequisite for local critical work. Browser storage durability limitations must be tested. No forced native migration now.
+Every status must be truthful: Saved on this device, Pending sync, Synced only when server acknowledged, Conflict / Action required. A locally sent NFC handoff is not automatic digital hospital acceptance. Do not display synthetic sync as real sync.
+11. Phase 1 Implementation Boundary (Still Binding)
+11.1 Functions allowed NOW
+- Responsive role-selection screen for exactly three public roles, plus login/signup/navigation/logout.
+- Working email/password Firebase Authentication only where already configured and permissioned; preserve existing implementations.
+- Guest option for each public role, read-only synthetic records, role-specific routes, dialogs, child selection, page/back/forward/refresh, error/not-found recovery.
+- Exact Medical Green light/dark/system appearance and selector for English (default), Bengali, Kannada, Hindi, Marathi; honest fallback to English for untranslated content.
+- Public app-shell caching for offline static interface/fixtures, as already planned. No caching secrets or clinical records.
+- All future-feature navigation goes to meaningful previews labelled Coming Soon rather than blank pages.
+- UI alignment to §§5–9; no new real backend integration.
+11.2 Explicitly forbidden NOW (without new explicit user approval)
+- Firestore/Realtime Database/Cloud Storage/patient profile writes; authenticated patient record linkage.
+- Real patient data, upload/download, OCR/extraction, patient or drug search, prescription saving, interaction evaluation, any AI generation, AI model downloads, external searches.
+- Actual referral creation/transmission/acceptance/arrival/closure; PDF export; report document generation; notifications/reminders/messages or SMS.
+- Actual BLE/NFC connection/scan/write/read, firmware, real vitals sensor ingestion.
+- Band issuance, inventory mutations, deposit/refund transactions, distributor reimbursement, supply moves or payment integration.
+- New authentication providers, organization credential verification claims, hospital permissions, regulated medical decision tools.
+- Supabase, billing upgrades, paid API calls, new Firebase products, unrequested deployment.
+Coming Soon UI rule: All future action buttons/menus open a clearly described informational state, or remain disabled with a nearby readable explanation. Never simulate a successful operation. Suggested text: Coming Soon — This feature is planned for a future release and is not active in this demo. Navigation among read-only synthetic pages is functional.
+11.3 Guest mode — exact continuation
+- No Firebase anonymous Auth. Guest state completely independent from Firebase Authentication.
+- User selects one of 3 public roles, then Continue as Guest.
+- Synthetic sample patients/facilities; always label Guest Demo · Synthetic data; no personal/medical data entry and no upload.
+- Guest state and preferences only namespaced sessionStorage and memory (matrisync.demo.v1 is a suggested namespace). No Guest writes to Firestore, localStorage, IndexedDB, cookies, analytics, persistent service-worker data cache or other cloud endpoint.
+- Preserve across same-tab navigation/reload; ordinary new tab is a separate session; don't intentionally clone state between tabs.
+- Exit Guest/Log Out removes Guest keys and memory and goes to role selection; Reset Demo reseeds fixtures. Switching Guest → real account clears Guest data. Browser restore can retain prior session; never promise secure deletion on tab close.
+- If sessionStorage blocked/corrupted, disclose persistence failure and allow limited in-memory navigation only.
+- Guest entry should not call Firebase services. Login/signup only initializes the necessary already approved Auth behavior.
+11.4 Firebase Authentication — exact continuation
+- Firebase Auth modular web integration, email/password only; use established safe auth-state observer, loading/errors/sign out, session persistence on shared demo devices if already approved.
+- No phone/SMS auth, SAML/OIDC, fake professional claims, Firestore profile auto-creation, Supabase. Auth UID is not clinical Patient ID.
+- Do not expose tokens/secrets in repo, documentation, screenshots or console logs. Placeholder env example only; don't expose local .env contents.
+- If Firebase config is missing, offer honest auth setup needed state and keep Guest working. Do not change billing.
+12. Navigation/Buttons Governance and UI Quality
+12.1 Explicit exceptions to the no-extra-controls rule
+Only standard controls required to operate the specified UI are permitted without a separate feature decision: Back, Close, Cancel, Continue (within existing auth/demo flow), Confirm (only for non-clinical UI dialogs), Log In, Sign Up, Continue as Guest, Exit Guest, Reset Demo, Log Out, Return to Role Selection, Show/Hide Password, Retry for an existing auth/navigation error, and accessibility controls intrinsic to documented dialogs/forms. Browser Back/Forward works. Do not add unrelated CTA buttons, floating assistant buttons, generic dashboards, new quick-action chips or cards.
+12.2 Action rules
+- Exact action inventories from §5 apply. Reuse a listed action only in its specified context; do not duplicate it in multiple menus merely to fill space.
+- If an older implementation contains a button not authorized by §5, don't silently delete working logic; remove its new-nav placement or mark discrepancy and request approval if destructive removal/migration would be required.
+- If an internal section's detailed form fields were not specified, use an explanatory read-only panel and a Coming Soon action, not guessed clinical fields.
+- If a navigation item was listed under More, it should not also become an extra top-level tab or a floating action.
+- Single global brand and theme components. No renamed branded feature labels. Do not generate marketing claims, fake metrics, invented clinical risk indicators, pseudo-AI answers, or decorative controls.
+- Existing approved icon: use only if accessible and verified. Previous guide contained a visual inspiration reference, not proof of final logo. Do not invent/recolor another icon.
+12.3 UI presentation
+- Mobile: 5 bottom tabs per workspace; no side-scrolling sixth tab. Desktop: sidebar mirroring exact menu and internal sections.
+- Adequate spacing/contrast, focus/keyboard navigation, descriptive labels, 44px+ targets where practicable, reduced-motion and readable Indic-language fallbacks.
+- Read-only sample status uses source/time and conspicuous Synthetic example/Demo status. No made-up critical/normal clinical determination.
+- Home vitals display only explicitly available fixtures; if missing, Not recorded, never auto-populate with fabricated personal measurements or pretend real monitoring.
+- Don't display permanent band stock ID as Patient ID anywhere. Don't expose patient medical details in distributor screens.
+13. Exact MatriSync Medical Green Theme (Preserve v1 Values)
+13.1. Primary brand colours
+Component	HEX
+Primary Green	#059669
+Primary Hover	#047857
+Primary Pressed	#065F46
+Secondary Green	#10B981
+Light Green Accent	#D1FAE5
+Dark Green Accent	#064E3B
+Primary Button Text	#FFFFFF
+
+
+13.2. Light mode
+Component	Exact HEX
+Main Background	#F8FCFA
+Secondary Background	#F0FDF4
+Cards	#FFFFFF
+Elevated Cards	#F8FAFC
+Input Background	#F8FAFC
+Primary Colour	#059669
+Secondary Colour	#10B981
+Primary Text	#0F172A
+Secondary Text	#475569
+Muted Text	#64748B
+Borders	#E2E8F0
+Dividers	#E5E7EB
+Selected Navigation	#D1FAE5
+Modal Background	#FFFFFF
+Disabled Background	#E5E7EB
+Disabled Text	#94A3B8
+
+
+13.3. Dark mode
+Component	Exact HEX
+Main Background	#071510
+Secondary Background	#0B1F17
+Cards	#10271D
+Elevated Cards	#173529
+Input Background	#173529
+Primary Colour	#34D399
+Secondary Colour	#10B981
+Primary Text	#FFFFFF
+Secondary Text	#CBD5E1
+Muted Text	#94A3B8
+Borders	#254638
+Dividers	#1F3D30
+Selected Navigation	#173F30
+Modal Background	#10271D
+Disabled Background	#24382E
+Disabled Text	#64748B
+
+
+13.4. Medical status colours
+These colours will be consistent across MatriSync's maternal health records, referrals, alerts, and clinical dashboards.
+Status	Light Mode	Dark Mode
+Normal / Success	#059669	#34D399
+Information	#0284C7	#38BDF8
+Warning	#D97706	#FBBF24
+Critical / Emergency	#DC2626	#F87171
+Pending	#7C3AED	#A78BFA
+Inactive	#64748B	#94A3B8
+
+
+Clinical note: These are interface status colours. Maternal risk classifications must be determined by validated clinical criteria, not by the colours themselves.
+13.5. Buttons and interactive components
+Component	Light Mode	Dark Mode
+Primary Button	#059669	#34D399
+Primary Button Text	#FFFFFF	#052E20
+Secondary Button	#D1FAE5	#173F30
+Secondary Button Text	#065F46	#A7F3D0
+Destructive Button	#DC2626	#DC2626
+Destructive Button Text	#FFFFFF	#FFFFFF
+Input Focus Border	#059669	#34D399
+Active Toggle	#059669	#34D399
+Inactive Toggle	#CBD5E1	#475569
+Checkbox Selected	#059669	#34D399
+Navigation Active Icon	#059669	#34D399
+
+
+13.6. Transparency and overlays
+Component	Light Mode	Dark Mode
+Glass Background	rgba(5,150,105,0.06)	rgba(52,211,153,0.08)
+Glass Border	rgba(5,150,105,0.12)	rgba(52,211,153,0.15)
+Focus Ring	rgba(5,150,105,0.20)	rgba(52,211,153,0.25)
+Modal Overlay	rgba(15,23,42,0.60)	rgba(0,0,0,0.75)
+Card Shadow	rgba(15,23,42,0.06)	rgba(0,0,0,0.25)
+
+
+13.7. MatriSync-specific components
+Component	Light Mode	Dark Mode
+Patient Profile Card	#FFFFFF	#10271D
+Maternal Health Summary	#ECFDF5	#123629
+Antenatal Visit Card	#F0FDF4	#173529
+Referral In Progress	#FEF3C7	#453318
+Referral Completed	#D1FAE5	#173F30
+Emergency Alert Background	#FEF2F2	#451A1A
+Offline Indicator	#F59E0B	#FBBF24
+Synchronization Indicator	#0284C7	#38BDF8
+Successfully Synced	#059669	#34D399
+
+
+13.8 Theme implementation rules
+- Define semantic tokens once and use them across all roles, dialogs, navigation, forms, and empty states. Mode-specific component values take precedence over the generic brand defaults: dark primary-button text is #052E20, not white.
+- Preserve exact HEX/RGBA values, including transparency. Do not approximate with nearby framework defaults or recolour the brand to match a stock template.
+- Brand hover #047857 and pressed #065F46 are recorded; separate dark-mode hover/pressed colours were not supplied. Keep any dark interaction treatment documented and legible without inventing additional “confirmed” tokens.
+- Status colours identify interface states, not calculated maternal risk. Never infer diagnosis, urgency, or normality from mock measurements. Pair every badge with text and an icon or shape.
+- Validate contrast for each actual foreground/background combination. White on #059669 calculates to about 3.77:1: it does not satisfy a 4.5:1 normal-text target. Retain the exact palette; use sufficiently large bold primary-button labels (for example, 20 CSS px at bold weight) or an approved existing-token treatment. Do not claim universal accessibility based on the palette alone. Pale borders/focus rings may need a distinct solid outline from an existing darker token. See W3C contrast guidance for the normal/large-text distinction.
+- Disabled colours apply only to truly inactive controls. Keep the explanation and Coming Soon label readable with normal text tokens; do not hide important information in low-contrast disabled text.
+13.9 Layout and interaction specification
+The following are implementation specifications, not recovered exact design measurements:
+- Mobile-first layout; test narrow phones, tablets, and desktop. Use a sidebar on desktop and a compact bottom navigation plus a clearly labelled More menu on mobile.
+- Rounded cards, restrained shadows, generous whitespace, consistent icon family, clear hierarchy, and short readable labels. Avoid decorative effects that obscure clinical information.
+- Suggested spacing scale: 4, 8, 12, 16, 24, 32, 48 px. Suggested radii: 12 px controls, 16 px cards, 20 px dialogs. Keep these easy to change.
+- Use a legible system font stack with appropriate Indic-script fallbacks. Body text around 16 px; primary controls at least 44×44 CSS px. Preserve zoom and avoid horizontal page overflow.
+- Include keyboard navigation, visible focus, associated field labels, descriptive errors, dialog focus trapping and restoration, Escape dismissal where appropriate, reduced-motion support, and screen-reader announcements for important status changes.
+- Offer Light, Dark, and System appearance. Store Guest appearance and language choices within the same temporary session.
+14. Approved Route/Sitemap Implementation Rules
+Do not invent routes to match these names blindly. Preserve equivalent existing route patterns and change displayed labels; introduce only necessary missing UI routes. Use redirects for formerly public demo routes where safe rather than breaking bookmarks. The following is a logical sitemap, not a command to replace routing libraries:
+Public:
+  Role Selection [Mother/Caregiver | Healthcare Professional | Healthcare Organization]
+  Login / Sign Up / Continue as Guest / Help / Not Found
+
+Mother:
+  Home
+  My Health [Overview | Vitals | Medical History | Medicines | Reports | Visits | Referrals | Follow-ups]
+  MatriSathi [Information & Education | AI Companion]
+  Children [child selector > Overview | Vitals | Medical History | Vaccinations |
+            Medicines | Reports | Visits | Follow-ups]
+  More [My Referrals | Appointments & Follow-ups | Notifications | My Documents |
+        Connected Accounts and Permissions | Language | Appearance |
+        Privacy and Data Controls | Help and Support | Profile Settings | Log Out]
+
+Professional:
+  Home
+  Patients [patient list > Overview | History | Vitals | Reports |
+            Prescriptions | Visits | Referrals | Follow-ups]
+  Referrals [Draft | Pending Clinical Review | Approved | Submitted to Organization |
+             Initiated read-only | Completed | Returned for Correction]
+  Follow-ups [Today | Upcoming | Overdue | Completed | Instructions | Investigations]
+  More [Prescriptions | Reports and Investigations | Vitals Monitoring |
+        AI Documentation Reviews | Bluetooth NFC Device Manager | Referral History |
+        Notifications | Professional Verification | Facility Affiliation |
+        Profile | Settings | Help | Log Out]
+
+Organization:
+  Home
+  Referrals [Ready to Initiate | Outgoing | Incoming | Awaiting Acceptance |
+             In Transit | Arrived | Completed | External Referrals]
+  Patients
+  Inventory [NFC Band Stock | Issue Band | Return Band | Defective Bands |
+             Stock Transfers | Bluetooth Devices | Financial Records | Inventory History]
+  More [Staff Management | Professional Verification | Facility Profile |
+        Device Management | Reports and Analytics | Referral Monitoring |
+        Follow-up Operations | Distributor Coordination | Financial Settlements |
+        Notifications | Settings | Help and Support | Log Out]
+
+Restricted Distributor preview, nested via Organization > More > Distributor Coordination:
+  Home | Stock | Transfers | Settlements | More
+No independent AI Companion outside MatriSathi, Drug Safety Assistant top-level route, MatriFlow / MatriWatch / MatriBridge / MatriVitals branded route, NFC tag inventory under mother profile, or fourth public sign-up role.
+15. Acceptance Criteria for This Update
+Product wording and routes
+- [ ] Exactly three selectable public roles, with restricted distributor preview nested under Organization, not public registration.
+- [ ] Four exact five-tab layouts in §5, with no extra tab/buttons/cards/sections.
+- [ ] Old MatriFlow/MatriWatch/MatriBridge/MatriVitals/MatriBand/MatriSync Bridge visible names are replaced with functional titles. MatriSathi remains spelled correctly.
+- [ ] No redundant top-level Drug Information tab; mother drug/herb reference is under MatriSathi Information & Education; clinical medication review remains in prescription workflow.
+- [ ] Mother AI Companion appears only within MatriSathi. Its preview explains grounded/externally sourced/uncertain responses and controlled preference personalization; it does not actually answer in Phase 1.
+- [ ] Doctor/referral view demonstrates preparation and approval; organization view demonstrates initiation and routing. External route never claims live acknowledgement; connected route distinguishes acceptance, arrival, handoff and closure.
+- [ ] Print/digital/NFC handoff roles clearly shown; chip clinical info minimal and asset ID external; band return/reimbursement/stock flows and restricted distributor previews visible.
+Functionality, security and fidelity
+- [ ] Existing working auth and Guest behavior preserved; no new backend services or cost exposure.
+- [ ] Guest data session-only, synthetic, independently resettable, not uploaded; no live patient data; no fake sync or AI actions.
+- [ ] Every named destination opens the correct read-only synthetic/Coming Soon view and is reachable from its intended tab; browser Back/Forward, deep link refresh and error states work.
+- [ ] All future action buttons visibly indicate unavailable capability; no silently executing live effects; no direct NFC, no BLE prompt, no hidden AI/API calls.
+- [ ] No unauthorized role privilege escalation; organization UI not permitted to edit clinical decisions; distributor UI has no medical records.
+- [ ] Exact theme colors and both modes preserved, including foreground/background contrast checks.
+- [ ] English default; Bengali, Kannada, Hindi, Marathi selectors preserved; fallback messages accurate; no false claim that clinical content is translated.
+- [ ] No added tabs, floating buttons, generic “Insights” or “AI Risk Predictor” sections, payment integrations, advertising, invented widgets or medical advice.
+- [ ] Actual repository changes inspected and validated; no destructive modifications, secret disclosure or unverified pushes/deployments.
+Required completion report from Codex
+Return a concise completion report containing:
+1. Actual repository/branch inspected and what existed before changes.
+2. Existing screens/tabs that differed from v2 (and how handled).
+3. Exact screens/routes/labels/actions updated, with changed-file list.
+4. Any functional capabilities preserved beyond Phase 1 and any unresolved conflicts.
+5. Tests run and results (build, typecheck, lint, route/navigation/Guest/auth regression, offline shell smoke test); identify untested portions.
+6. Whether a commit/push occurred, with verified branch/commit evidence if applicable; do not claim deployed without actual deployment verification.
+7. Explicit reminder of Coming Soon features and any future decisions requiring separate approval.
+16. Open Decisions — Do Not Invent Answers
+- Exact professional subroles, verified credential procedure, staff permissions and record sharing/consent policy.
+- Clinical criteria and required contents for essential NFC payload, tag hardware model/capacity, crypto/access keys, authorized offline recipient decryption and lost-tag handling.
+- Exact device firmware/pin assignments/real BLE protocol and hardware bill of materials.
+- Final drug/reference reviewer identities, documentary sign-off, severity definitions, regulatory scope and real clinical deployment authorization.
+- Follow-up notification channels, alert timing, escalation recipients and live operational workflows.
+- Distributor identity verification and contractual return/refund settlement policies, damaged-band reimbursement liability, collection/replacement service levels.
+- Secure patient digital document-delivery mechanism and what an external facility can verify/acknowledge.
+- Approved final icon source, confirmed tagline and trademark position.
+- Real deployment dates, service budgets, actual synced patient-data architecture, offline retention/revocation rules and clinical pilots.
+- Vaccination-record functionality beyond the agreed child-profile preview.
+Do not silently settle these by coding defaults. They remain future product decisions.
+17. Codex Execution Brief — Run This Guide Against the Existing Codebase
+Read and follow this complete v2.0 guide. This is an update to ongoing development, not authorization to start again. Inspect the current project and preserve the existing Firebase Authentication, session-only synthetic Guest mode, PWA, project configuration, and user changes. Compare existing screen/menu/action inventory with the exact role UI specifications in §5. Implement the UI/navigation/Coming Soon preview alignment only. Retire old branded module labels, apply the new doctor-prepares / organization-initiates referral structure, embed mother drug/herb information inside MatriSathi, include the exclusive AI Companion preview, and add the organization inventory and restricted distributor preview. Maintain the exact Medical Green theme and all security/no-cost constraints. Do not invent a single additional tab, section, card, form field or button outside this guide. Do not activate clinical/AI/drug/hardware/sync/payment operations now. Perform non-destructive verification and report exact files changed, test results and any conflicts, rather than guessing.
+
+18. Provenance and Precedence
+- Source document compared: user-uploaded MatriSync_Master_Development_Guide(1).md, v1.0, prepared 20 October 2026, 565 source lines. Sections preserved here include original Medical Green palette, Firebase/Guest/no-cost/offline shell constraints, program boundaries and safe development practices.
+- New decisions: direct user instructions and confirmed follow-up design decisions in the current MatriSync discussion, including exact role UI/navigation plan, MatriSathi integration, AI Companion behavior, dual referral workflows, band ID separation, deposit/return/reimbursement/distribution, BLE NFC device ownership and read/write duties.
+- Where the old guide described features previously recovered from incomplete history, do not convert uncertainty into a newly asserted historical fact. This v2 controls future intended UI; real source-code state must be inspected independently.
+- Implementation boundary precedence: explicit later user authorization can expand future phases, but this guide alone authorizes only the stated safe UI alignment. Do not reinterpret roadmap text as an instruction to implement everything immediately.
+End of MatriSync Master Development Guide v2.0.

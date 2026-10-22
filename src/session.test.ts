@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createDemoStore, seed, KEY, type StorageLike } from "./session";
+import { createDemoStore, seed, KEY, validProfile, type StorageLike } from "./session";
 function storage(): StorageLike {
   const map = new Map<string, string>();
   return {
@@ -17,6 +17,16 @@ function storage(): StorageLike {
   };
 }
 describe("Guest session boundary", () => {
+  it("restores a bounded local profile and rejects remote or executable photo sources", () => {
+    const s = storage();
+    const profile = { name: "Asha", photo: "data:image/png;base64,YQ==" };
+    createDemoStore(() => s).save({ ...seed("mother"), profile });
+    expect(createDemoStore(() => s).load()?.profile).toEqual(profile);
+    for (const photo of ["https://example.com/photo.png", "javascript:alert(1)", "data:image/svg+xml;base64,YQ==", "x".repeat(250001)]) expect(validProfile({ name: "Asha", photo })).toBe(false);
+    expect(validProfile({ name: " ", photo: "" })).toBe(false);
+    const store = createDemoStore(() => s); store.clear();
+    expect(store.load()).toBeNull();
+  });
   it("restores same-tab preferences and role", () => {
     const s = storage();
     createDemoStore(() => s).save({

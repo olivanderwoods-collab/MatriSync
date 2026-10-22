@@ -73,12 +73,7 @@ test("child context, tabs, deep-link refresh and browser history", async ({
   await expect(
     page.getByRole("heading", { name: "Arun · Growth visit summary" }),
   ).toBeVisible();
-  for (const tab of [
-    "Overview",
-    "Medications",
-    "Prescriptions",
-    "Test reports",
-  ]) {
+  for (const tab of ["Overview", "Prescriptions", "Vaccinations", "Reports"]) {
     await page
       .getByRole("navigation", { name: "Section tabs" })
       .getByRole("link", { name: tab, exact: true })
@@ -124,19 +119,33 @@ test("Guest to account clears demo; setup availability is explicit", async ({
 }) => {
   await guest(page);
   await page.goto("/mother/settings");
-  await page.getByRole("button", { name: "Exit Guest & sign in" }).click();
+  await page.getByRole("button", { name: "Log In", exact: true }).click();
   expect(
     await page.evaluate(() => sessionStorage.getItem("matrisync.demo.v1")),
   ).toBeNull();
-  const unavailable = await page.getByText("Authentication setup required").isVisible();
-  if(unavailable) await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeDisabled();
-  else await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeEnabled();
+  const unavailable = await page
+    .getByText("Authentication setup required")
+    .isVisible();
+  if (unavailable)
+    await expect(
+      page.getByRole("button", { name: "Sign in", exact: true }),
+    ).toBeDisabled();
+  else
+    await expect(
+      page.getByRole("button", { name: "Sign in", exact: true }),
+    ).toBeEnabled();
   await page.getByRole("link", { name: "Create an account" }).click();
   await expect(
     page.getByRole("heading", { name: "Create your account" }),
   ).toBeVisible();
-  if(unavailable) await expect(page.getByRole("button", { name: "Create account", exact: true })).toBeDisabled();
-  else await expect(page.getByRole("button", { name: "Create account", exact: true })).toBeEnabled();
+  if (unavailable)
+    await expect(
+      page.getByRole("button", { name: "Create account", exact: true }),
+    ).toBeDisabled();
+  else
+    await expect(
+      page.getByRole("button", { name: "Create account", exact: true }),
+    ).toBeEnabled();
 });
 test("blocked and corrupt storage remain usable without persistent fallback", async ({
   browser,
@@ -156,7 +165,7 @@ test("blocked and corrupt storage remain usable without persistent fallback", as
   );
   await page
     .getByRole("navigation", { name: "Main navigation", exact: true })
-    .getByRole("link", { name: "My children" })
+    .getByRole("link", { name: "Children", exact: true })
     .click();
   await expect(page.getByText("Tara Sen", { exact: true })).toBeVisible();
   await page
@@ -261,16 +270,23 @@ test("desktop/mobile visual checks, dialog focus, themes and overflow", async ({
     path: "docs/screenshots/mother-mobile.png",
     fullPage: true,
   });
-  await page.getByRole("button", { name: "More", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "Mobile navigation", exact: true })
+    .getByRole("link", { name: "More", exact: true })
+    .click();
+  await expect(
+    page.getByRole("navigation", { name: "More menu" }),
+  ).toBeVisible();
+  await page.goto("/mother/health/reports");
+  const futureAction = page.getByRole("button", { name: /^Open Report/ });
+  await futureAction.click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.keyboard.press("Tab");
   expect(
     await page.evaluate(() => !!document.activeElement?.closest("dialog")),
   ).toBeTruthy();
   await page.keyboard.press("Escape");
-  await expect(
-    page.getByRole("button", { name: "More", exact: true }),
-  ).toBeFocused();
+  await expect(futureAction).toBeFocused();
   for (const width of [320, 390, 768, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
     for (const url of [
@@ -297,6 +313,16 @@ test("desktop/mobile visual checks, dialog focus, themes and overflow", async ({
     path: "docs/screenshots/professional-desktop.png",
     fullPage: true,
   });
+  await page.goto("/professional/patients");
+  await page.screenshot({
+    path: "docs/screenshots/patients-desktop.png",
+    fullPage: true,
+  });
+  await page.goto("/professional/patients/mira/prescriptions");
+  await page.screenshot({
+    path: "docs/screenshots/prescriptions-desktop.png",
+    fullPage: true,
+  });
   await page
     .getByRole("button", { name: "Exit Guest", exact: true })
     .first()
@@ -304,6 +330,16 @@ test("desktop/mobile visual checks, dialog focus, themes and overflow", async ({
   await guest(page, "organization");
   await page.screenshot({
     path: "docs/screenshots/organization-desktop.png",
+    fullPage: true,
+  });
+  await page.goto("/organization/inventory/return");
+  await page.screenshot({
+    path: "docs/screenshots/inventory-desktop.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: "docs/screenshots/inventory-mobile.png",
     fullPage: true,
   });
 });

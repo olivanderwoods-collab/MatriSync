@@ -56,14 +56,12 @@ import {
   authError,
   authWasInitialized,
 } from "./auth";
-import {
-  children,
-  modules,
-  navigation,
-  patients,
-  roleNames,
-  TAGLINE,
-} from "./data";
+import { navigation, roleNames, TAGLINE } from "./data";
+import { defaultProfile, ProfileEditor, type Profile } from "./profile";
+import { BackButton } from "./navigation";
+import { WorkspaceScreens } from "./workspace";
+import { RecordsProvider, LocalRecords, RecordsHome } from "./records";
+import { distributorSections, moreMenus } from "./workspace-spec";
 import {
   demoStore,
   languages,
@@ -77,6 +75,7 @@ import {
 import "./styles.css";
 
 const icons: Record<string, LucideIcon> = {
+  Menu,
   Activity,
   ArrowRightLeft,
   Baby,
@@ -115,6 +114,8 @@ function accountMarker(active: boolean) {
   }
 }
 type AppState = {
+  profile: Profile;
+  saveProfile: (profile: Profile) => void;
   demo: DemoSession | null;
   user: User | null;
   loading: boolean;
@@ -126,15 +127,26 @@ type AppState = {
   reset: () => void;
   preferences: (theme: Theme, language: Language) => void;
   toAccount: (role: Role) => void;
+  beginAccount: () => void;
   authenticated: (user: User) => void;
   soon: (label: string) => void;
 };
 const Context = createContext<AppState>(null!);
 const useApp = () => useContext(Context);
-function Brand({ large = false }: { large?: boolean }) {
+function Brand({
+  large = false,
+  profile,
+}: {
+  large?: boolean;
+  profile?: Profile;
+}) {
   return (
     <div className={`brand ${large ? "brand-large" : ""}`}>
-      <img src="/icons/icon-192.png" alt="" />
+      <img
+        className={profile?.photo ? "profile-photo" : undefined}
+        src={profile?.photo || "/icons/icon-192.png"}
+        alt=""
+      />
       <div>
         <strong>
           MatriSync<span className="brand-dot">.</span>
@@ -144,38 +156,7 @@ function Brand({ large = false }: { large?: boolean }) {
     </div>
   );
 }
-function Tag({
-  children: content,
-  tone = "green",
-}: {
-  children: React.ReactNode;
-  tone?: string;
-}) {
-  return (
-    <span className={`tag ${tone}`}>
-      <span aria-hidden="true">●</span> {content}
-    </span>
-  );
-}
-function Soon({
-  action = "Learn more",
-  compact = false,
-}: {
-  action?: string;
-  compact?: boolean;
-}) {
-  const { soon } = useApp();
-  return (
-    <button
-      className={`soon-button ${compact ? "compact" : ""}`}
-      onClick={() => soon(action)}
-    >
-      <span>{action}</span>
-      <span className="soon-label">Coming Soon</span>
-      <ChevronRight size={16} />
-    </button>
-  );
-}
+
 function Dialog({
   title,
   children: content,
@@ -218,6 +199,7 @@ function Dialog({
 }
 function App() {
   const [demo, setDemo] = useState<DemoSession | null>(() => demoStore.load());
+  const [accountProfile, setAccountProfile] = useState<Profile>(defaultProfile);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(
     () => !demo && hasAccount() && authConfigured,
@@ -232,10 +214,11 @@ function App() {
   const [update, setUpdate] = useState<ServiceWorker | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
+  const observeAccount = !demo && (!!user || hasAccount()) && authConfigured;
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
     let disposed = false;
-    if (!demo && hasAccount() && authConfigured) {
+    if (observeAccount) {
       Promise.all([accountAuth(), import("firebase/auth")])
         .then(([auth, sdk]) => {
           if (disposed) return;
@@ -256,9 +239,8 @@ function App() {
       disposed = true;
       unsubscribe?.();
     };
-    // Restore once at startup; Guest never initializes Firebase.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    // Observe both restored and newly signed-in sessions; Guest never initializes Firebase.
+  }, [observeAccount]);
   useEffect(() => {
     const media = matchMedia("(prefers-color-scheme: dark)");
     const apply = () => {
@@ -307,6 +289,7 @@ function App() {
     }
   }, []);
   const clear = () => {
+    setAccountProfile(defaultProfile);
     demoStore.clear();
     setDemo(null);
     setTheme("system");
@@ -364,6 +347,11 @@ function App() {
       );
   }
   const state: AppState = {
+    profile: demo?.profile || accountProfile,
+    saveProfile: (profile) => {
+      if (demo) setDemo(demoStore.save({ ...demo, profile }));
+      else setAccountProfile(profile);
+    },
     demo,
     user,
     loading,
@@ -386,6 +374,7 @@ function App() {
       clear();
       navigate(`/auth/login?role=${role}`);
     },
+    beginAccount: clear,
     authenticated: (u) => {
       clear();
       accountMarker(true);
@@ -450,7 +439,7 @@ function App() {
             generated, or saved to a service.
           </p>
           <button className="button primary" onClick={() => setModal("")}>
-            Got it
+            Close
           </button>
         </Dialog>
       )}
@@ -500,7 +489,7 @@ function RoleSelection() {
   const descriptions = [
     "A thoughtful space for your health, your children, and every chapter ahead.",
     "A connected view of your patients, documentation, and care handoffs.",
-    "Bring your care teams, referrals, and facility workflows into one view.",
+    "See your patients, care team, and facility devices in one place.",
   ];
   return (
     <div className="public-page">
@@ -575,7 +564,7 @@ function AuthPage() {
     return <NotFound />;
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!authConfigured || !app.online) return;
+    if (busy || !authConfigured || !app.online) return;
     const data = new FormData(e.currentTarget);
     const password = String(data.get("password"));
     if (signup && password !== data.get("confirm")) {
@@ -585,7 +574,7 @@ function AuthPage() {
     setBusy(true);
     setError("");
     try {
-      demoStore.clear();
+      app.beginAccount();
       const [auth, sdk] = await Promise.all([
         accountAuth(),
         import("firebase/auth"),
@@ -751,26 +740,36 @@ function Loading() {
     </main>
   );
 }
-function NotFound() {
+function NotFound({ embedded = false }: { embedded?: boolean }) {
+  const Container = embedded ? "section" : "main";
   return (
-    <main id="main" tabIndex={-1} className="empty-state">
+    <Container
+      id={embedded ? undefined : "main"}
+      tabIndex={-1}
+      className="empty-state"
+    >
       <Brand />
       <span className="eyebrow">PAGE NOT FOUND</span>
       <h1>Let’s find your way back.</h1>
       <p>This page isn’t part of the demo.</p>
       <Link className="button primary" to="/">
-        Choose a workspace
+        Return to Role Selection
       </Link>
-    </main>
+    </Container>
   );
 }
 function Workspace() {
+  const app = useApp();
+  const uid = !app.demo ? app.user?.uid : undefined;
+  return (
+    <RecordsProvider key={uid || "guest"} uid={uid}>
+      <WorkspaceBody />
+    </RecordsProvider>
+  );
+}
+function WorkspaceBody() {
   const { role, "*": rest } = useParams();
   const app = useApp();
-  const navigate = useNavigate();
-  const [menu, setMenu] = useState(false);
-  const location = useLocation();
-  useEffect(() => setMenu(false), [location.pathname]);
   if (!roles.includes(role as Role)) return <NotFound />;
   const r = role as Role;
   if (app.loading) return <Loading />;
@@ -778,40 +777,61 @@ function Workspace() {
     return <Navigate to={`/auth/login?role=${r}`} replace />;
   if (app.demo && app.demo.role !== r)
     return <Navigate to={`/${app.demo.role}/overview`} replace />;
-  const section = (rest || "overview").split("/")[0];
-  const nav = navigation[r];
-  const title =
-    nav.find((x) => x[0] === section)?.[1] ||
-    { settings: "Settings", help: "About & help" }[section] ||
-    "Details";
-  const navContents = (
-    <>
-      <div className="nav-caption">YOUR WORKSPACE</div>
-      {nav.map(([path, label, icon]) => (
-        <NavLink key={path} to={`/${r}/${path}`}>
-          <Icon name={icon} />
-          <span>{label}</span>
-        </NavLink>
-      ))}
-      <div className="nav-divider" />
-      <NavLink to={`/${r}/settings`}>
-        <Settings size={20} />
-        Settings
-      </NavLink>
-      <NavLink to={`/${r}/help`}>
-        <Info size={20} />
-        About & help
-      </NavLink>
-    </>
-  );
+  const path = rest || "overview";
+  const section = path.split("/")[0];
+  const realRecords =
+    !app.demo &&
+    ((r === "professional" &&
+      (section === "patients" || path === "overview")) ||
+      (r === "mother" &&
+        ["health/reports", "health/prescriptions"].includes(path)));
+  const distributor =
+    r === "organization" &&
+    path.split("/")[0] === "more" &&
+    path.split("/")[1] === "distributor";
+  const nav: [string, string, string][] = distributor
+    ? distributorSections.map((s, i) => [
+        `more/distributor/${s.id}`,
+        s.title,
+        ["House", "Cpu", "ArrowRightLeft", "Files", "Menu"][i],
+      ])
+    : navigation[r];
+  const title = distributor
+    ? "Distributor preview"
+    : nav.find((n) => n[0] === section)?.[1] || "Details";
+  const navLinks = nav.map(([target, label, icon]) => (
+    <NavLink key={target} to={`/${r}/${target}`}>
+      <Icon name={icon} />
+      <span>{label}</span>
+    </NavLink>
+  ));
   return (
     <div className="app-layout">
       <aside className="sidebar">
-        <Link to={`/${r}/overview`}>
-          <Brand />
+        <Link
+          to={r === "mother" ? "/mother/more/profile" : `/${r}/overview`}
+          aria-label={r === "mother" ? "Open profile settings" : "Home"}
+        >
+          <Brand profile={r === "mother" ? app.profile : undefined} />
         </Link>
-        <div className="workspace-label">{roleNames[r]}</div>
-        <nav aria-label="Main navigation">{navContents}</nav>
+        <div className="workspace-label">
+          {distributor ? "Restricted distributor · Demo" : roleNames[r]}
+        </div>
+        <nav aria-label="Main navigation">
+          <div className="nav-caption">YOUR WORKSPACE</div>
+          {navLinks}
+        </nav>
+        {!distributor && section === "more" && path.split("/")[1] && (
+          <nav className="nested-nav" aria-label="More destinations">
+            {moreMenus[r]
+              .filter(([id]) => id !== "logout")
+              .map(([id, label]) => (
+                <NavLink key={id} to={`/${r}/more/${id}`}>
+                  {label}
+                </NavLink>
+              ))}
+          </nav>
+        )}
         <div className="sidebar-bottom">
           <div className="avatar small-avatar">
             {r === "mother" ? "MS" : r === "professional" ? "DR" : "LF"}
@@ -819,16 +839,18 @@ function Workspace() {
           <div>
             <strong>
               {r === "mother"
-                ? "Mira Sen"
+                ? app.profile.name
                 : r === "professional"
-                  ? "Dr. Ishani Rao"
+                  ? app.demo
+                    ? "Dr. Ishani Rao"
+                    : "Your account"
                   : "Lotus Family Clinic"}
             </strong>
-            <span>Synthetic profile</span>
+            <span>{app.demo ? "Synthetic profile" : "Signed-in account"}</span>
           </div>
           <button
             className="icon-button"
-            aria-label={app.demo ? "Exit Guest" : "Log out"}
+            aria-label={app.demo ? "Exit Guest" : "Log Out"}
             onClick={() => void app.exit()}
           >
             <LogOut size={18} />
@@ -841,19 +863,36 @@ function Workspace() {
             Workspace <ChevronRight size={14} />
             <strong>{title}</strong>
           </div>
-          <div className="mobile-brand">
-            <Brand />
-          </div>
-          <div className="header-actions">
-            <span className="date-label">DEMO · 20 OCT 2026</span>
-            <button
-              className="icon-button"
-              aria-label="Open settings"
-              onClick={() => navigate(`/${r}/settings`)}
-            >
-              <Settings size={20} />
-            </button>
-          </div>
+          <Link
+            className="mobile-brand"
+            to={r === "mother" ? "/mother/more/profile" : `/${r}/overview`}
+            aria-label={r === "mother" ? "Open profile settings" : "Home"}
+          >
+            <Brand profile={r === "mother" ? app.profile : undefined} />
+          </Link>
+          {r === "mother" && section === "overview" && (
+            <label className="home-language">
+              <span>Language</span>
+              <select
+                aria-label="Language"
+                value={app.language}
+                onChange={(e) =>
+                  app.preferences(app.theme, e.target.value as Language)
+                }
+              >
+                {languages.map((language) => (
+                  <option key={language}>{language}</option>
+                ))}
+              </select>
+            </label>
+          )}
+          <span className="connection-state">
+            {realRecords
+              ? "Device storage"
+              : app.online
+                ? "Online · Demo only"
+                : "Offline · Public shell"}
+          </span>
         </header>
         <div className="demo-banner">
           <div>
@@ -861,47 +900,68 @@ function Workspace() {
             <strong>
               {app.demo
                 ? "Guest Demo · Synthetic data"
-                : "Account Demo · Synthetic data"}
+                : realRecords
+                  ? "Private records · Device storage"
+                  : "Account Demo · Synthetic data"}
             </strong>
             <span className="banner-description">
-              A preview of connected care. All records are fictional.
+              {realRecords
+                ? "Documents remain on this device."
+                : "Patient records are fictional."}
             </span>
           </div>
           <button onClick={() => void app.exit()}>
-            {app.demo ? "Exit Guest" : "Log out"} <LogOut size={14} />
+            {app.demo ? "Exit Guest" : "Log Out"} <LogOut size={14} />
           </button>
         </div>
         <main id="main" tabIndex={-1} className="workspace-main">
-          <Screen role={r} path={rest || "overview"} />
+          {path !== "overview" && (
+            <BackButton
+              fallback={`/${r}/${path.startsWith("more/") ? "more" : path.startsWith("patients/") ? "patients" : "overview"}`}
+            />
+          )}
+          {r === "mother" &&
+            section === "overview" &&
+            app.language !== "English" && (
+              <p className="small muted" role="status">
+                {app.language} selected. Reviewed translations are pending;
+                content is shown in English.
+              </p>
+            )}
+          {realRecords ? (
+            path === "overview" ? (
+              <RecordsHome />
+            ) : (
+              <LocalRecords path={path} self={r === "mother"} />
+            )
+          ) : (
+            <WorkspaceScreens
+              account={!!app.user && !app.demo}
+              role={r}
+              profileName={app.profile.name}
+              path={path}
+              soon={app.soon}
+              exit={() => void app.exit()}
+              settings={(section) => (
+                <SettingsPage role={r} section={section} />
+              )}
+              help={<Help embedded />}
+              notFound={<NotFound embedded />}
+            />
+          )}
           <footer className="workspace-footer">
             <span>MatriSync · {TAGLINE}</span>
-            <span>Demonstration only · No clinical advice</span>
+            <span>
+              {realRecords
+                ? "Private storage · No clinical interpretation"
+                : "Demonstration only · No clinical advice"}
+            </span>
           </footer>
         </main>
         <nav className="mobile-nav" aria-label="Mobile navigation">
-          {nav.slice(0, 3).map(([path, label, icon]) => (
-            <NavLink to={`/${r}/${path}`} key={path}>
-              <Icon name={icon} />
-              <span>{label}</span>
-            </NavLink>
-          ))}
-          <button onClick={() => setMenu(true)}>
-            <Menu size={20} />
-            <span>More</span>
-          </button>
+          {navLinks}
         </nav>
       </div>
-      {menu && (
-        <Dialog title="Your workspace" onClose={() => setMenu(false)}>
-          <nav className="drawer-nav">{navContents}</nav>
-          <button
-            className="button secondary full"
-            onClick={() => void app.exit()}
-          >
-            {app.demo ? "Exit Guest" : "Log out"}
-          </button>
-        </Dialog>
-      )}
     </div>
   );
 }
@@ -956,877 +1016,157 @@ function Panel({
     </section>
   );
 }
-function Overview({ role }: { role: Role }) {
-  const mother = role === "mother";
-  const org = role === "organization";
-  return (
-    <>
-      <PageTitle
-        eyebrow={
-          mother
-            ? "YOUR CARE, CONNECTED"
-            : org
-              ? "LOTUS FAMILY CLINIC · SYNTHETIC FACILITY"
-              : "YOUR CARE WORKSPACE"
-        }
-        title={
-          mother
-            ? "A little care, every day."
-            : org
-              ? "A connected team. A shared purpose."
-              : "Welcome back, Dr. Ishani."
-        }
-        description={
-          mother
-            ? "Welcome, Mira. Here’s a gentle overview of your family’s journey."
-            : org
-              ? "A sample view of the people and handoffs that bring care together."
-              : "Your sample workspace for continuity, coordination, and care."
-        }
-      />
-      <div className="overview-grid">
-        <section className="journey-hero">
-          <div>
-            <span className="eyebrow">
-              {mother ? "YOUR MATERNAL JOURNEY" : "CONTINUITY OF CARE"}
-            </span>
-            <h2>
-              {mother ? (
-                <>
-                  Every chapter.
-                  <br />A circle of care.
-                </>
-              ) : (
-                <>
-                  Good care goes further
-                  <br />
-                  when we stay connected.
-                </>
-              )}
-            </h2>
-            <p>
-              {mother
-                ? "A space for you, your children, and the people who care for you."
-                : "Keep the person at the heart of every record, referral, and follow-up."}
-            </p>
-            <Link
-              className="button hero-button"
-              to={`/${role}/${mother ? "journey" : "patients"}`}
-            >
-              {mother ? "Explore my journey" : "View sample patients"}
-              <ArrowRight size={18} />
-            </Link>
-          </div>
-          <div className="hero-emblem">
-            <img src="/icons/icon-512.png" alt="" />
-          </div>
-          <div className="hero-foot">
-            <span>
-              <ShieldCheck size={16} /> Synthetic example
-            </span>
-            <span>Built around you</span>
-          </div>
-        </section>
-        <section className="next-card">
-          <div className="card-kicker">
-            <CalendarDays size={21} />
-            <span>FOLLOW-UP PREVIEW</span>
-          </div>
-          <div className="calendar-date">
-            <strong>28</strong>
-            <span>
-              OCT
-              <br />
-              2026
-            </span>
-          </div>
-          <h3>A moment to reconnect</h3>
-          <p>Example follow-up with Dr. Ishani Rao at Lotus Family Clinic.</p>
-          <Tag tone="purple">Example · Not scheduled</Tag>
-          <Link className="text-link" to={`/${role}/follow-up`}>
-            View clinician’s instructions <ArrowRight size={16} />
-          </Link>
-        </section>
-      </div>
-      <div className="stat-grid">
-        {(mother
-          ? [
-              ["2", "Child profiles", "Baby", "children"],
-              ["3", "Record categories", "Files", "health"],
-              ["1", "Sample care handoff", "ArrowRightLeft", "referrals"],
-            ]
-          : org
-            ? [
-                ["3", "Sample patient profiles", "Users", "patients"],
-                ["2", "Sample staff profiles", "BadgeCheck", "staff"],
-                [
-                  "2",
-                  "Example referral directions",
-                  "ArrowRightLeft",
-                  "referrals",
-                ],
-              ]
-            : [
-                ["3", "Sample patients", "Users", "patients"],
-                ["1", "Example follow-up", "CalendarDays", "follow-up"],
-                ["1", "Sample handoff", "ArrowRightLeft", "matriflow"],
-              ]
-        ).map(([value, label, icon, path]) => (
-          <Link className="stat-card" key={label} to={`/${role}/${path}`}>
-            <span className="stat-icon">
-              <Icon name={icon} />
-            </span>
-            <div>
-              <strong>{value}</strong>
-              <span>{label}</span>
-            </div>
-            <ChevronRight size={18} />
-          </Link>
-        ))}
-      </div>
-      <div className="two-columns">
-        <Panel
-          title={mother ? "Your family, in one place" : "People at the center"}
-          description="Separate profiles. One connected journey."
-          link={{
-            to: `/${role}/${mother ? "children" : "patients"}`,
-            label: "View all",
-          }}
-        >
-          {(mother ? children : patients.slice(0, 2)).map((person) => (
-            <Link
-              className="person-row"
-              to={`/${role}/${mother ? "children" : "patients"}/${person.id}/overview`}
-              key={person.id}
-            >
-              <span className="avatar">{person.initials}</span>
-              <div>
-                <strong>{person.name}</strong>
-                <span>{person.age} · Synthetic profile</span>
-              </div>
-              <ChevronRight size={18} />
-            </Link>
-          ))}
-        </Panel>
-        <Panel
-          title={
-            mother
-              ? "A companion for the journey"
-              : "Thoughtful tools for your team"
-          }
-          description={
-            mother
-              ? "Meet MatriSathi, your future educational companion."
-              : "Preview the next chapter of coordinated care."
-          }
-        >
-          <div className="companion">
-            <div className="companion-icon">
-              {mother ? <Flower2 size={34} /> : <Files size={34} />}
-            </div>
-            <div>
-              <h3>
-                {mother ? "Growing together" : "Less paperwork, more presence"}
-              </h3>
-              <p>
-                {mother
-                  ? "From preparing for pregnancy to raising your children. A space to learn, at your pace."
-                  : "Explore how MatriBridge will organize documentation for professional review."}
-              </p>
-              <Link
-                className="text-link"
-                to={`/${role}/${mother ? "matrisathi" : org ? "devices" : "matribridge"}`}
-              >
-                Explore the preview <ArrowRight size={16} />
-              </Link>
-            </div>
-          </div>
-        </Panel>
-      </div>
-      <div className="quiet-note">
-        <Info size={17} />
-        <span>
-          These are demonstration records, not live activity. Future actions are
-          clearly marked Coming Soon.
-        </span>
-      </div>
-    </>
-  );
-}
-function Tabs({
-  items,
-  base,
-  active,
-}: {
-  items: [string, string][];
-  base: string;
-  active: string;
-}) {
-  return (
-    <nav className="tabs" aria-label="Section tabs">
-      {items.map(([key, label]) => (
-        <Link
-          aria-current={active === key ? "page" : undefined}
-          className={active === key ? "active" : ""}
-          to={`${base}/${key}`}
-          key={key}
-        >
-          {label}
-        </Link>
-      ))}
-    </nav>
-  );
-}
-function Journey({ role }: { role: Role }) {
-  const { soon } = useApp();
-  const [stage, setStage] = useState("Pregnancy");
-  return (
-    <>
-      <PageTitle
-        eyebrow="MY JOURNEY"
-        title="Every chapter belongs here."
-        description="Explore the stages of a maternal and family journey. This is a synthetic preview."
-      />
-      <div className="journey-stages">
-        {["Conceiving", "Pregnancy", "Postpartum", "Parenting"].map((s, i) => (
-          <button
-            aria-pressed={stage === s}
-            className={s === stage ? "selected" : ""}
-            key={s}
-            onClick={() => setStage(s)}
-          >
-            <span>0{i + 1}</span>
-            <Icon name={["Flower2", "Heart", "HeartPulse", "Baby"][i]} />
-            <strong>{s}</strong>
-          </button>
-        ))}
-      </div>
-      <Panel
-        title={`${stage} · Your example chapter`}
-        description="A preview of how your care story could come together."
-      >
-        <div className="two-columns inner">
-          <div>
-            <h3>A place for your story</h3>
-            <p>
-              Keep the people, appointments, and records for this chapter in
-              view. No health advice or personalized guidance is generated.
-            </p>
-            <button
-              className="button secondary"
-              onClick={() => soon("Save journey updates")}
-            >
-              Save journey updates · Coming Soon
-            </button>
-          </div>
-          <div className="link-stack">
-            <Link to={`/${role}/health`}>
-              Explore maternal records <ArrowRight size={18} />
-            </Link>
-            <Link to={`/${role}/follow-up`}>
-              See sample follow-up <ArrowRight size={18} />
-            </Link>
-            <Link to={`/${role}/children`}>
-              Meet the child profiles <ArrowRight size={18} />
-            </Link>
-          </div>
-        </div>
-      </Panel>
-    </>
-  );
-}
-const healthTabs: [string, string][] = [
-  ["overview", "Overview"],
-  ["medications", "Medications"],
-  ["prescriptions", "Prescriptions"],
-  ["reports", "Test reports"],
-];
-function RecordContent({
-  name,
-  tab,
-  childId,
-}: {
-  name: string;
-  tab: string;
-  childId?: string;
-}) {
-  const child = children.find((c) => c.id === childId);
-  if (tab === "overview")
-    return (
-      <div className="two-columns">
-        <Panel title="Profile overview">
-          <dl className="record-details">
-            <div>
-              <dt>Profile</dt>
-              <dd>{name}</dd>
-            </div>
-            <div>
-              <dt>Source</dt>
-              <dd>Synthetic meeting fixture</dd>
-            </div>
-            <div>
-              <dt>Record status</dt>
-              <dd>Example only · Not clinically verified</dd>
-            </div>
-            <div>
-              <dt>{child ? "Guardian" : "Care team"}</dt>
-              <dd>
-                {child
-                  ? "Mira Sen · Fictional caregiver"
-                  : "Dr. Ishani Rao · Fictional professional"}
-              </dd>
-            </div>
-          </dl>
-        </Panel>
-        <Panel title={child ? "A separate story" : "Maternal history"}>
-          <p>
-            {child
-              ? `Records in this view belong only to ${name}. Child profiles are nested beneath the caregiver, with no separate sign-in.`
-              : "This preview reserves space for pregnancy history, recorded observations, allergies, and clinician-authored notes."}
-          </p>
-          <div className="notice">
-            <Info size={18} />
-            <p>
-              No measurements or medical conditions are inferred. This sample
-              contains no real health information.
-            </p>
-          </div>
-          <Soon action="Edit profile" />
-        </Panel>
-      </div>
-    );
-  const title =
-    tab === "medications"
-      ? child?.medication || `${name} · Medication record preview`
-      : tab === "prescriptions"
-        ? child?.prescription || `${name} · Prescription layout example`
-        : child?.report || `${name} · Maternal visit summary`;
-  return (
-    <Panel title={title} description="Synthetic example · Read-only">
-      <div className="document-preview">
-        <div className="document-icon">
-          <Icon name={tab === "medications" ? "Pill" : "Files"} size={32} />
-        </div>
-        <div>
-          <h3>
-            {tab === "medications"
-              ? "Clinician-entered medication record"
-              : tab === "prescriptions"
-                ? "Prescription documentation"
-                : "Visit report preview"}
-          </h3>
-          <p>
-            Profile: <strong>{name}</strong> · Example date: 18 October 2026
-          </p>
-          <p>
-            {tab === "medications"
-              ? "Medicine names and doses are intentionally omitted. This screen demonstrates record organization only."
-              : tab === "prescriptions"
-                ? "Author, source, date, and review status will accompany clinician-authored prescriptions. No treatment is generated here."
-                : "A sample document container showing provenance and profile context. No laboratory values or interpretation are supplied."}
-          </p>
-          <Tag>Synthetic example</Tag>
-        </div>
-      </div>
-      <Soon
-        action={
-          tab === "medications"
-            ? "Add medication record"
-            : tab === "prescriptions"
-              ? "Create prescription"
-              : "Upload report"
-        }
-      />
-    </Panel>
-  );
-}
-function Children({ role, parts }: { role: Role; parts: string[] }) {
-  const child = children.find((c) => c.id === parts[1]);
-  const tab = parts[2] || "overview";
-  if (parts[1] && !child) return <NotFound />;
-  if (!healthTabs.some(([id]) => id === tab)) return <NotFound />;
-  return (
-    <>
-      <PageTitle
-        eyebrow="MY CHILDREN"
-        title={
-          child
-            ? `${child.name}’s little world.`
-            : "Their own stories. Always connected."
-        }
-        description={
-          child
-            ? `${child.age} · Child profile ${child.id.toUpperCase()} · Synthetic example`
-            : "Two fictional child profiles, with their records kept carefully separate."
-        }
-        action={<Soon action="Add child" compact />}
-      />
-      {child ? (
-        <>
-          <div className="child-switcher">
-            {children.map((c) => (
-              <Link
-                className={child.id === c.id ? "selected" : ""}
-                to={`/${role}/children/${c.id}/${tab}`}
-                key={c.id}
-              >
-                <span className="avatar small-avatar">{c.initials}</span>
-                {c.name}
-              </Link>
-            ))}
-          </div>
-          <Tabs
-            base={`/${role}/children/${child.id}`}
-            active={tab}
-            items={healthTabs}
-          />
-          <RecordContent name={child.name} tab={tab} childId={child.id} />
-        </>
-      ) : (
-        <div className="two-columns">
-          {children.map((c) => (
-            <Link
-              className="child-card panel"
-              to={`/${role}/children/${c.id}/overview`}
-              key={c.id}
-            >
-              <span className="avatar large-avatar">{c.initials}</span>
-              <h2>{c.name}</h2>
-              <Tag>{c.age}</Tag>
-              <p>{c.description}</p>
-              <span className="text-link">
-                Open child profile <ArrowRight size={18} />
-              </span>
-            </Link>
-          ))}
-        </div>
-      )}
-    </>
-  );
-}
-function PatientList({ role, parts }: { role: Role; parts: string[] }) {
-  const patient = patients.find((p) => p.id === parts[1]);
-  const tab = parts[2] || "overview";
-  if (parts[1] && !patient) return <NotFound />;
-  if (!healthTabs.some(([id]) => id === tab)) return <NotFound />;
-  return (
-    <>
-      <PageTitle
-        eyebrow={
-          role === "organization"
-            ? "READ-ONLY FACILITY RECORDS"
-            : "PATIENT WORKSPACE"
-        }
-        title={patient ? patient.name : "People, beyond the records."}
-        description={
-          patient
-            ? `${patient.age} · ${patient.stage} · Synthetic profile`
-            : "A fictional patient directory for exploring the care workspace."
-        }
-        action={<Soon action="Search patients" compact />}
-      />
-      {patient ? (
-        <>
-          <Link className="back-link" to={`/${role}/patients`}>
-            ← All sample patients
-          </Link>
-          <Tabs
-            items={healthTabs}
-            base={`/${role}/patients/${patient.id}`}
-            active={tab}
-          />
-          <RecordContent name={patient.name} tab={tab} />
-          <div className="action-row">
-            <Soon action="Pair or merge records" />
-            <Soon action="Verify profile" />
-          </div>
-        </>
-      ) : (
-        <Panel
-          title="Sample patient directory"
-          description="3 fictional profiles · No real patient access"
-        >
-          {patients.map((p) => (
-            <Link
-              className="person-row patient-row"
-              to={`/${role}/patients/${p.id}/overview`}
-              key={p.id}
-            >
-              <span className="avatar">{p.initials}</span>
-              <div>
-                <strong>{p.name}</strong>
-                <span>{p.detail}</span>
-              </div>
-              <Tag>{p.stage}</Tag>
-              <ChevronRight size={18} />
-            </Link>
-          ))}
-          <Soon action="Register a patient" />
-        </Panel>
-      )}
-    </>
-  );
-}
-function FollowUp() {
-  return (
-    <>
-      <PageTitle
-        eyebrow="FOLLOW-UP"
-        title="The next step, clearly in view."
-        description="A fictional example of instructions entered by a clinician. Nothing has been scheduled or sent."
-      />
-      <Panel
-        title="Mira Sen · Example follow-up"
-        description="Entered by Dr. Ishani Rao · Synthetic clinician"
-      >
-        <div className="follow-up-grid">
-          <div className="due-date">
-            <CalendarDays size={28} />
-            <span>EXAMPLE DUE DATE</span>
-            <strong>28 October</strong>
-            <span>2026</span>
-            <Tag tone="purple">Not scheduled</Tag>
-          </div>
-          <dl className="record-details">
-            <div>
-              <dt>Doctor’s reason</dt>
-              <dd>
-                Review the previously documented visit and discuss the care
-                plan.
-              </dd>
-            </div>
-            <div>
-              <dt>Required tests, as entered</dt>
-              <dd>
-                No new tests listed in this synthetic example. Bring the
-                existing report preview.
-              </dd>
-            </div>
-            <div>
-              <dt>Example facility</dt>
-              <dd>Lotus Family Clinic · Fictional</dd>
-            </div>
-            <div>
-              <dt>Record source</dt>
-              <dd>Demo fixture, not an appointment or medical instruction</dd>
-            </div>
-          </dl>
-        </div>
-        <div className="action-row">
-          <Soon action="Schedule follow-up" />
-          <Soon action="Send reminder" />
-          <Soon action="Mark complete" />
-        </div>
-      </Panel>
-    </>
-  );
-}
-function Referrals({ role, tab = "incoming" }: { role: Role; tab?: string }) {
-  const org = role === "organization";
-  if (org && !["incoming", "outgoing"].includes(tab)) return <NotFound />;
-  return (
-    <>
-      <PageTitle
-        eyebrow={role === "professional" ? "MATRIFLOW" : "CARE JOURNEY"}
-        title="Keep the handoff human."
-        description="A sample care-coordination timeline. No referral has been submitted or received."
-      />
-      {org && (
-        <Tabs
-          items={[
-            ["incoming", "Incoming"],
-            ["outgoing", "Outgoing"],
-          ]}
-          base={`/${role}/referrals`}
-          active={tab}
-        />
-      )}
-      <div className="two-columns">
-        <Panel
-          title={`Mira Sen · ${org ? tab + " referral" : "Sample handoff"}`}
-          description="DEMO-REF-001 · Synthetic example"
-        >
-          <div className="referral-route">
-            <div>
-              <span>FROM</span>
-              <strong>
-                {org && tab === "incoming"
-                  ? "Meadow Care Center"
-                  : "Lotus Family Clinic"}
-              </strong>
-            </div>
-            <ArrowRight size={24} />
-            <div>
-              <span>TO</span>
-              <strong>
-                {org && tab === "incoming"
-                  ? "Lotus Family Clinic"
-                  : "Meadow Care Center"}
-              </strong>
-            </div>
-          </div>
-          <Tag tone="purple">Demo status · Awaiting acknowledgement</Tag>
-          <p>
-            Both facilities are fictional. The destination illustrates a handoff
-            and is not a recommendation.
-          </p>
-          <Soon action="Submit referral" />
-        </Panel>
-        <Panel
-          title="Example timeline"
-          description="Static illustration · Not live activity"
-        >
-          <ol className="timeline">
-            {[
-              "Clinician documents the reason",
-              "Handoff prepared for review",
-              "Destination receives the handoff",
-              "Patient Received confirmation",
-            ].map((label, i) => (
-              <li key={label}>
-                <span>{i < 2 ? <Check size={14} /> : i + 1}</span>
-                <div>
-                  <strong>{label}</strong>
-                  <p>
-                    {i < 2 ? "Example stage" : "Planned stage · Coming Soon"}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ol>
-          <Soon action="Patient Received" />
-        </Panel>
-      </div>
-    </>
-  );
-}
-function Module({ name }: { name: string }) {
-  const module = modules[name];
-  const [topic, setTopic] = useState(0);
-  return (
-    <>
-      <PageTitle
-        eyebrow={module.eyebrow.toUpperCase()}
-        title={module.title}
-        description={module.description}
-      />
-      <section className="module-hero panel">
-        <div className="module-icon">
-          <Icon
-            name={
-              name === "matrisathi"
-                ? "Flower2"
-                : name === "drug-safety"
-                  ? "Pill"
-                  : name === "bridge" || name === "devices"
-                    ? "Cpu"
-                    : "Sparkles"
-            }
-            size={42}
-          />
-        </div>
-        <Tag tone="purple">Coming Soon</Tag>
-        <h2>{module.eyebrow}</h2>
-        <p>A preview of what’s ahead. Explore the concept below.</p>
-        <div className="module-topics" aria-label="Preview topics">
-          {module.steps.map((step, i) => (
-            <button
-              key={step}
-              aria-pressed={topic === i}
-              className={topic === i ? "active" : ""}
-              onClick={() => setTopic(i)}
-            >
-              {step}
-            </button>
-          ))}
-        </div>
-        <div className="topic-description">
-          <strong>{module.steps[topic]}</strong>
-          <p>
-            This area will support the planned {module.eyebrow} workflow. It is
-            an informational preview; no clinical content, device action, or
-            service is active.
-          </p>
-        </div>
-        <Soon action={module.action} />
-      </section>
-    </>
-  );
-}
-function Watch() {
-  return (
-    <>
-      <PageTitle
-        eyebrow="MATRIWATCH"
-        title="Every handoff accounted for."
-        description="Operational workflow examples only. No clinical risk scores, monitoring, or alerts are generated."
-      />
-      <div className="two-columns">
-        <Panel title="Pending acknowledgement">
-          <Tag tone="purple">Demo status</Tag>
-          <h3>DEMO-REF-001 · Mira Sen</h3>
-          <p>
-            A fictional handoff awaiting a receiving professional’s
-            acknowledgement.
-          </p>
-          <Soon action="Notify care team" />
-        </Panel>
-        <Panel title="Incomplete documentation">
-          <Tag tone="amber">Example workflow state</Tag>
-          <h3>Handoff review</h3>
-          <p>
-            The example documentation step is waiting for a professional to
-            review the source.
-          </p>
-          <Soon action="Open live monitoring" />
-        </Panel>
-      </div>
-    </>
-  );
-}
-function Staff() {
-  return (
-    <>
-      <PageTitle
-        eyebrow="STAFF & VERIFICATION"
-        title="The people behind the care."
-        description="Fictional team profiles. Selection and sign-in do not verify credentials."
-        action={<Soon action="Invite staff" compact />}
-      />
-      <Panel title="Sample care team">
-        {[
-          "Dr. Ishani Rao · Professional",
-          "Nila Bose · Facility coordinator",
-        ].map((name, i) => (
-          <div className="person-row" key={name}>
-            <span className="avatar">{i ? "NB" : "IR"}</span>
-            <div>
-              <strong>{name}</strong>
-              <span>Lotus Family Clinic · Synthetic affiliation</span>
-            </div>
-            <Tag tone="purple">Not verified</Tag>
-          </div>
-        ))}
-        <Soon action="Verify credentials" />
-      </Panel>
-    </>
-  );
-}
-function SettingsPage({ role }: { role: Role }) {
+
+function SettingsPage({ role, section }: { role: Role; section?: string }) {
   const app = useApp();
+  if (role === "mother" && section === "profile")
+    return (
+      <>
+        <PageTitle
+          eyebrow="YOUR PREFERENCES"
+          title="Profile Settings"
+          description="Your name and picture."
+        />
+        <ProfileEditor profile={app.profile} save={app.saveProfile} />
+      </>
+    );
+  const combinedProfile = role === "professional" && section === "profile";
+  const title =
+    moreMenus[role].find(([id]) => id === section)?.[1] || "Settings";
   return (
     <>
       <PageTitle
         eyebrow="YOUR PREFERENCES"
-        title="Make this space feel like yours."
-        description="Appearance and language preferences stay in this tab’s demo session."
+        title={title}
+        description={
+          section === "profile"
+            ? "Account and workspace preferences."
+            : "Appearance and language preferences stay in this tab’s demo session."
+        }
       />
       <div className="two-columns">
-        <Panel
-          title="Appearance"
-          description="Choose the view that feels most comfortable."
-        >
-          <div className="theme-choices">
-            {(["light", "dark", "system"] as const).map((t) => (
-              <button
-                key={t}
-                aria-pressed={app.theme === t}
-                className={app.theme === t ? "selected" : ""}
-                onClick={() => app.preferences(t, app.language)}
-              >
-                {t === "light" ? (
-                  <Sun />
-                ) : t === "dark" ? (
-                  <Moon />
-                ) : (
-                  <Settings />
-                )}
-                <span>{t[0].toUpperCase() + t.slice(1)}</span>
-                {app.theme === t && <Check size={16} />}
-              </button>
-            ))}
-          </div>
-        </Panel>
-        <Panel
-          title="Preferred language"
-          description="English is the default for this preview."
-        >
-          <label htmlFor="preferred-language">Language</label>
-          <select
-            id="preferred-language"
-            aria-label="Language"
-            value={app.language}
-            onChange={(e) =>
-              app.preferences(app.theme, e.target.value as Language)
-            }
+        {(!section ||
+          section === "settings" ||
+          section === "appearance" ||
+          combinedProfile) && (
+          <Panel
+            title="Appearance"
+            description="Choose the view that feels most comfortable."
           >
-            {languages.map((l) => (
-              <option key={l}>{l}</option>
-            ))}
-          </select>
-          <p className="small" role="status">
-            {app.language === "English"
-              ? "Navigation and demo content are shown in English."
-              : `${app.language} selected. Reviewed translations are not yet bundled, so navigation and content currently fall back to English.`}
-          </p>
-        </Panel>
-        <Panel title="Your demo profile">
-          <dl className="record-details">
-            <div>
-              <dt>Workspace</dt>
-              <dd>{roleNames[role]}</dd>
+            <div className="theme-choices">
+              {(["light", "dark", "system"] as const).map((t) => (
+                <button
+                  key={t}
+                  aria-pressed={app.theme === t}
+                  className={app.theme === t ? "selected" : ""}
+                  onClick={() => app.preferences(t, app.language)}
+                >
+                  {t === "light" ? (
+                    <Sun />
+                  ) : t === "dark" ? (
+                    <Moon />
+                  ) : (
+                    <Settings />
+                  )}
+                  <span>{t[0].toUpperCase() + t.slice(1)}</span>
+                  {app.theme === t && <Check size={16} />}
+                </button>
+              ))}
             </div>
-            <div>
-              <dt>Identity</dt>
-              <dd>
-                {app.demo
-                  ? "Guest · No account created"
-                  : "Signed-in account · Synthetic health data"}
-              </dd>
-            </div>
-            <div>
-              <dt>Professional privileges</dt>
-              <dd>None granted in this demo</dd>
-            </div>
-          </dl>
-          <Soon action="Update or verify profile" />
-        </Panel>
-        <Panel title="Session & privacy">
-          <p>
-            Guest uses fictional information and temporary tab storage. Browser
-            restore or duplicated tabs may preserve a session. Explicitly exit
-            to clear the demo.
-          </p>
-          {app.demo && (
-            <>
-              <button className="button secondary full" onClick={app.reset}>
-                Reset Demo
-              </button>
-              <button
-                className="button subtle full"
-                onClick={() => app.toAccount(role)}
-              >
-                Exit Guest & sign in
-              </button>
-            </>
-          )}
-          <button
-            className="button subtle full"
-            onClick={() => void app.exit()}
+          </Panel>
+        )}
+        {(!section ||
+          section === "settings" ||
+          section === "language" ||
+          combinedProfile) && (
+          <Panel
+            title="Preferred language"
+            description="English is the default for this preview."
           >
-            {app.demo ? "Exit Guest" : "Log out"}
-          </button>
-        </Panel>
+            <label htmlFor="preferred-language">Language</label>
+            <select
+              id="preferred-language"
+              aria-label="Language"
+              value={app.language}
+              onChange={(e) =>
+                app.preferences(app.theme, e.target.value as Language)
+              }
+            >
+              {languages.map((l) => (
+                <option key={l}>{l}</option>
+              ))}
+            </select>
+            <p className="small" role="status">
+              {app.language === "English"
+                ? "Navigation and demo content are shown in English."
+                : `${app.language} selected. Reviewed translations are not yet bundled, so navigation and content currently fall back to English.`}
+            </p>
+          </Panel>
+        )}
+        {section === "profile" && (
+          <Panel title={title}>
+            <dl className="record-details">
+              <div>
+                <dt>Workspace</dt>
+                <dd>{roleNames[role]}</dd>
+              </div>
+              <div>
+                <dt>Identity</dt>
+                <dd>
+                  {app.demo
+                    ? "Guest · No account created"
+                    : "Signed-in account"}
+                </dd>
+              </div>
+              <div>
+                <dt>Professional privileges</dt>
+                <dd>No verified clinical privileges</dd>
+              </div>
+            </dl>
+          </Panel>
+        )}
+        {(!section ||
+          section === "settings" ||
+          section === "privacy" ||
+          combinedProfile) && (
+          <Panel title="Privacy and Data Controls">
+            <p>
+              Guest uses fictional information and temporary tab storage.
+              Browser restore or duplicated tabs may preserve a session.
+              Explicitly exit to clear the demo.
+            </p>
+            {app.demo && (
+              <>
+                <button className="button secondary full" onClick={app.reset}>
+                  Reset Demo
+                </button>
+                <button
+                  className="button subtle full"
+                  onClick={() => app.toAccount(role)}
+                >
+                  Log In
+                </button>
+              </>
+            )}
+            <button
+              className="button subtle full"
+              onClick={() => void app.exit()}
+            >
+              {app.demo ? "Exit Guest" : "Log Out"}
+            </button>
+          </Panel>
+        )}
       </div>
     </>
   );
 }
-function Help() {
+function Help({ embedded = false }: { embedded?: boolean }) {
   return (
     <>
+      {!embedded && <BackButton fallback="/" />}
       <PageTitle
         eyebrow="ABOUT MATRISYNC"
-        title="Every Mother. Every Step."
+        title={TAGLINE}
         description="A demonstration of maternal care continuity, from conceiving through parenting."
       />
       <Panel title="A guide to this preview">
@@ -1835,16 +1175,17 @@ function Help() {
             <h3>Explore with confidence</h3>
             <p>
               Choose a workspace, open its sections, switch child profiles, and
-              try both appearance modes. All people, records, dates, and
-              facilities are fictional.
+              try both appearance modes. Guest profiles and workflow previews
+              are fictional. Signed-in private records stay on your device.
             </p>
           </div>
           <div>
             <h3>Know what works</h3>
             <p>
               Navigation, preferences, and temporary Guest sessions work.
-              Account sign-in requires configured Authentication. Future
-              clinical, AI, messaging, and device actions say Coming Soon.
+              Signed-in accounts can save encrypted patient profiles and
+              upload documents locally. Clinical approvals, AI, messaging and
+              device connections remain in development.
             </p>
           </div>
           <div>
@@ -1856,9 +1197,9 @@ function Help() {
             </p>
           </div>
           <div>
-            <h3>Made for a meeting</h3>
+            <h3>Development status</h3>
             <p>
-              This is a demonstration, not a production medical system. It
+              This is a development build. It
               offers no diagnosis, treatment, prescription, or patient-specific
               advice.
             </p>
@@ -1868,77 +1209,7 @@ function Help() {
     </>
   );
 }
-function Screen({ role, path }: { role: Role; path: string }) {
-  const parts = path.split("/").filter(Boolean);
-  const section = parts[0] || "overview";
-  const depth = ['children', 'patients'].includes(section) ? 3 : ['health', 'prescriptions'].includes(section) || (section === 'referrals' && role === 'organization') ? 2 : 1;
-  if (parts.length > depth) return <NotFound />;
-  if (
-    !navigation[role].some((n) => n[0] === section) &&
-    !["settings", "help"].includes(section)
-  )
-    return <NotFound />;
-  if (section === "overview") return <Overview role={role} />;
-  if (section === "settings") return <SettingsPage role={role} />;
-  if (section === "help") return <Help />;
-  if (section === "journey") return <Journey role={role} />;
-  if (section === "children") return <Children role={role} parts={parts} />;
-  if (section === "patients") return <PatientList role={role} parts={parts} />;
-  if (section === "health" || section === "prescriptions") {
-    const tab =
-      parts[1] || (section === "prescriptions" ? "prescriptions" : "overview");
-    if (!healthTabs.some(([id]) => id === tab)) return <NotFound />;
-    return (
-      <>
-        <PageTitle
-          eyebrow={section === "health" ? "MY HEALTH" : "PRESCRIPTION PREVIEWS"}
-          title="A story of care, in one place."
-          description="Mira Sen · Read-only synthetic examples"
-        />
-        <Tabs items={healthTabs} base={`/${role}/${section}`} active={tab} />
-        <RecordContent name="Mira Sen" tab={tab} />
-      </>
-    );
-  }
-  if (section === "follow-up") return <FollowUp />;
-  if (section === "referrals" || section === "matriflow")
-    return <Referrals role={role} tab={parts[1]} />;
-  if (section === "matriwatch") return <Watch />;
-  if (section === "staff") return <Staff />;
-  if (section === "activity")
-    return (
-      <>
-        <PageTitle
-          eyebrow="ACTIVITY HISTORY"
-          title="A shared view of the journey."
-          description="Illustrative workflow stages, not live facility analytics."
-        />
-        <Panel title="Synthetic activity examples">
-          <ol className="timeline">
-            {[
-              "Profile prepared for review",
-              "Handoff awaiting acknowledgement",
-              "Follow-up preview documented",
-            ].map((s, i) => (
-              <li key={s}>
-                <span>{i + 1}</span>
-                <div>
-                  <strong>{s}</strong>
-                  <p>
-                    Example only · 20 October 2026 · Fictional facility team
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ol>
-          <Soon action="Export activity" />
-          <Soon action="View live analytics" />
-        </Panel>
-      </>
-    );
-  if (modules[section]) return <Module key={section} name={section} />;
-  return <NotFound />;
-}
+
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { failed: boolean }
