@@ -1,7 +1,7 @@
 import type { Role } from "./session";
 export const TAGLINE = "Every Mother. Every Step."; // Provisional copy pending final acceptance.
 export const roleNames: Record<Role, string> = {
-  mother: "Mother / Caregiver",
+  mother: "Mother",
   professional: "Healthcare Professional",
   organization: "Healthcare Organization",
 };
@@ -64,7 +64,6 @@ export const navigation: Record<Role, [string, string, string][]> = {
   professional: [
     ["overview", "Home", "House"],
     ["patients", "Patients", "Users"],
-    ["referrals", "Referrals", "ArrowRightLeft"],
     ["follow-up", "Follow-ups", "CalendarDays"],
     ["more", "More", "Menu"],
   ],

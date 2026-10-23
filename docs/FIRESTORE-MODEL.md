@@ -1,5 +1,7 @@
 # Encrypted record connection — prototype, not deployed
 
+**23 October update:** the live adapter is still disabled. Local record opening now uses a non-extractable device key saved in the account's IndexedDB key slot; old passphrase records have a one-time migration that preserves the ciphertext and documents. The adapter below still uses its separate passphrase-based prototype; it has not been connected to the new local device key or turned into shared E2EE. See [confirmed encryption/sharing requirements](DECISIONS-2026-10-23.md). Earlier mentions of routine local passphrase/idle locking below describe the previous implementation.
+
 Read-only inspection on 22 October 2026 confirmed the existing `(default)` database in `matrisync-c9de7` is **Standard**, Firestore Native, `asia-south1`. No new database, bucket or billing configuration was created.
 
 The adapter uses one exact document: `recordOwners/{Firebase UID}/vaults/patients`. There are no collection queries, public profiles, role claims, facility grants or cross-account shares. It reads from the server and uses a transaction for compare-and-set writes. Local record edits do not invoke it. The production connection is disabled in code; only the loopback demo emulator can currently construct a connection. Enabling it later requires deployment/review of the rules and backup/restore conflict UX. Do not deploy these default-deny prototype rules over a live ruleset without first comparing existing collection requirements.

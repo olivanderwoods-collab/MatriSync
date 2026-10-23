@@ -1,4 +1,26 @@
-# Current verification — 22 October 2026
+# Current verification — 23 October 2026
+
+This section supersedes the historical results below for the changed code. Scope and manual acceptance steps are in [confirmed decisions](DECISIONS-2026-10-23.md) and [what to check / what's next](CHECK-THIS-BUILD-2026-10-23.md).
+
+- ESLint, TypeScript, production build and demo build passed. The production check excludes the synthetic assignment module and both research-draft JSON assets. The demo build retains the original draft bytes. Existing Guest preview fixtures remain; removing all demonstration data is still a final-release gate.
+- **33 unit tests passed** across seven files. They cover the previous safety/session/reference checks plus automatic local-key opening, non-extractable keys, account/concurrency boundaries, lossless one-time migration, synthetic consent/assignment/acceptance/revocation, exact profile readback and limited AI context projection. The output filter now rejects the observed first-person birth-fear claim, including typographic apostrophes and negation.
+- **22 Edge UI/PWA tests passed**. The three affected AI/assignment UI cases passed again after the last filter and screenshot updates. Includes patient-specific navigation, Back to Patients, doctor referral creation versus organization initiation, revoked access denial, Mother prescription-copy limits, Inventory refund placement, logout confirmation, responsive layouts and Guest/PWA isolation. The final 390px dark patient-referral screenshot was visually inspected.
+- **10 Auth/local-record tests passed** against the local Auth emulator; the separate real-model case is intentionally skipped in that ordinary suite. The three affected AI/profile cases passed again after the final changes. Covers encrypted Mother profile persistence, explicit name/week/date projection, excluded contacts/clinical fields, profile-context opt-out, medicine/report routing before generation, account isolation, offline records, original-byte download and one-time legacy migration. The projection test uses a mocked worker and is not evidence of model conversation quality.
+- **One separate actual-Qwen production-PWA test passed** using the previously downloaded public model cache and synthetic emulator accounts on Windows/Edge. With browser networking disabled, it produced two genuine general/supportive replies, read back two exact saved-profile answers, suppressed an inappropriate birth-related output, stopped generation, loaded the cached model again and completed another generation whose output was replaced by the safety fallback. No external request occurred during that offline inference/restart portion. This is not evidence that every sample received a successful model-generated answer.
+
+### Findings and limits
+
+The small model did not reliably answer identity questions from instructions alone. Exact name/stage questions now read the authenticated local profile directly and display **Saved profile · Not AI-generated**. Report quotations, diagnoses, attachments, clinical history, contacts and other patients remain excluded from model context. The bundled packet guides inference; it does not retrain weights or guarantee compliance.
+
+An earlier real-model run produced an inappropriate first-person response about giving birth. The filter was corrected and the final run displayed **Safety fallback · Not AI-generated** instead. A prior restart assertion expected an additional **Offline AI** label and failed even though a filtered fallback is a valid result; final acceptance checks require a completed reply, correct provenance and suppression of the observed inappropriate claim. The model's replies remain generic and need broader quality and multilingual/clinical safety review. Only this Windows/Edge device was tested.
+
+Local records open without a routine vault lockscreen. Old records require their original passphrase once to attach the existing key without changing ciphertext or original documents. A key stored on the same device is not hardware-backed isolation or end-to-end sharing. Browser storage loss remains a data-loss risk; backup/recovery and server-blind recipient-key sharing are not implemented.
+
+The assignment, consent and referral handoff workspace is an explicit in-memory synthetic test. Real staff roles, cross-account access, persistent refunds/settlements, digital clinical prescribing, real BLE/NFC transfer, child linking and full professional/facility profiles remain pending. No live cloud record/file upload, paid service, provider activation, rules deployment or application deployment occurred. Firestore rules were unchanged and their previous emulator result below was not rerun for this update.
+
+---
+
+# Previous verification — 22 October 2026
 
 This section supersedes earlier demo-only verification for the changed routes. It records implementation checks, not clinical certification or production readiness.
 

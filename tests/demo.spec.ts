@@ -37,6 +37,7 @@ test("all workspaces, all navigation, future actions, no service traffic", async
       .getByRole("button", { name: "Exit Guest", exact: true })
       .first()
       .click();
+  await page.getByRole("dialog").getByRole("button", { name: "Exit Guest", exact: true }).click();
     await expect(page).toHaveURL("/");
   }
   expect(external).toEqual([]);
@@ -104,6 +105,7 @@ test("preferences survive reload; reset and exit clear only demo state", async (
     .getByRole("button", { name: "Exit Guest", exact: true })
     .first()
     .click();
+  await page.getByRole("dialog").getByRole("button", { name: "Exit Guest", exact: true }).click();
   expect(
     await page.evaluate(() => sessionStorage.getItem("matrisync.demo.v1")),
   ).toBeNull();
@@ -172,6 +174,7 @@ test("blocked and corrupt storage remain usable without persistent fallback", as
     .getByRole("button", { name: "Exit Guest", exact: true })
     .first()
     .click();
+  await page.getByRole("dialog").getByRole("button", { name: "Exit Guest", exact: true }).click();
   await expect(page).toHaveURL("/");
   await context.close();
   const clean = await browser.newContext();
@@ -308,6 +311,7 @@ test("desktop/mobile visual checks, dialog focus, themes and overflow", async ({
     .getByRole("button", { name: "Exit Guest", exact: true })
     .first()
     .click();
+  await page.getByRole("dialog").getByRole("button", { name: "Exit Guest", exact: true }).click();
   await guest(page, "professional");
   await page.screenshot({
     path: "docs/screenshots/professional-desktop.png",
@@ -327,6 +331,7 @@ test("desktop/mobile visual checks, dialog focus, themes and overflow", async ({
     .getByRole("button", { name: "Exit Guest", exact: true })
     .first()
     .click();
+  await page.getByRole("dialog").getByRole("button", { name: "Exit Guest", exact: true }).click();
   await guest(page, "organization");
   await page.screenshot({
     path: "docs/screenshots/organization-desktop.png",

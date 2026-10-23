@@ -5,12 +5,19 @@ import {
   unseal,
   type VaultEnvelope,
 } from "./vault-crypto";
-import { commitVault, readFile, readVault } from "./vault-storage";
+import {
+  commitVault,
+  readFile,
+  readVault,
+  readDeviceKey,
+} from "./vault-storage";
 import {
   emptyRecords,
   parseRecords,
   patientInput,
   validatedDocument,
+  motherProfileInput,
+  type MotherProfile,
   type RecordData,
   type LocalDocument,
 } from "./records-model";
@@ -34,6 +41,59 @@ export class RecordVault {
   async exists() {
     await this.authorize();
     return !!(await readVault(this.uid));
+  }
+  // Device-local access only. This is not a shared-key or cloud E2EE protocol.
+  async openOnDevice(): Promise<boolean> {
+    const epoch = this.epoch;
+    await this.authorize();
+    const envelope = await readVault(this.uid);
+    let key = await readDeviceKey(this.uid);
+    if (envelope && !key) return false; // Preserve legacy passphrase records.
+    if (!envelope && key)
+      throw Error(
+        "Record metadata is missing. Existing device key was preserved.",
+      );
+    if (!key)
+      key = await crypto.subtle.generateKey(
+        { name: "AES-GCM", length: 256 },
+        false,
+        ["encrypt", "decrypt"],
+      );
+    const data = envelope
+      ? parseRecords(
+          await unseal(
+            key,
+            envelope,
+            `${this.uid}:records:${envelope.revision}`,
+          ),
+        )
+      : emptyRecords();
+    await this.authorize();
+    if (epoch !== this.epoch)
+      throw Error("Account changed. Open records again.");
+    this.key = key;
+    this.envelope = envelope;
+    this.data = data;
+    if (!envelope) {
+      try {
+        await this.persist(data, newSalt(), undefined, key);
+      } catch (error) {
+        this.lock();
+        throw error;
+      }
+    }
+    return true;
+  }
+  async enableDeviceAccess() {
+    const epoch = this.epoch;
+    const key = this.key,
+      envelope = this.envelope;
+    if (!key || !envelope) throw Error("Open the existing records first.");
+    await this.authorize();
+    if (epoch !== this.epoch)
+      throw Error("Account changed. Nothing was saved.");
+    // Atomic revision check: never replace a newer record or re-encrypt files.
+    await commitVault(this.uid, envelope.revision, envelope, undefined, key);
   }
   async unlock(passphrase: string, create: boolean) {
     const epoch = this.epoch;
@@ -80,6 +140,7 @@ export class RecordVault {
     data: RecordData,
     salt = this.envelope?.salt,
     file?: { id: string; sealed: Awaited<ReturnType<typeof seal>> },
+    deviceKey?: CryptoKey,
   ) {
     if (!this.key || !salt || this.writing)
       throw Error(
@@ -104,7 +165,13 @@ export class RecordVault {
       await this.authorize();
       if (epoch !== this.epoch)
         throw Error("The vault was locked. Nothing was saved.");
-      await commitVault(this.uid, this.envelope?.revision, envelope, file);
+      await commitVault(
+        this.uid,
+        this.envelope?.revision,
+        envelope,
+        file,
+        deviceKey,
+      );
       if (epoch !== this.epoch) return;
       this.envelope = envelope;
       this.data = data;
@@ -113,7 +180,12 @@ export class RecordVault {
     }
   }
   async savePatient(
-    input: { name: string; birthDate: string; history: string },
+    input: {
+      name: string;
+      birthDate: string;
+      history: string;
+      profile?: MotherProfile;
+    },
     id?: string,
   ) {
     if (!this.data) throw Error("Unlock your records first.");
@@ -124,7 +196,18 @@ export class RecordVault {
     if (id && !previous && id !== "self") throw Error("Patient not found.");
     const now = new Date().toISOString();
     const patient = {
+      ...previous,
       ...fields,
+      ...(input.profile
+        ? {
+            profile: motherProfileInput({
+              ...input.profile,
+              profileCode:
+                previous?.profile?.profileCode ||
+                `LOCAL-${crypto.randomUUID()}`,
+            }),
+          }
+        : {}),
       id: id ?? crypto.randomUUID(),
       createdAt: previous?.createdAt ?? now,
       updatedAt: now,
@@ -137,6 +220,22 @@ export class RecordVault {
       ],
     });
     return patient.id;
+  }
+  async ownCompanionProfile() {
+    const epoch = this.epoch;
+    await this.authorize();
+    const envelope = await readVault(this.uid);
+    if (!envelope) return undefined;
+    const key = await readDeviceKey(this.uid);
+    if (!key)
+      throw Error("Open your existing profile once to enable local context.");
+    const data = parseRecords(
+      await unseal(key, envelope, `${this.uid}:records:${envelope.revision}`),
+    );
+    await this.authorize();
+    if (epoch !== this.epoch)
+      throw Error("Account changed. Open the companion again.");
+    return data.patients.find((p) => p.id === "self");
   }
   async addDocument(
     patientId: string,

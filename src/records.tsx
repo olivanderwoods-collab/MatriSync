@@ -1,6 +1,7 @@
 import {
   createContext,
   useContext,
+  useCallback,
   useEffect,
   useState,
   type ReactNode,
@@ -11,6 +12,8 @@ import { accountAuth } from "./auth";
 import { RecordVault } from "./record-vault";
 import type { LocalDocument, Patient } from "./records-model";
 import { professionalSections, maternalSections } from "./workspace-spec";
+import { profileContext } from "./ai/behavior";
+import type { MotherProfile } from "./records-model";
 
 type RecordsContext = {
   vault?: RecordVault;
@@ -18,6 +21,231 @@ type RecordsContext = {
   lock: () => void;
 };
 const Context = createContext<RecordsContext>({ refresh() {}, lock() {} });
+export function useLocalCompanionProfile() {
+  const { vault } = useContext(Context);
+  return useCallback(
+    async () => profileContext(await vault?.ownCompanionProfile()),
+    [vault],
+  );
+}
+export function MotherRecordsHome() {
+  const load = useLocalCompanionProfile();
+  const [profile, setProfile] = useState<Awaited<ReturnType<typeof load>>>();
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    let live = true;
+    load()
+      .then((value) => {
+        if (live) {
+          setProfile(value);
+          setReady(true);
+        }
+      })
+      .catch(() => {
+        if (live) {
+          setError(true);
+          setReady(true);
+        }
+      });
+    return () => {
+      live = false;
+    };
+  }, [load]);
+  return (
+    <>
+      <div className="page-title">
+        <div>
+          <span className="eyebrow">
+            {profile?.name
+              ? `Welcome ${profile.name.split(/\s+/)[0]}`
+              : "Welcome"}
+          </span>
+          <h1>A little care, every day.</h1>
+          <p>Your health at a glance.</p>
+        </div>
+      </div>
+      <section className="panel">
+        <h2>Your profile</h2>
+        {!ready ? (
+          <p>Opening your saved profile…</p>
+        ) : error ? (
+          <p>Open Profile Settings to connect your existing records.</p>
+        ) : !profile ? (
+          <p>No profile details added yet.</p>
+        ) : (
+          <>
+            <p>{profile.name}</p>
+            <p>
+              {profile.pregnancyWeeks !== undefined
+                ? `Pregnancy week ${profile.pregnancyWeeks} · Recorded ${profile.recordedOn}`
+                : "Pregnancy stage not recorded."}
+            </p>
+          </>
+        )}
+      </section>
+      <section className="panel">
+        <h2>Educational suggestions</h2>
+        <p>Explore topics in MatriSathi. Articles are pending review.</p>
+      </section>
+    </>
+  );
+}
+export function MotherRecordProfile({
+  email,
+  onName,
+}: {
+  email: string;
+  onName: (name: string) => void;
+}) {
+  return (
+    <VaultGate>
+      <MotherRecordForm email={email} onName={onName} />
+    </VaultGate>
+  );
+}
+function MotherRecordForm({
+  email,
+  onName,
+}: {
+  email: string;
+  onName: (name: string) => void;
+}) {
+  const { vault, refresh } = useContext(Context);
+  const patient = vault!.data!.patients.find((p) => p.id === "self");
+  useEffect(() => {
+    if (patient?.name) onName(patient.name);
+  }, [patient?.name, onName]);
+  const [name, setName] = useState(patient?.name || "");
+  const [birthDate, setBirthDate] = useState(patient?.birthDate || "");
+  const [profile, setProfile] = useState<MotherProfile>(
+    patient?.profile || {
+      bloodGroup: "",
+      allergies: "",
+      emergencyContact: "",
+      emergencyPhone: "",
+      guardian: "",
+      guardianPhone: "",
+      residence: "",
+      username: "",
+      profileCode: "",
+    },
+  );
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  return (
+    <form
+      className="panel record-form"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setBusy(true);
+        setError("");
+        setStatus("");
+        try {
+          await vault!.savePatient(
+            { name, birthDate, history: patient?.history || "", profile },
+            "self",
+          );
+          refresh();
+          onName(name.trim());
+          setProfile(
+            vault!.data!.patients.find((p) => p.id === "self")!.profile!,
+          );
+          setStatus("Profile saved encrypted on this device.");
+        } catch (e) {
+          setError(message(e));
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <h2>Mother profile</h2>
+      <label>
+        Email
+        <input value={email} readOnly />
+      </label>
+      <label>
+        Full name
+        <input
+          required
+          value={name}
+          maxLength={120}
+          onChange={(e) => setName(e.target.value)}
+        />
+      </label>
+      <label>
+        Date of birth (optional)
+        <input
+          type="date"
+          value={birthDate}
+          onChange={(e) => setBirthDate(e.target.value)}
+        />
+      </label>
+      <label>
+        Recorded pregnancy week (optional)
+        <input
+          type="number"
+          min={0}
+          max={50}
+          step={1}
+          value={profile.pregnancyWeeks ?? ""}
+          onChange={(e) =>
+            setProfile({
+              ...profile,
+              pregnancyWeeks:
+                e.target.value === "" ? undefined : Number(e.target.value),
+            })
+          }
+        />
+      </label>
+      <label>
+        Pregnancy week recorded on
+        <input
+          type="date"
+          required={profile.pregnancyWeeks !== undefined}
+          value={profile.recordedOn || ""}
+          onChange={(e) =>
+            setProfile({ ...profile, recordedOn: e.target.value })
+          }
+        />
+      </label>
+      {(
+        [
+          ["username", "Username"],
+          ["bloodGroup", "Blood group (as recorded)"],
+          ["allergies", "Allergies (as recorded)"],
+          ["emergencyContact", "Emergency contact"],
+          ["emergencyPhone", "Emergency contact phone"],
+          ["guardian", "Guardian name"],
+          ["guardianPhone", "Guardian phone"],
+          ["residence", "Residence"],
+        ] as const
+      ).map(([key, label]) => (
+        <label key={key}>
+          {label}
+          <input
+            value={profile[key]}
+            maxLength={key === "allergies" || key === "residence" ? 1000 : 120}
+            onChange={(e) => setProfile({ ...profile, [key]: e.target.value })}
+          />
+        </label>
+      ))}
+      <p className="small record-id">
+        Profile code: {profile.profileCode || "Created when you save"}
+      </p>
+      <p className="small">
+        This code and username are local until secure account linking is
+        enabled. Entered health details are not professionally verified.
+      </p>
+      <button className="button" disabled={busy}>
+        {busy ? "Saving…" : "Save mother profile"}
+      </button>
+      {error && <p role="alert">{error}</p>}
+      {status && <p role="status">{status}</p>}
+    </form>
+  );
+}
 export function RecordsProvider({
   uid,
   children,
@@ -34,33 +262,26 @@ export function RecordsProvider({
       : undefined,
   );
   const [, update] = useState(0);
-  const refresh = () => update((n) => n + 1);
+  const refresh = useCallback(() => update((n) => n + 1), []);
   const lock = () => {
     vault?.lock();
     refresh();
   };
   useEffect(() => {
     if (!vault) return;
-    let lastActivity = Date.now();
-    const activity = () => {
-      lastActivity = Date.now();
-    };
     const clear = () => {
       vault.lock();
       update((n) => n + 1);
     };
-    const timer = window.setInterval(() => {
-      if (vault.data && Date.now() - lastActivity >= 5 * 60_000) clear();
-    }, 10_000);
-    window.addEventListener("pointerdown", activity);
-    window.addEventListener("keydown", activity);
+    const restore = (event: PageTransitionEvent) => {
+      if (event.persisted) window.location.reload();
+    };
     window.addEventListener("pagehide", clear);
+    window.addEventListener("pageshow", restore);
     return () => {
       vault.lock();
-      clearInterval(timer);
-      window.removeEventListener("pointerdown", activity);
-      window.removeEventListener("keydown", activity);
       window.removeEventListener("pagehide", clear);
+      window.removeEventListener("pageshow", restore);
     };
   }, [vault]);
   return (
@@ -76,92 +297,92 @@ function message(error: unknown) {
 }
 function VaultGate({ children }: { children: ReactNode }) {
   const { vault, refresh } = useContext(Context);
-  const [exists, setExists] = useState<boolean>();
-  const [passphrase, setPassphrase] = useState("");
-  const [confirm, setConfirm] = useState("");
+  const [legacy, setLegacy] = useState(false);
+  const [phrase, setPhrase] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let live = true;
+    if (!vault || vault.data) return;
     vault
-      ?.exists()
-      .then((value) => {
-        if (live) setExists(value);
+      .openOnDevice()
+      .then((open) => {
+        if (live) {
+          setLegacy(!open);
+          refresh();
+        }
       })
-      .catch((error) => {
-        if (live) setError(message(error));
+      .catch((e) => {
+        if (live) setError(message(e));
       });
     return () => {
       live = false;
     };
-  }, [vault]);
+  }, [vault, attempt, refresh]);
+  if (vault?.data) return children;
   if (!vault) return null;
-  if (vault.data) return children;
-  async function unlock(event: FormEvent) {
-    event.preventDefault();
-    setError("");
-    if (exists === false && passphrase !== confirm) {
-      setError("The passphrases do not match.");
-      return;
-    }
-    setBusy(true);
-    try {
-      await vault!.unlock(passphrase, !exists);
-      setExists(true);
-      refresh();
-    } catch (error) {
-      setError(message(error));
-    } finally {
-      setPassphrase("");
-      setConfirm("");
-      setBusy(false);
-    }
-  }
   return (
-    <section className="panel vault-gate">
+    <section className="panel">
       <h2>
-        {exists === false ? "Set up encrypted records" : "Unlock records"}
+        {legacy ? "Connect your existing records" : "Opening your records"}
       </h2>
-      <p>
-        Your records and documents stay on this device. The vault locks after
-        five minutes without activity, on reload and when you leave your
-        account.
-      </p>
-      <p className="small">
-        Keep this separate passphrase safe. It cannot be recovered. Clearing
-        browser data or losing this device can permanently remove local records
-        and documents. Firebase backup is not connected yet.
-      </p>
-      <form onSubmit={unlock}>
-        <label>
-          Vault passphrase
-          <input
-            type="password"
-            autoComplete={exists ? "current-password" : "new-password"}
-            required
-            minLength={12}
-            maxLength={512}
-            value={passphrase}
-            onChange={(e) => setPassphrase(e.target.value)}
-          />
-        </label>
-        {exists === false && (
+      {legacy && (
+        <form
+          className="record-form"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setBusy(true);
+            setError("");
+            try {
+              await vault.unlock(phrase, false);
+              await vault.enableDeviceAccess();
+              setPhrase("");
+              refresh();
+            } catch (e) {
+              vault.lock();
+              setError(message(e));
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <p>
+            Enter your previous vault passphrase once to keep your existing
+            records and open them automatically on this device after sign-in.
+          </p>
           <label>
-            Confirm vault passphrase
+            Previous vault passphrase
             <input
               type="password"
-              autoComplete="new-password"
               required
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
+              minLength={12}
+              maxLength={512}
+              value={phrase}
+              onChange={(e) => setPhrase(e.target.value)}
             />
           </label>
-        )}
-        {error && <p role="alert">{error}</p>}
-        <button className="button" disabled={busy || exists === undefined}>
-          {busy ? "Opening…" : exists === false ? "Create vault" : "Unlock"}
-        </button>
-      </form>
+          <button className="button" disabled={busy}>
+            {busy ? "Connecting…" : "Keep records and continue"}
+          </button>
+        </form>
+      )}
+      {error && (
+        <>
+          <p role="alert">{error}</p>
+          {!legacy && (
+            <button
+              className="button secondary"
+              onClick={() => {
+                setError("");
+                setAttempt((n) => n + 1);
+              }}
+            >
+              Try again
+            </button>
+          )}
+        </>
+      )}
     </section>
   );
 }
@@ -263,6 +484,7 @@ function Documents({
 }) {
   const { vault, refresh } = useContext(Context);
   const [adding, setAdding] = useState(false);
+  const [camera, setCamera] = useState(false);
   const [file, setFile] = useState<File>();
   const [source, setSource] = useState("");
   const [date, setDate] = useState("");
@@ -320,9 +542,26 @@ function Documents({
       <div className="panel-heading">
         <h2>{kind === "reports" ? "Reports" : "Prescriptions"}</h2>
         {!adding && (
-          <button className="button secondary" onClick={() => setAdding(true)}>
-            {kind === "reports" ? "Add Report" : "Upload prescription"}
-          </button>
+          <div className="action-row">
+            <button
+              className="button secondary"
+              onClick={() => {
+                setCamera(false);
+                setAdding(true);
+              }}
+            >
+              Upload From Device
+            </button>
+            <button
+              className="button secondary"
+              onClick={() => {
+                setCamera(true);
+                setAdding(true);
+              }}
+            >
+              Take Photo
+            </button>
+          </div>
         )}
       </div>
       <p className="small muted">
@@ -334,7 +573,12 @@ function Documents({
             Document
             <input
               type="file"
-              accept="application/pdf,image/jpeg,image/png,image/webp"
+              accept={
+                camera
+                  ? "image/jpeg,image/png,image/webp"
+                  : "application/pdf,image/jpeg,image/png,image/webp"
+              }
+              capture={camera ? "environment" : undefined}
               required
               onChange={(e) => setFile(e.target.files?.[0])}
             />
@@ -406,15 +650,13 @@ function Documents({
   );
 }
 function RecordContent({ path, self }: { path: string; self: boolean }) {
-  const { vault, lock } = useContext(Context);
+  const { vault } = useContext(Context);
   const [query, setQuery] = useState("");
   const [, id, tab = "overview", extra] = path.split("/");
   const data = vault!.data!;
   const patient = data.patients.find((p) => p.id === (self ? "self" : id));
   const title = self
-    ? id === "prescriptions"
-      ? "Prescriptions"
-      : "Reports"
+    ? maternalSections.find((s) => s.id === id)?.title || "My Health"
     : !id
       ? "Patients"
       : id === "add"
@@ -427,9 +669,6 @@ function RecordContent({ path, self }: { path: string; self: boolean }) {
           <h1>{title}</h1>
           <p className="small muted">Private records · This device</p>
         </div>
-        <button className="button secondary" onClick={lock}>
-          Lock records
-        </button>
       </div>
       {self && (
         <nav className="tabs" aria-label="Section tabs">
@@ -442,11 +681,16 @@ function RecordContent({ path, self }: { path: string; self: boolean }) {
       )}
       {self ? (
         patient ? (
-          <Documents
-            key={id}
-            patient={patient}
-            kind={id as LocalDocument["kind"]}
-          />
+          id === "reports" || id === "prescriptions" ? (
+            <Documents key={id} patient={patient} kind={id} />
+          ) : (
+            <section className="panel">
+              <h2>
+                {maternalSections.find((s) => s.id === id)?.title || "Overview"}
+              </h2>
+              <p>{id === "overview" ? patient.name : "No records yet."}</p>
+            </section>
+          )
         ) : (
           <PatientForm self />
         )
@@ -590,6 +834,15 @@ export function LocalRecords({
   path: string;
   self?: boolean;
 }) {
+  if (self) {
+    const [, section, extra] = path.split("/");
+    if (!section || ["vitals", "history", "visits"].includes(section))
+      return <Navigate to="/mother/health/overview" replace />;
+    if (["medications", "medicines"].includes(section))
+      return <Navigate to="/mother/health/prescriptions" replace />;
+    if (extra || !maternalSections.some((s) => s.id === section))
+      return <p>No record is available at this address.</p>;
+  }
   return (
     <VaultGate>
       <RecordContent key={path} path={path} self={self} />
@@ -608,7 +861,7 @@ export function RecordsHome() {
         <p>
           {vault?.data
             ? `${vault.data.patients.filter((p) => p.id !== "self").length} patients on this device`
-            : "Open Patients to unlock your records."}
+            : "Open Patients to view your records."}
         </p>
       </section>
     </>

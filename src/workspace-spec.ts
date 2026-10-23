@@ -49,7 +49,7 @@ export const childSections = [
   section(
     "overview",
     "Overview",
-    "This child's identity, caregiver and separate record context.",
+    "This child's identity, mother and separate record context.",
   ),
   section(
     "vaccinations",
@@ -215,42 +215,11 @@ export const organizationReferrals = [
   ),
 ];
 export const followUpSections = [
-  section(
-    "today",
-    "Today's Follow-ups",
-    "No visit is scheduled for today in this demo.",
-    ["Create Follow-up", "Select Patient"],
-  ),
-  section(
-    "upcoming",
-    "Upcoming",
-    "Doctor-entered instructions, not generated care requirements.",
-    ["Enter Reason", "Add Required Tests", "Set Date", "Set Reminder"],
-  ),
-  section(
-    "overdue",
-    "Overdue",
-    "No overdue clinical status is inferred from the synthetic example.",
-    ["Mark Reviewed"],
-  ),
-  section(
-    "completed",
-    "Completed",
-    "Only an authorized clinician may record completion; no completion occurs here.",
-    ["Mark Completed"],
-  ),
-  section(
-    "instructions",
-    "Patient Instructions",
-    "Show exactly what the clinician entered.",
-    ["Enter Reason"],
-  ),
-  section(
-    "investigations",
-    "Required Investigations",
-    "Only clinician-entered required tests belong here.",
-    ["Add Required Tests"],
-  ),
+  section("upcoming", "Upcoming", "No follow-ups scheduled.", [
+    "Add Follow-up",
+  ]),
+  section("completed", "Completed", "No completed follow-ups."),
+  section("cancelled", "Cancelled", "No cancelled follow-ups."),
 ];
 export const inventorySections = [
   section(
@@ -285,15 +254,21 @@ export const inventorySections = [
   ),
   section(
     "devices",
-    "Bluetooth Devices",
+    "MatriSync Devices",
     "Facility-owned Bluetooth NFC Reader/Writer: proposed ESP32 BLE reader and writer with a small screen and physical controls. Devices are not connected.",
     ["Register Device", "Assign Device", "Report Fault"],
   ),
   section(
-    "financial",
-    "Financial Records",
+    "refunds",
+    "Refunds / Settlements",
     "Deposits, refunds and distributor reimbursement require reconciled claims and duplicate prevention. No amounts or transactions are supplied.",
     ["View Deposits", "View Refunds", "Reimbursement Claims"],
+  ),
+  section(
+    "distributor",
+    "Distributor Coordination",
+    "Coordinate band returns, collection and reimbursement through Inventory.",
+    ["Arrange Collection", "Review Reimbursement"],
   ),
   section(
     "history",
@@ -341,7 +316,6 @@ export const moreMenus: Record<Role, [string, string][]> = {
     ["appearance", "Appearance"],
     ["privacy", "Privacy and Data Controls"],
     ["help", "Help and Support"],
-    ["logout", "Log Out"],
   ],
   professional: [
     ["profile", "Profile"],
@@ -349,22 +323,14 @@ export const moreMenus: Record<Role, [string, string][]> = {
     ["verification", "Professional Verification"],
     ["affiliation", "Facility Affiliation"],
     ["help", "Help"],
-    ["logout", "Log Out"],
   ],
   organization: [
+    ["profile", "Facility Profile"],
     ["staff", "Staff Management"],
     ["verification", "Professional Verification"],
-    ["profile", "Facility Profile"],
-    ["device", "Device Management"],
-    ["reports", "Reports and Analytics"],
-    ["monitoring", "Referral Monitoring"],
-    ["follow-up", "Follow-up Operations"],
-    ["distributor", "Distributor Coordination"],
-    ["settlements", "Financial Settlements"],
     ["notifications", "Notifications"],
     ["settings", "Settings"],
     ["help", "Help and Support"],
-    ["logout", "Log Out"],
   ],
 };
 export const moreDescriptions: Record<string, string> = {

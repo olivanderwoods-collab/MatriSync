@@ -5,7 +5,8 @@ test("mother and professional annotation changes stay compact and preserve bookm
   await page.goto("/auth/login?role=mother");
   await page.getByRole("button", { name: "Continue as Guest" }).click();
   await expect(page.locator("header").getByLabel("Language")).toBeVisible();
-  await page.locator("header").getByLabel("Language").selectOption("Bengali");
+  await page.locator("header").getByLabel("Language").click();
+  await page.locator("header").getByRole("button", { name: "Bengali", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Reviewed translations are pending");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
   await page.goto("/mother/more");
@@ -16,6 +17,7 @@ test("mother and professional annotation changes stay compact and preserve bookm
   await expect(page).toHaveURL(/\/mother\/health\/overview$/);
   await expect(page.getByRole("navigation", { name: "Section tabs" }).getByRole("link")).toHaveText(["Overview", "Prescriptions", "Reports", "Referrals", "Follow-ups"]);
   await page.getByRole("button", { name: "Exit Guest", exact: true }).first().click();
+  await page.getByRole("dialog").getByRole("button", { name: "Exit Guest", exact: true }).click();
   await expect(page).toHaveURL("/");
   await page.goto("/auth/login?role=professional");
   await page.getByRole("button", { name: "Continue as Guest" }).click();

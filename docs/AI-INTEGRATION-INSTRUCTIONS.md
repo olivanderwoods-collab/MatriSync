@@ -1,5 +1,7 @@
 # MATRISYNC — AI Integration Development Instructions
 
+> Confirmed 23 October amendment: the user approved local **profile context only** and explicitly deferred report quotations after comparison with the nonclinical-only plan. Current context is limited to saved name and dated pregnancy stage; no report text, diagnosis, medical-history free text or contacts enter generation. See [confirmed decisions](DECISIONS-2026-10-23.md). The bundled behavior packet guides inference; it does not train weights. The original instructions below remain applicable except where this explicit amendment supersedes them.
+
 ## Project
 
 **Application:** MatriSync  

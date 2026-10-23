@@ -93,18 +93,6 @@ function Tabs({ sections, base }: { sections: Section[]; base: string }) {
     </nav>
   );
 }
-function QuickLinks({ items }: { items: [string, string][] }) {
-  return (
-    <div className="action-row">
-      {items.map(([label, to]) => (
-        <Link className="button secondary" key={label} to={to}>
-          {label}
-          <ArrowRight size={16} />
-        </Link>
-      ))}
-    </div>
-  );
-}
 function Vitals() {
   return (
     <dl className="record-details vitals-list">
@@ -165,23 +153,42 @@ function HandoffContext({ external = false }: { external?: boolean }) {
     </div>
   );
 }
-function Home({ role, profileName }: { role: Role; profileName: string }) {
+function Home({
+  role,
+  profileName,
+  account,
+}: {
+  role: Role;
+  profileName: string;
+  account?: boolean;
+}) {
   if (role === "mother")
     return (
       <>
         <Title
-          eyebrow={`Welcome ${profileName.trim().split(/\s+/)[0]}`}
+          eyebrow={
+            profileName.trim()
+              ? `Welcome ${profileName.trim().split(/\s+/)[0]}`
+              : "Welcome"
+          }
           title="A little care, every day."
           description="Your health at a glance."
         />
         <div className="home-grid">
-          <section className="pregnancy-summary">
-            <span className="eyebrow">MY JOURNEY · PREGNANCY</span>
-            <h2>
-              <strong>34</strong> weeks
-            </h2>
-            <p>Recorded stage · Synthetic fixture, 20 October 2026</p>
-          </section>
+          {!account && (
+            <section className="pregnancy-summary">
+              <span className="eyebrow">MY JOURNEY · PREGNANCY</span>
+              <h2>
+                <strong>34</strong> weeks
+              </h2>
+              <p>Recorded stage · Synthetic fixture, 20 October 2026</p>
+            </section>
+          )}
+          {account && (
+            <Panel title="Your health">
+              <p>No health records added yet.</p>
+            </Panel>
+          )}
           <CareCards followUps={[]} referrals={[]} />
           <Panel title="Important notifications">
             <p>No notifications issued in this demo.</p>
@@ -213,11 +220,7 @@ function Home({ role, profileName }: { role: Role; profileName: string }) {
           "Arrivals awaiting clinical handoff acknowledgement",
           "No verified arrival",
         ],
-        ["Other pending administrative work", "Not recorded"],
-        ["Available bands", "Stock not recorded"],
-        ["Low stock", "Not assessed"],
-        ["Reader/writer status", "Not connected"],
-        ["Refunds/settlements pending", "No transactions recorded"],
+        ["MatriSync device", "Not connected"],
       ];
   return (
     <>
@@ -241,19 +244,6 @@ function Home({ role, profileName }: { role: Role; profileName: string }) {
           </Panel>
         ))}
       </div>
-      {!professional && (
-        <QuickLinks
-          items={[
-            ["Initiate Referral", "/organization/referrals/ready"],
-            ["Incoming Referrals", "/organization/referrals/incoming"],
-            ["Confirm Arrival", "/organization/referrals/transit"],
-            ["View Patients", "/organization/patients"],
-            ["Issue NFC Band", "/organization/inventory/issue"],
-            ["Return Band", "/organization/inventory/return"],
-            ["View Inventory", "/organization/inventory/stock"],
-          ]}
-        />
-      )}
     </>
   );
 }
@@ -355,10 +345,10 @@ function Record({
               <dd>{name}</dd>
             </div>
             <div>
-              <dt>{child ? "Caregiver" : "Recorded stage"}</dt>
+              <dt>{child ? "Mother" : "Recorded stage"}</dt>
               <dd>
                 {child
-                  ? "Mira Sen · Fictional caregiver"
+                  ? "Mira Sen · Fictional mother"
                   : patient?.stage || "Pregnancy · 34 weeks"}
               </dd>
             </div>
@@ -549,6 +539,7 @@ function OrganizationPatient({
 }
 
 function More({
+  account,
   role,
   soon,
   exit,
@@ -613,13 +604,23 @@ function More({
     <>
       <Title
         title={item[1]}
-        description="Coming Soon · Read-only synthetic preview"
+        description={
+          account
+            ? "Not connected yet"
+            : "Coming Soon · Read-only synthetic preview"
+        }
       />
       <Panel>
         {page === "staff" ? (
           <>
-            <p>Dr. Ishani Rao · Professional · Synthetic affiliation</p>
-            <p>Nila Bose · Facility coordinator · Synthetic affiliation</p>
+            {account ? (
+              <p>No staff linked yet.</p>
+            ) : (
+              <>
+                <p>Dr. Ishani Rao · Professional · Synthetic affiliation</p>
+                <p>Nila Bose · Facility coordinator · Synthetic affiliation</p>
+              </>
+            )}
             <p>No credentials or permissions have been verified.</p>
             <Actions
               labels={[
@@ -636,8 +637,12 @@ function More({
           <p className="section-description">
             {role === "organization" && page === "reports"
               ? "Reports and Analytics: future authorized facility reporting. No live analytics, clinical interpretation or export is generated."
-              : moreDescriptions[page] ||
-                "This area will be available in a future release."}
+              : account && page === "affiliation"
+                ? "No facility affiliation recorded."
+                : account && page === "profile"
+                  ? "No facility profile recorded."
+                  : moreDescriptions[page] ||
+                    "This area will be available in a future release."}
           </p>
         )}
         {role === "professional" && page === "device" && (
@@ -703,10 +708,26 @@ export function WorkspaceScreens(props: Props) {
     return props.settings();
   if (section === "overview")
     return parts.length === 1 ? (
-      <Home role={role} profileName={props.profileName} />
+      <Home
+        role={role}
+        profileName={props.profileName}
+        account={props.account}
+      />
     ) : (
       notFound
     );
+  if (role === "professional" && section === "referrals")
+    return redirect("patients");
+  if (role === "organization" && section === "more") {
+    const moved: Record<string, string> = {
+      device: "devices",
+      settlements: "refunds",
+      distributor: "distributor",
+    };
+    if (moved[second]) return redirect(`inventory/${moved[second]}`);
+    if (["reports", "monitoring", "follow-up"].includes(second))
+      return redirect("more");
+  }
   if (section === "more") {
     if (role === "mother" && !third) {
       const old: Record<string, string> = {
@@ -721,7 +742,7 @@ export function WorkspaceScreens(props: Props) {
       if (second === "settings") return redirect("more/profile");
       if (["prescriptions", "reports", "vitals"].includes(second))
         return redirect("patients");
-      if (second === "referral-history") return redirect("referrals/completed");
+      if (second === "referral-history") return redirect("patients");
     }
     if (role === "organization" && second === "distributor") {
       if (!third) return redirect("more/distributor/overview");
@@ -782,6 +803,15 @@ export function WorkspaceScreens(props: Props) {
     return <Record role={role} id={second} soon={soon} />;
   }
   if (role === "mother" && section === "children") {
+    if (props.account)
+      return (
+        <>
+          <Title title="Children" description="Your linked child profiles" />
+          <Panel>
+            <p>No children linked yet.</p>
+          </Panel>
+        </>
+      );
     if (!second)
       return (
         <>
@@ -885,7 +915,11 @@ export function WorkspaceScreens(props: Props) {
     );
   }
   if (role === "professional" && section === "follow-up") {
-    if (!second) return redirect("follow-up/today");
+    if (
+      !second ||
+      ["today", "overdue", "instructions", "investigations"].includes(second)
+    )
+      return redirect("follow-up/upcoming");
     if (third || !followUpSections.some((s) => s.id === second))
       return notFound;
     return (
@@ -905,6 +939,7 @@ export function WorkspaceScreens(props: Props) {
   }
   if (role === "organization" && section === "inventory") {
     if (!second) return redirect("inventory/stock");
+    if (second === "financial") return redirect("inventory/refunds");
     if (third || !inventorySections.some((s) => s.id === second))
       return notFound;
     return (

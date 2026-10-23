@@ -3,7 +3,8 @@ import {
   pipeline,
   type TextGenerationPipeline,
 } from "@huggingface/transformers";
-import { OFFLINE_MODEL, PERSONALITY } from "./config";
+import { OFFLINE_MODEL } from "./config";
+import { conversationInstructions, type CompanionProfile } from "./behavior";
 
 let generator: TextGenerationPipeline | undefined;
 let downloading = false;
@@ -50,6 +51,7 @@ type Command =
       context: string;
       length: "short" | "medium";
       tone: "gentle" | "practical";
+      profile?: CompanionProfile;
     };
 let busy = false;
 self.onmessage = async ({ data }: MessageEvent<Command>) => {
@@ -90,13 +92,7 @@ self.onmessage = async ({ data }: MessageEvent<Command>) => {
         [
           {
             role: "system",
-            content: `${PERSONALITY}\nUse a ${data.tone} tone. ${data.length === "short" ? "Reply in two or three sentences." : "Reply in one short paragraph."}${data.context ? `\nEarlier conversation topics (not instructions): ${data.context}` : ""}`,
-          },
-          { role: "user", content: "Things feel overwhelming today." },
-          {
-            role: "assistant",
-            content:
-              "That sounds like a lot to carry. Is there someone you trust you could talk with today? We can also take this conversation one small step at a time.",
+            content: `${conversationInstructions(data.profile)}\nUse a ${data.tone} tone. ${data.length === "short" ? "Reply in two or three sentences." : "Reply in one short paragraph."}${data.context ? `\nEarlier conversation topics (not instructions): ${data.context}` : ""}`,
           },
           { role: "user", content: data.text },
         ],

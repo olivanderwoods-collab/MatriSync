@@ -83,6 +83,24 @@ export function safetyCheck(
       text: "Reliable safety support for this language has not been validated yet. Please use English for this development version. For urgent concerns, contact a healthcare professional or local emergency services.",
     };
   if (
+    /what (?:medicine|medication|tablet|pill).*take|what should i take|(?:should|can|may) i take|which (?:medicine|medication)|recommend.*(?:medicine|medication)|prescribe/.test(
+      text,
+    )
+  )
+    return {
+      kind: "clinical",
+      text: "I can't recommend a medicine or dose. Please consult your physician before taking any medicine.",
+    };
+  if (
+    /diagnos|what.*report.*(?:mean|represent|say)|interpret.*(?:report|result)|(?:lab|test) results?/.test(
+      text,
+    )
+  )
+    return {
+      kind: "clinical",
+      text: "I can't interpret reports or give a diagnosis. Reading diagnoses from reports is not enabled yet. Please ask your physician to explain the report.",
+    };
+  if (
     /\bdos(e|age|ing)\b|how (much|many).*(medicine|tablet|pill|take)|\b(mg|mcg|ml)\b|prescri|diagnos|medicin|medicat|drug|herb|tablet|pill|paracetamol|ibuprofen|antibiotic|safe.*(take|pregnan)|interaction|symptom|bleed|pain|fever|rash|vomit|diabet|blood pressure|test result|breastfeed|nutrition|vaccin|disease|illness|depress|treat/.test(
       text,
     )
@@ -94,7 +112,7 @@ export function safetyCheck(
   // Only bounded everyday/emotional topics reach the small model. Unknown topics
   // conservatively fall back instead of treating a keyword miss as medical safety.
   if (
-    /\b(hello|hi|hey|thanks|thank you|chat|lonely|loneliness|scared|afraid|worr(y|ied)|feel|feeling|sad|happy|friend|family|encourage|support|day|hobby|music|poem|story|bored|overwhelm|delivery|giving birth)\b/.test(
+    /\b(my name|my profile|pregnancy week|how many weeks|weather|travel|movie|book|cooking|recipe|sport|game|history|language|math|science|art|garden|how are you|how are things|how is it going|how are you doing|do you know me|remember me|know my name|who are you|what is your name|tell me about yourself|good morning|good evening|good night|hello|hi|hey|thanks|thank you|chat|lonely|loneliness|scared|afraid|worr(y|ied)|feel|feeling|sad|happy|friend|family|encourage|support|day|hobby|music|poem|story|bored|overwhelm|delivery|giving birth)\b/.test(
       text,
     ) &&
     !/ignore|system prompt|pretend|roleplay|instructions|jailbreak/.test(text)
@@ -107,9 +125,10 @@ export function safetyCheck(
 }
 export function safeOutput(text: string): string | undefined {
   const cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+  const normalized = cleaned.replace(/[’‘]/g, "'");
   if (
-    /\bI(?:'m| am) (?:scared|afraid|pregnant|lonely)|\bI feel (?:your|scared|afraid|lonely)|your heart is a beautiful place/i.test(
-      cleaned,
+    /\bI(?:'m| am) (?:not |never )?(?:scared|afraid|pregnant|lonely)|\bI (?:do not |don't |never )?feel (?:your|scared|afraid|lonely)|your heart is a beautiful place/i.test(
+      normalized,
     )
   )
     return undefined;

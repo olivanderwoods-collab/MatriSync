@@ -60,7 +60,19 @@ import { navigation, roleNames, TAGLINE } from "./data";
 import { defaultProfile, ProfileEditor, type Profile } from "./profile";
 import { BackButton } from "./navigation";
 import { WorkspaceScreens } from "./workspace";
-import { RecordsProvider, LocalRecords, RecordsHome } from "./records";
+import {
+  RecordsProvider,
+  LocalRecords,
+  RecordsHome,
+  MotherRecordProfile,
+  MotherRecordsHome,
+} from "./records";
+import {
+  WorkflowTestProvider,
+  WorkflowTests,
+  TestLink,
+  workflowTestsEnabled,
+} from "./workflow-tests";
 import { distributorSections, moreMenus } from "./workspace-spec";
 import {
   demoStore,
@@ -148,9 +160,7 @@ function Brand({
         alt=""
       />
       <div>
-        <strong>
-          MatriSync<span className="brand-dot">.</span>
-        </strong>
+        <strong>MatriSync</strong>
         <span>{TAGLINE}</span>
       </div>
     </div>
@@ -199,7 +209,10 @@ function Dialog({
 }
 function App() {
   const [demo, setDemo] = useState<DemoSession | null>(() => demoStore.load());
-  const [accountProfile, setAccountProfile] = useState<Profile>(defaultProfile);
+  const [accountProfile, setAccountProfile] = useState<Profile>({
+    name: "",
+    photo: "",
+  });
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(
     () => !demo && hasAccount() && authConfigured,
@@ -289,7 +302,7 @@ function App() {
     }
   }, []);
   const clear = () => {
-    setAccountProfile(defaultProfile);
+    setAccountProfile({ name: "", photo: "" });
     demoStore.clear();
     setDemo(null);
     setTheme("system");
@@ -347,7 +360,7 @@ function App() {
       );
   }
   const state: AppState = {
-    profile: demo?.profile || accountProfile,
+    profile: demo ? demo.profile || defaultProfile : accountProfile,
     saveProfile: (profile) => {
       if (demo) setDemo(demoStore.save({ ...demo, profile }));
       else setAccountProfile(profile);
@@ -763,13 +776,17 @@ function Workspace() {
   const uid = !app.demo ? app.user?.uid : undefined;
   return (
     <RecordsProvider key={uid || "guest"} uid={uid}>
-      <WorkspaceBody />
+      <WorkflowTestProvider>
+        <WorkspaceBody />
+      </WorkflowTestProvider>
     </RecordsProvider>
   );
 }
 function WorkspaceBody() {
   const { role, "*": rest } = useParams();
   const app = useApp();
+  const navigate = useNavigate();
+  const [logout, setLogout] = useState(false);
   if (!roles.includes(role as Role)) return <NotFound />;
   const r = role as Role;
   if (app.loading) return <Loading />;
@@ -779,12 +796,19 @@ function WorkspaceBody() {
     return <Navigate to={`/${app.demo.role}/overview`} replace />;
   const path = rest || "overview";
   const section = path.split("/")[0];
+  const testing = workflowTestsEnabled && path.startsWith("patients/test");
+  const patientDetail =
+    section === "patients" &&
+    (testing
+      ? path.split("/").length > 2
+      : !!path.split("/")[1] &&
+        !["add", "register", "consultation"].includes(path.split("/")[1]));
   const realRecords =
     !app.demo &&
+    !testing &&
     ((r === "professional" &&
       (section === "patients" || path === "overview")) ||
-      (r === "mother" &&
-        ["health/reports", "health/prescriptions"].includes(path)));
+      (r === "mother" && section === "health"));
   const distributor =
     r === "organization" &&
     path.split("/")[0] === "more" &&
@@ -806,7 +830,7 @@ function WorkspaceBody() {
     </NavLink>
   ));
   return (
-    <div className="app-layout">
+    <div className={`app-layout ${patientDetail ? "patient-layout" : ""}`}>
       <aside className="sidebar">
         <Link
           to={r === "mother" ? "/mother/more/profile" : `/${r}/overview`}
@@ -844,17 +868,12 @@ function WorkspaceBody() {
                   ? app.demo
                     ? "Dr. Ishani Rao"
                     : "Your account"
-                  : "Lotus Family Clinic"}
+                  : app.demo
+                    ? "Lotus Family Clinic"
+                    : "Your facility"}
             </strong>
             <span>{app.demo ? "Synthetic profile" : "Signed-in account"}</span>
           </div>
-          <button
-            className="icon-button"
-            aria-label={app.demo ? "Exit Guest" : "Log Out"}
-            onClick={() => void app.exit()}
-          >
-            <LogOut size={18} />
-          </button>
         </div>
       </aside>
       <div className="workspace-body">
@@ -871,55 +890,70 @@ function WorkspaceBody() {
             <Brand profile={r === "mother" ? app.profile : undefined} />
           </Link>
           {r === "mother" && section === "overview" && (
-            <label className="home-language">
-              <span>Language</span>
-              <select
-                aria-label="Language"
-                value={app.language}
-                onChange={(e) =>
-                  app.preferences(app.theme, e.target.value as Language)
+            <details className="home-language">
+              <summary aria-label="Language">
+                {
+                  {
+                    English: "EN",
+                    Bengali: "BN",
+                    Kannada: "KN",
+                    Hindi: "HI",
+                    Marathi: "MR",
+                  }[app.language]
                 }
-              >
+              </summary>
+              <div>
                 {languages.map((language) => (
-                  <option key={language}>{language}</option>
+                  <button
+                    key={language}
+                    onClick={(e) => {
+                      app.preferences(app.theme, language);
+                      e.currentTarget
+                        .closest("details")
+                        ?.removeAttribute("open");
+                    }}
+                  >
+                    {language}
+                  </button>
                 ))}
-              </select>
-            </label>
+              </div>
+            </details>
           )}
           <span className="connection-state">
-            {realRecords
-              ? "Device storage"
-              : app.online
-                ? "Online · Demo only"
-                : "Offline · Public shell"}
+            {app.online ? "Online" : "Offline"}
+            {app.demo ? " · Guest Demo" : ""}
           </span>
         </header>
         <div className="demo-banner">
           <div>
             <span className="status-dot" />
             <strong>
-              {app.demo
-                ? "Guest Demo · Synthetic data"
-                : realRecords
-                  ? "Private records · Device storage"
-                  : "Account Demo · Synthetic data"}
+              {app.demo ? "Guest Demo · Synthetic data" : "Signed-in account"}
             </strong>
             <span className="banner-description">
-              {realRecords
-                ? "Documents remain on this device."
-                : "Patient records are fictional."}
+              {app.demo
+                ? "Fictional profiles."
+                : "Records stay on this device."}
             </span>
           </div>
-          <button onClick={() => void app.exit()}>
+          <button onClick={() => setLogout(true)}>
             {app.demo ? "Exit Guest" : "Log Out"} <LogOut size={14} />
           </button>
         </div>
         <main id="main" tabIndex={-1} className="workspace-main">
-          {path !== "overview" && (
-            <BackButton
-              fallback={`/${r}/${path.startsWith("more/") ? "more" : path.startsWith("patients/") ? "patients" : "overview"}`}
-            />
-          )}
+          {path !== "overview" &&
+            (patientDetail ? (
+              <Link
+                className="back-button"
+                to={`/${r}/patients${testing ? "/test" : ""}`}
+              >
+                ← Back to Patients
+              </Link>
+            ) : (
+              <BackButton
+                fallback={`/${r}/${path.startsWith("more/") ? "more" : path.startsWith("patients/") ? "patients" : "overview"}`}
+              />
+            ))}
           {r === "mother" &&
             section === "overview" &&
             app.language !== "English" && (
@@ -928,7 +962,18 @@ function WorkspaceBody() {
                 content is shown in English.
               </p>
             )}
-          {realRecords ? (
+          {!app.demo && r === "mother" && path === "overview" ? (
+            <MotherRecordsHome />
+          ) : testing ? (
+            <WorkflowTests role={r} path={path} />
+          ) : !app.demo && r === "organization" && section === "patients" ? (
+            <>
+              <h1>Patients</h1>
+              <section className="panel">
+                <p>No patients linked yet.</p>
+              </section>
+            </>
+          ) : realRecords ? (
             path === "overview" ? (
               <RecordsHome />
             ) : (
@@ -941,7 +986,7 @@ function WorkspaceBody() {
               profileName={app.profile.name}
               path={path}
               soon={app.soon}
-              exit={() => void app.exit()}
+              exit={() => setLogout(true)}
               settings={(section) => (
                 <SettingsPage role={r} section={section} />
               )}
@@ -949,18 +994,59 @@ function WorkspaceBody() {
               notFound={<NotFound embedded />}
             />
           )}
+          {section === "patients" && !patientDetail && !testing && (
+            <TestLink role={r} />
+          )}
+          {r === "mother" && path === "more/permissions" && (
+            <TestLink role={r} />
+          )}
           <footer className="workspace-footer">
             <span>MatriSync · {TAGLINE}</span>
             <span>
-              {realRecords
-                ? "Private storage · No clinical interpretation"
-                : "Demonstration only · No clinical advice"}
+              {app.demo || testing
+                ? "Synthetic test · No clinical advice"
+                : "Device storage · No clinical interpretation"}
             </span>
           </footer>
         </main>
-        <nav className="mobile-nav" aria-label="Mobile navigation">
-          {navLinks}
-        </nav>
+        {!patientDetail && (
+          <nav
+            className="mobile-nav"
+            aria-label="Mobile navigation"
+            style={{
+              gridTemplateColumns: `repeat(${nav.length}, minmax(0, 1fr))`,
+            }}
+          >
+            {navLinks}
+          </nav>
+        )}
+        {logout && (
+          <Dialog
+            title="Are you sure?"
+            onClose={() => {
+              setLogout(false);
+              navigate(`/${r}/overview`);
+            }}
+          >
+            <p>
+              {app.demo ? "Leave this Guest session?" : "Log out of MatriSync?"}
+            </p>
+            <div className="action-row">
+              <button className="button" onClick={() => void app.exit()}>
+                {app.demo ? "Exit Guest" : "Log out"}
+              </button>
+              <button
+                className="button secondary"
+                onClick={() => {
+                  setLogout(false);
+                  navigate(`/${r}/overview`);
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </Dialog>
+        )}
       </div>
     </div>
   );
@@ -1027,7 +1113,20 @@ function SettingsPage({ role, section }: { role: Role; section?: string }) {
           title="Profile Settings"
           description="Your name and picture."
         />
-        <ProfileEditor profile={app.profile} save={app.saveProfile} />
+        <ProfileEditor
+          profile={app.profile}
+          save={app.saveProfile}
+          photoOnly={!app.demo}
+        />
+        {!app.demo && app.user && (
+          <MotherRecordProfile
+            email={app.user.email || ""}
+            onName={(name) => {
+              if (app.profile.name !== name)
+                app.saveProfile({ ...app.profile, name });
+            }}
+          />
+        )}
       </>
     );
   const combinedProfile = role === "professional" && section === "profile";
@@ -1148,12 +1247,6 @@ function SettingsPage({ role, section }: { role: Role; section?: string }) {
                 </button>
               </>
             )}
-            <button
-              className="button subtle full"
-              onClick={() => void app.exit()}
-            >
-              {app.demo ? "Exit Guest" : "Log Out"}
-            </button>
           </Panel>
         )}
       </div>
@@ -1166,7 +1259,7 @@ function Help({ embedded = false }: { embedded?: boolean }) {
       {!embedded && <BackButton fallback="/" />}
       <PageTitle
         eyebrow="ABOUT MATRISYNC"
-        title={TAGLINE}
+        title="Help & Support"
         description="A demonstration of maternal care continuity, from conceiving through parenting."
       />
       <Panel title="A guide to this preview">
@@ -1183,9 +1276,9 @@ function Help({ embedded = false }: { embedded?: boolean }) {
             <h3>Know what works</h3>
             <p>
               Navigation, preferences, and temporary Guest sessions work.
-              Signed-in accounts can save encrypted patient profiles and
-              upload documents locally. Clinical approvals, AI, messaging and
-              device connections remain in development.
+              Signed-in accounts can save encrypted patient profiles and upload
+              documents locally. Clinical approvals, AI, messaging and device
+              connections remain in development.
             </p>
           </div>
           <div>
@@ -1199,9 +1292,8 @@ function Help({ embedded = false }: { embedded?: boolean }) {
           <div>
             <h3>Development status</h3>
             <p>
-              This is a development build. It
-              offers no diagnosis, treatment, prescription, or patient-specific
-              advice.
+              This is a development build. It offers no diagnosis, treatment,
+              prescription, or patient-specific advice.
             </p>
           </div>
         </div>

@@ -12,6 +12,14 @@ import {
 } from "./quotas";
 describe("AI safety independently of generation", () => {
   it("allows ordinary support, routes clinical and urgent statements to fixed guidance", () => {
+    for (const greeting of [
+      "How are you?",
+      "Do you know me?",
+      "Good morning",
+      "Who are you?",
+      "Do you remember me?",
+    ])
+      expect(safetyCheck(greeting)).toBeUndefined();
     expect(safetyCheck("I feel lonely during my pregnancy.")).toBeUndefined();
     expect(safetyCheck("I'm scared about giving birth.")).toBeUndefined();
     expect(
@@ -43,8 +51,13 @@ describe("AI safety independently of generation", () => {
       "<think>unfinished",
       "Your blood pressure is normal",
       "You don't need a doctor",
+      "I'm not scared of giving birth, it's a natural process.",
+      "I’m not afraid either.",
     ])
       expect(safeOutput(text)).toBeUndefined();
+    expect(safetyCheck("Can I take aspirin today?")?.text).toContain(
+      "consult your physician",
+    );
     expect(
       safeOutput(
         "That sounds lonely. Is there someone you trust you could talk to today?",

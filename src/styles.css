@@ -2689,3 +2689,20 @@ button.back-link {
 .ai-install-confirm { display:flex; flex-wrap:wrap; align-items:center; }
 .ai-install-confirm p { flex:0 0 100%; margin:0; }
 .ai-install-confirm .button { max-width:100%; }
+
+/* Patient records have their own navigation and an explicit directory return. */
+.patient-layout .sidebar nav { display: none; }
+.patient-layout .workspace-main { padding-bottom: 30px; }
+.back-button { display: inline-block; margin-bottom: 24px; color: var(--text); }
+.home-language { position: relative; }
+.home-language summary { cursor: pointer; padding: 8px 12px; border: 1px solid var(--border); border-radius: 12px; }
+.home-language > div { position: absolute; z-index: 8; right: 0; padding: 8px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; min-width: 140px; }
+.home-language > div button { display: block; width: 100%; padding: 10px; text-align: left; }
+.test-workspace { margin-bottom: 24px; }
+.test-workspace > div { width: 100%; }
+.test-workspace label { display: grid; gap: 8px; margin: 12px 0; }
+.test-workspace select { max-width: 100%; }
+.check-row { display: flex !important; align-items: center; gap: 12px; }
+.check-row input { width: auto; }
+
+.test-workspace .text-button { border: 0; background: transparent; color: var(--text); text-decoration: underline; cursor: pointer; padding: 8px 0; }

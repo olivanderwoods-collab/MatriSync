@@ -1,4 +1,6 @@
-# Capability inventory — 22 October 2026
+# Capability inventory — 23 October 2026
+
+Current changes: [23 October decisions](DECISIONS-2026-10-23.md). Private records now open automatically on this device, with one-time migration for old passphrase vaults. Mother replaces Mother/Caregiver. Patient-level navigation, organization-controlled referral initiation, Inventory refunds and synthetic linking/assignment are implemented as described there. Synthetic grants are not real authorization; cloud E2EE sharing, hardware transport and an operational refund ledger remain pending. The table below describes the earlier 22 October baseline and is retained as historical context.
 
 | Area | Working now | Remaining |
 |---|---|---|

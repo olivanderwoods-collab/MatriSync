@@ -2,12 +2,91 @@ import "fake-indexeddb/auto";
 import { describe, expect, it } from "vitest";
 import { RecordVault } from "./record-vault";
 import { cloudRecords, patientInput, validatedDocument } from "./records-model";
-import { readVault, commitVault, VAULT_DB } from "./vault-storage";
+import {
+  readVault,
+  commitVault,
+  VAULT_DB,
+  readDeviceKey,
+} from "./vault-storage";
 import { deriveVaultKey, newSalt, seal, unseal } from "./vault-crypto";
 const pass = "a separate test vault phrase";
 const authorize = async () => {};
 
 describe("encrypted device records", () => {
+  it("opens new device records automatically and isolates account keys", async () => {
+    const uid = crypto.randomUUID();
+    const first = new RecordVault(uid, authorize);
+    expect(await first.openOnDevice()).toBe(true);
+    await first.savePatient({
+      name: "Automatic private record",
+      birthDate: "",
+      history: "",
+    });
+    const key = (await readDeviceKey(uid))!;
+    expect(key.extractable).toBe(false);
+    await expect(crypto.subtle.exportKey("raw", key)).rejects.toThrow();
+    first.lock();
+    const second = new RecordVault(uid, authorize);
+    expect(await second.openOnDevice()).toBe(true);
+    expect(second.data?.patients[0].name).toBe("Automatic private record");
+    const other = new RecordVault(crypto.randomUUID(), authorize);
+    await other.openOnDevice();
+    expect(other.data?.patients).toEqual([]);
+  });
+  it("migrates legacy access without changing ciphertext or original file bytes", async () => {
+    const uid = crypto.randomUUID();
+    const legacy = new RecordVault(uid, authorize);
+    await legacy.unlock(pass, true);
+    const id = await legacy.savePatient({
+      name: "Legacy",
+      birthDate: "",
+      history: "Preserve",
+    });
+    await legacy.addDocument(
+      id,
+      "reports",
+      new File(["%PDF-1.7\nKeep original"], "original.pdf", {
+        type: "application/pdf",
+      }),
+      "",
+      "",
+    );
+    const documentId = legacy.data!.documents[0].id;
+    const envelope = await readVault(uid);
+    const bytes = (await legacy.document(documentId)).bytes;
+    legacy.lock();
+    const next = new RecordVault(uid, authorize);
+    expect(await next.openOnDevice()).toBe(false);
+    expect(await readVault(uid)).toEqual(envelope);
+    await expect(
+      next.unlock("incorrect legacy passphrase", false),
+    ).rejects.toThrow();
+    expect(await readDeviceKey(uid)).toBeUndefined();
+    await next.unlock(pass, false);
+    await next.enableDeviceAccess();
+    expect(await readVault(uid)).toEqual(envelope);
+    next.lock();
+    expect(await next.openOnDevice()).toBe(true);
+    expect((await next.document(documentId)).bytes).toEqual(bytes);
+  });
+  it("rejects an automatic open after account change and concurrent initialization", async () => {
+    const uid = crypto.randomUUID();
+    const first = new RecordVault(uid, authorize);
+    const opening = first.openOnDevice();
+    first.lock();
+    await expect(opening).rejects.toThrow("Account changed");
+    expect(first.data).toBeUndefined();
+    const a = new RecordVault(uid, authorize),
+      b = new RecordVault(uid, authorize);
+    const results = await Promise.allSettled([
+      a.openOnDevice(),
+      b.openOnDevice(),
+    ]);
+    expect(results.some((r) => r.status === "fulfilled")).toBe(true);
+    const reopened = new RecordVault(uid, authorize);
+    await expect(reopened.openOnDevice()).resolves.toBe(true);
+    expect(reopened.data?.patients).toEqual([]);
+  });
   it("persists patients and original documents encrypted and survives reopening", async () => {
     const uid = crypto.randomUUID();
     const vault = new RecordVault(uid, authorize);

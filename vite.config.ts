@@ -64,6 +64,17 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: [
       {
+        find: /^\.\/workflow-tests$/,
+        replacement: fileURLToPath(
+          new URL(
+            mode === "production"
+              ? "./src/workflow-tests-disabled.tsx"
+              : "./src/workflow-tests.tsx",
+            import.meta.url,
+          ),
+        ),
+      },
+      {
         find: /^\.\/medicine-demo-loader$/,
         replacement: fileURLToPath(
           new URL(

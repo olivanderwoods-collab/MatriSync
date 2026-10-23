@@ -16,14 +16,14 @@ async function guest(page: Page, role: string) {
   await page.getByRole("button", { name: "Continue as Guest" }).click();
   await expect(page.getByText("Guest Demo · Synthetic data")).toBeVisible();
 }
-test("exact five tabs for three public roles and restricted distributor", async ({
+test("revised role navigation and distributor move into inventory", async ({
   page,
 }) => {
   await page.goto("/");
   await expect(page.locator(".role-card")).toHaveCount(3);
   const layouts = {
     mother: ["Home", "My Health", "MatriSathi", "Children", "More"],
-    professional: ["Home", "Patients", "Referrals", "Follow-ups", "More"],
+    professional: ["Home", "Patients", "Follow-ups", "More"],
     organization: ["Home", "Referrals", "Patients", "Inventory", "More"],
   };
   for (const [role, labels] of Object.entries(layouts)) {
@@ -48,6 +48,7 @@ test("exact five tabs for three public roles and restricted distributor", async 
       .getByRole("button", { name: "Exit Guest", exact: true })
       .first()
       .click();
+  await page.getByRole("dialog").getByRole("button", { name: "Exit Guest", exact: true }).click();
   }
   await guest(page, "organization");
   await page.goto("/organization/more/distributor");
@@ -55,7 +56,7 @@ test("exact five tabs for three public roles and restricted distributor", async 
     page
       .getByRole("navigation", { name: "Mobile navigation", exact: true })
       .getByRole("link"),
-  ).toHaveText(["Home", "Stock", "Transfers", "Settlements", "More"]);
+  ).toHaveText(["Home", "Referrals", "Patients", "Inventory", "More"]);
   await expect(page.locator("main")).not.toContainText("Mira Sen");
   await expect(page.locator("main")).not.toContainText("DEMO-P-");
 });
@@ -133,6 +134,7 @@ test("every specified destination, legacy bookmarks and no external traffic", as
       .getByRole("button", { name: "Exit Guest", exact: true })
       .first()
       .click();
+  await page.getByRole("dialog").getByRole("button", { name: "Exit Guest", exact: true }).click();
   }
   await guest(page, "professional");
   await page.goto("/professional/matribridge");
@@ -170,12 +172,11 @@ test("v2 role boundaries and Home action inventories", async ({ page }) => {
     .getByRole("button", { name: "Exit Guest", exact: true })
     .first()
     .click();
+  await page.getByRole("dialog").getByRole("button", { name: "Exit Guest", exact: true }).click();
   await guest(page, "professional");
   await expect(main.getByRole("link")).toHaveCount(0);
   await page.goto("/professional/referrals/approved");
-  await expect(
-    main.getByRole("button", { name: /Submit to Organization/ }),
-  ).toBeVisible();
+  await expect(page).toHaveURL(/\/professional\/patients$/);
   await expect(
     main.getByRole("button", { name: /Initiate Referral/ }),
   ).toHaveCount(0);
@@ -188,16 +189,9 @@ test("v2 role boundaries and Home action inventories", async ({ page }) => {
     .getByRole("button", { name: "Exit Guest", exact: true })
     .first()
     .click();
+  await page.getByRole("dialog").getByRole("button", { name: "Exit Guest", exact: true }).click();
   await guest(page, "organization");
-  await expect(main.getByRole("link")).toHaveText([
-    "Initiate Referral",
-    "Incoming Referrals",
-    "Confirm Arrival",
-    "View Patients",
-    "Issue NFC Band",
-    "Return Band",
-    "View Inventory",
-  ]);
+  await expect(main.getByRole("link")).toHaveCount(0);
   await page.goto("/organization/referrals/ready");
   await expect(
     main.getByRole("button", { name: /^Initiate Referral/ }),

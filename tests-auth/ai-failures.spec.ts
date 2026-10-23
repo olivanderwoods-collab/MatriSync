@@ -11,7 +11,7 @@ async function account(page: Page) {
   await page
     .getByRole("button", { name: "Create account", exact: true })
     .click();
-  await expect(page.getByText("Account Demo · Synthetic data")).toBeVisible();
+  await expect(page.locator(".demo-banner").getByText("Signed-in account")).toBeVisible();
   await page.goto("/mother/matrisathi/companion/settings");
 }
 test("signed-in unsupported devices retain normal navigation", async ({

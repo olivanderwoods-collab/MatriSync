@@ -1,5 +1,9 @@
 # Selected AI foundation — 22 October 2026
 
+**23 October update:** `src/ai/behavior.ts` supplies versioned inference instructions. The user approved a local profile-context amendment and deferred report quotations. The app projects only saved name and dated pregnancy stage from the authenticated mother's own encrypted record; attachments and clinical history are not supplied. This is prompt/context integration, not fine-tuning. See [confirmed decisions](DECISIONS-2026-10-23.md) and the latest [verification](VERIFICATION.md); earlier model-response evidence below does not certify the revised prompt.
+
+Exact identity/stage questions use labelled local profile readback because the small model did not reliably retrieve those facts. The final cached-model offline test passed with two genuine model replies, exact profile answers and explicit safety fallbacks for rejected birth-related output, including after Stop/restart. General conversation quality remains a known limitation; the functional test does not establish unrestricted safe conversation.
+
 The new [AI integration instructions](AI-INTEGRATION-INSTRUCTIONS.md) replace the earlier provider comparison. The selected technologies are Qwen3-0.6B, Firebase AI Logic with Gemini `gemini-3.8-flash`, and Tavily Researcher Free. No OpenAI integration, provider account creation, billing upgrade, cloud file storage or paid fallback is part of this phase.
 
 ## Implemented locally

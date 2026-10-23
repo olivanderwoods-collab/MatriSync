@@ -24,20 +24,21 @@ test("emulator signup, restoration, logout, errors, login and transition to Gues
     .getByRole("button", { name: "Create account", exact: true })
     .click();
   await expect(
-    page.getByText(
-      /Account Demo · Synthetic data|Private records · Device storage/,
+    page.locator(".demo-banner").getByText(
+      /Signed-in account/,
     ),
   ).toBeVisible();
   await page.reload();
   await expect(
-    page.getByText(
-      /Account Demo · Synthetic data|Private records · Device storage/,
+    page.locator(".demo-banner").getByText(
+      /Signed-in account/,
     ),
   ).toBeVisible();
   await page
     .getByRole("button", { name: "Log Out", exact: true })
     .first()
     .click();
+  await page.getByRole("dialog").getByRole("button", { name: "Log out", exact: true }).click();
   await expect(page).toHaveURL("/");
   await page.goto("/auth/login?role=mother");
   await page.getByLabel("Email address", { exact: true }).fill(email);
@@ -47,8 +48,8 @@ test("emulator signup, restoration, logout, errors, login and transition to Gues
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(
-    page.getByText(
-      /Account Demo · Synthetic data|Private records · Device storage/,
+    page.locator(".demo-banner").getByText(
+      /Signed-in account/,
     ),
   ).toBeVisible();
   await page.goto("/auth/login?role=mother");
@@ -96,8 +97,8 @@ test("new login observes SDK sign-out without a reload", async ({ page }) => {
     .getByRole("button", { name: "Create account", exact: true })
     .click();
   await expect(
-    page.getByText(
-      /Account Demo · Synthetic data|Private records · Device storage/,
+    page.locator(".demo-banner").getByText(
+      /Signed-in account/,
     ),
   ).toBeVisible();
   await page.evaluate(async () => {
@@ -107,8 +108,8 @@ test("new login observes SDK sign-out without a reload", async ({ page }) => {
   });
   await expect(page).toHaveURL(/\/auth\/login\?role=professional$/);
   await expect(
-    page.getByText(
-      /Account Demo · Synthetic data|Private records · Device storage/,
+    page.locator(".demo-banner").getByText(
+      /Signed-in account/,
     ),
   ).toHaveCount(0);
 });

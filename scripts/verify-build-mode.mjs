@@ -11,3 +11,11 @@ for (const name of ["catalogue", "interactions"]) {
   }
 }
 console.log(demo ? "Test fixtures included unchanged; clinical use remains disabled." : "Test fixtures excluded from production assets.");
+if (!demo) {
+  for (const file of assets.filter(name => name.endsWith(".js"))) {
+    const text = await readFile(`dist/assets/${file}`, "utf8");
+    if (text.includes("TEST-M-001") || text.includes("Synthetic workflow test"))
+      throw Error("Synthetic assignment workflow leaked into production assets");
+  }
+  console.log("Synthetic assignment workflow excluded from production assets.");
+}

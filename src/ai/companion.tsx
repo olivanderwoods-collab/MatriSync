@@ -16,6 +16,13 @@ import {
   type Capability,
 } from "./offline";
 import { safetyCheck, safeOutput } from "./safety";
+import { useLocalCompanionProfile } from "../records";
+import {
+  BEHAVIOR_VERSION,
+  profileQuestion,
+  savedProfileAnswer,
+  type CompanionProfile,
+} from "./behavior";
 
 const root = "/mother/matrisathi/companion";
 type Message = {
@@ -43,8 +50,11 @@ export function Companion({
   const [length, setLength] = useState<"short" | "medium">("short");
   const [tone, setTone] = useState<"gentle" | "practical">("gentle");
   const [context, setContext] = useState(true);
+  const [useProfile, setUseProfile] = useState(true);
+  const loadProfile = useLocalCompanionProfile();
   const [generated, setGenerated] = useState(0);
   const worker = useRef<Worker | null>(null);
+  const operation = useRef(0);
   const timeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const topics = useRef<string[]>([]);
   const log = useRef<HTMLDivElement>(null);
@@ -54,6 +64,7 @@ export function Companion({
   }, [messages, page]);
   useEffect(() => {
     let live = true;
+    const operations = operation;
     capability().then((value) => {
       if (live) setDevice(value);
     });
@@ -67,11 +78,14 @@ export function Companion({
         });
     return () => {
       live = false;
+      operations.current++;
       worker.current?.terminate();
+      worker.current = null;
       clearTimeout(timeout.current);
     };
   }, [account]);
   function stop() {
+    operation.current++;
     worker.current?.terminate();
     worker.current = null;
     clearTimeout(timeout.current);
@@ -96,6 +110,7 @@ export function Companion({
   function load(install: boolean) {
     if (!account || !AI_FLAGS.offlineInstallation || !device?.supported || busy)
       return;
+    operation.current++;
     setConfirm(false);
     setNotice("");
     setStatus("loading");
@@ -140,8 +155,8 @@ export function Companion({
               role: "assistant" as const,
               text:
                 text ||
-                "I couldn't produce a reliable reply. I can listen to everyday worries; please seek a qualified professional for personal health questions.",
-              label: text ? "Offline AI" : "Safety fallback",
+                "Thank you for sharing that. I couldn't form a reliable reply this time. You can tell me more about what's on your mind; for personal health questions, please speak with your care team.",
+              label: text ? "Offline AI" : "Safety fallback · Not AI-generated",
             },
           ].slice(-40),
         );
@@ -156,11 +171,12 @@ export function Companion({
     topics.current = [];
     setInput("");
   }
-  function send() {
+  async function send() {
     const text = input.trim();
     if (!text || busy) return;
-    const safe = safetyCheck(text);
-    if (!safe && status !== "ready") {
+    const profileRequest = profileQuestion(text);
+    const safe = profileRequest ? undefined : safetyCheck(text);
+    if (!safe && !profileRequest && status !== "ready") {
       setNotice(
         hasModel
           ? "Load Offline AI before chatting."
@@ -168,25 +184,52 @@ export function Companion({
       );
       return;
     }
+    let profile: CompanionProfile | undefined;
+    const request = ++operation.current;
+    const previousStatus = status;
+    const activeWorker = worker.current;
+    if (!safe && account && useProfile) {
+      setStatus("generating");
+      try {
+        profile = await loadProfile();
+      } catch {
+        if (operation.current !== request) return;
+        setStatus(previousStatus);
+        setNotice(
+          "Open Profile Settings to connect your existing records, or turn off local profile context in AI settings.",
+        );
+        return;
+      }
+      if (operation.current !== request || worker.current !== activeWorker)
+        return;
+    }
     setInput("");
     setNotice("");
+    const savedReply = profileRequest
+      ? savedProfileAnswer(profileRequest, profile)
+      : undefined;
     setMessages((items) =>
       [
         ...items,
         { role: "user" as const, text },
-        ...(safe
+        ...(safe || savedReply
           ? [
               {
                 role: "assistant" as const,
-                text: safe.text,
-                label: "Safety information · Not AI-generated",
-                source: safe.source,
+                text: safe?.text || savedReply!,
+                label: safe
+                  ? "Safety information · Not AI-generated"
+                  : "Saved profile · Not AI-generated",
+                source: safe?.source,
               },
             ]
           : []),
       ].slice(-40),
     );
-    if (safe) return;
+    if (safe || savedReply) {
+      if (savedReply) setStatus(previousStatus);
+      return;
+    }
     setStatus("generating");
     timeout.current = setTimeout(
       () =>
@@ -201,6 +244,7 @@ export function Companion({
       type: "generate",
       text,
       context: context ? topics.current.join(", ") : "",
+      profile,
       length,
       tone,
     });
@@ -409,6 +453,27 @@ export function Companion({
             <p className="small muted">
               Online image, voice and document analysis are disabled. Reports
               remain encrypted on your device.
+            </p>
+          </section>
+          <section>
+            <h3>Local profile context</h3>
+            <label className="check-row">
+              <input
+                type="checkbox"
+                checked={useProfile}
+                disabled={!account || busy}
+                onChange={(e) => setUseProfile(e.target.checked)}
+              />
+              Use saved name and recorded pregnancy stage
+            </label>
+            <p className="small">
+              Read on this device when you send a message. Report contents,
+              clinical history, contacts and diagnoses are excluded. You can
+              turn this off.
+            </p>
+            <p className="small">
+              Behavior instructions: {BEHAVIOR_VERSION}. These guide replies;
+              they do not retrain the model.
             </p>
           </section>
         </div>

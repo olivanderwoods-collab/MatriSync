@@ -1,4 +1,20 @@
-# MatriSync implementation status — 22 October 2026
+# MatriSync implementation status — 23 October 2026
+
+The [confirmed product decisions](DECISIONS-2026-10-23.md) supersede the historical status below. The public role is Mother. Doctors create/approve patient-level referrals; organizations initiate them and own the eventual MatriSync device transfer. Professional navigation has four main tabs and patient profiles replace the main navigation with patient-specific tabs and a direct Back to Patients link.
+
+New private local records now open automatically using an account-scoped, non-extractable device key. Existing vaults require the old passphrase once to enable the same behavior without rewriting their ciphertext or attachments. There is no routine passphrase/idle lockscreen. This is device encryption; live end-to-end sharing is not implemented or activated.
+
+Development/demo builds include an isolated synthetic linking and assignment workspace: username/code request, mother's approval, staff assignment and acceptance, revocation, doctor-created test prescriptions/referrals/follow-ups, organization initiation and actor/time history. It is memory-only, clears on reload/logout and is excluded from production bundles. The existing Guest preview is retained for development; the final-release checklist requires removing all demo data.
+
+Inventory now contains Refunds / Settlements and Distributor Coordination; the separate Financial Records/Financial Settlements entries are removed. This is navigation/preview work, not an operational refund ledger. Organization Home and More are simplified. Duplicate logout controls are removed; top logout requires confirmation and Cancel returns Home. Signed-in routes use account labels and empty records rather than default mother/child profiles. Brand punctuation, Help title and compact language display are corrected. Companion routing now admits ordinary greeting/familiarity questions while retaining clinical/distress handling.
+
+See [release gates](RELEASE-GATES.md) and [verification](VERIFICATION.md). Earlier milestones are retained below for provenance, not as the current unlock or navigation specification.
+
+The expanded Mother profile is stored encrypted locally. MatriSathi receives only the saved name and dated pregnancy stage, with a user toggle; reports and diagnosis quotations are deferred by explicit user choice. Direct identity/stage questions read the saved fields without model generation and show their source label. The bundled behavior packet guides inference, with separate refusal/output checks; it does not train the model. Read [this build's manual checklist and next steps](CHECK-THIS-BUILD-2026-10-23.md).
+
+---
+
+# Previous implementation status — 22 October 2026
 
 Updated the existing `app` checkout on `codex/phase-1-demo`; no rebuild or reset. Source publication follows the newly authorized GitHub workflow; no application deployment. Existing Auth/Guest/PWA, exact Medical Green tokens, artwork and uncommitted work are retained. Later direct instructions supersede the guide's original UI-only boundary.
 

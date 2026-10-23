@@ -5,10 +5,11 @@ export const VAULT_DB = "matrisync-encrypted-records-v1";
 // are inside authenticated ciphertext. No automatic network or service-worker writes.
 function open(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(VAULT_DB, 1);
+    const request = indexedDB.open(VAULT_DB, 2);
     request.onupgradeneeded = () => {
-      request.result.createObjectStore("vaults");
-      request.result.createObjectStore("files");
+      for (const name of ["vaults", "files", "deviceKeys"])
+        if (!request.result.objectStoreNames.contains(name))
+          request.result.createObjectStore(name);
     };
     request.onsuccess = () => {
       request.result.onversionchange = () => request.result.close();
@@ -42,10 +43,11 @@ export async function commitVault(
   previous: string | undefined,
   envelope: VaultEnvelope,
   file?: { id: string; sealed: Sealed },
+  deviceKey?: CryptoKey,
 ) {
   const db = await open();
   return new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(["vaults", "files"], "readwrite");
+    const tx = db.transaction(["vaults", "files", "deviceKeys"], "readwrite");
     let conflict = false;
     const store = tx.objectStore("vaults");
     const current = store.get(uid);
@@ -56,6 +58,7 @@ export async function commitVault(
         return;
       }
       store.put(envelope, uid);
+      if (deviceKey) tx.objectStore("deviceKeys").put(deviceKey, uid);
       if (file) tx.objectStore("files").put(file.sealed, [uid, file.id]);
     };
     tx.oncomplete = () => {
@@ -67,10 +70,27 @@ export async function commitVault(
       reject(
         Error(
           conflict
-            ? "Records changed in another tab. Lock and unlock to load the latest version."
+            ? "Records changed in another tab. Reload to load the latest version."
             : "Unable to save locally. Check available device storage and try again.",
         ),
       );
+    };
+  });
+}
+export async function readDeviceKey(
+  uid: string,
+): Promise<CryptoKey | undefined> {
+  const db = await open();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("deviceKeys", "readonly");
+    const request = tx.objectStore("deviceKeys").get(uid);
+    tx.oncomplete = () => {
+      db.close();
+      resolve(request.result);
+    };
+    tx.onabort = tx.onerror = () => {
+      db.close();
+      reject(Error("Unable to open this device's record key."));
     };
   });
 }

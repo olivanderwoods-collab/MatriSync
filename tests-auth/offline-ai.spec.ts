@@ -1,7 +1,7 @@
 import { test, expect, chromium } from "@playwright/test";
 // Explicit opt-in downloads public weights. The ignored profile retains only
 // public model/runtime caches and synthetic emulator test data between runs.
-test("genuine Qwen generation and cached restart work offline", async () => {
+test("genuine Qwen conversation, exact saved profile facts and cached restart work offline", async () => {
   test.skip(
     process.env.TEST_OFFLINE_MODEL !== "1",
     "Explicit model download test only",
@@ -40,7 +40,17 @@ test("genuine Qwen generation and cached restart work offline", async () => {
     await page
       .getByRole("button", { name: "Create account", exact: true })
       .click();
-    await expect(page.getByText("Account Demo · Synthetic data")).toBeVisible();
+    await expect(
+      page.locator(".demo-banner").getByText("Signed-in account"),
+    ).toBeVisible();
+    await page.goto("http://127.0.0.1:4174/mother/more/profile");
+    await page.getByLabel("Full name", { exact: true }).fill("Synthetic Mira");
+    await page.getByLabel("Recorded pregnancy week (optional)").fill("22");
+    await page.getByLabel("Pregnancy week recorded on").fill("2026-10-23");
+    await page.getByRole("button", { name: "Save mother profile" }).click();
+    await expect(page.getByRole("status")).toContainText(
+      "Profile saved encrypted",
+    );
     await page.goto(
       "http://127.0.0.1:4174/mother/matrisathi/companion/settings",
     );
@@ -87,7 +97,11 @@ test("genuine Qwen generation and cached restart work offline", async () => {
     const calls: string[] = [];
     page.on("request", (request) => calls.push(request.url()));
     await context.setOffline(true);
+    let replyCount = 0;
     for (const message of [
+      "How are you?",
+      "Do you know me?",
+      "What is my name?",
       "I feel lonely during my pregnancy.",
       "I'm scared about giving birth.",
     ]) {
@@ -98,6 +112,25 @@ test("genuine Qwen generation and cached restart work offline", async () => {
         "ready",
         { timeout: 120_000 },
       );
+      await expect(page.locator(".chat-bubble.assistant")).toHaveCount(
+        ++replyCount,
+        { timeout: 120_000 },
+      );
+      if (message === "Do you know me?")
+        await expect(
+          page.locator(".chat-bubble.assistant").last(),
+        ).toContainText(
+          /Mira|only|don't know|do not know|can't see|cannot see|share|tell me/i,
+        );
+      if (message === "What is my name?")
+        await expect(
+          page.locator(".chat-bubble.assistant").last(),
+        ).toContainText("Mira");
+      await expect(
+        page.locator(".chat-bubble.assistant").last(),
+      ).not.toContainText(
+        /I(?:'m| am|’m) (?:not )?(?:scared|afraid|pregnant|lonely)/i,
+      );
     }
     console.log(
       "Synthetic offline conversation:",
@@ -106,6 +139,11 @@ test("genuine Qwen generation and cached restart work offline", async () => {
     await expect(
       page.getByRole("log").getByText("Offline AI", { exact: true }),
     ).toHaveCount(2);
+    await expect(
+      page
+        .getByRole("log")
+        .getByText("Safety fallback · Not AI-generated", { exact: true }),
+    ).toHaveCount(1);
     if (process.env.TEST_AI_PRODUCTION === "1") {
       await page
         .getByLabel("Your message", { exact: true })
@@ -138,9 +176,18 @@ test("genuine Qwen generation and cached restart work offline", async () => {
         "ready",
         { timeout: 120_000 },
       );
+      await expect(page.locator(".chat-bubble.assistant")).toHaveCount(6, {
+        timeout: 120_000,
+      });
       await expect(
-        page.getByRole("log").getByText("Offline AI", { exact: true }),
-      ).toHaveCount(3);
+        page.locator(".chat-bubble.assistant").last(),
+      ).not.toContainText(
+        /I(?:'m| am|’m) (?:not )?(?:scared|afraid|pregnant|lonely)/i,
+      );
+      console.log(
+        "Reply after cached restart:",
+        await page.locator(".chat-bubble.assistant").last().innerText(),
+      );
     }
     expect(
       calls.filter((url) => !url.startsWith("http://127.0.0.1:4174")),

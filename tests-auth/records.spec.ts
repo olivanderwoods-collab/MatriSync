@@ -1,6 +1,70 @@
 import { test, expect } from "@playwright/test";
 const phrase = "Synthetic private records phrase";
-test("mother uploads remain on-device offline and idle timeout locks the vault", async ({
+test("existing passphrase records migrate once without losing their original document", async ({
+  page,
+}) => {
+  await page.goto("/auth/signup?role=mother");
+  await page
+    .getByLabel("Email address", { exact: true })
+    .fill(`legacy-${Date.now()}@example.test`);
+  await page.getByLabel("Password", { exact: true }).fill("Synthetic-test-42!");
+  await page
+    .getByLabel("Confirm password", { exact: true })
+    .fill("Synthetic-test-42!");
+  await page
+    .getByRole("button", { name: "Create account", exact: true })
+    .click();
+  await expect(page.locator(".demo-banner")).toContainText("Signed-in account");
+  await expect(page.locator("main")).not.toContainText("Mira");
+  await expect(page.locator("main")).not.toContainText("34");
+  await page.evaluate(async (pass) => {
+    const authPath = "/src/auth.ts",
+      vaultPath = "/src/record-vault.ts";
+    const { accountAuth } = await import(authPath);
+    const { RecordVault } = await import(vaultPath);
+    const uid = (await accountAuth()).currentUser.uid;
+    const vault = new RecordVault(uid, async () => {});
+    await vault.unlock(pass, true);
+    await vault.savePatient(
+      { name: "Legacy Mother", birthDate: "", history: "" },
+      "self",
+    );
+    await vault.addDocument(
+      "self",
+      "prescriptions",
+      new File(["%PDF-1.7\nLegacy original"], "legacy.pdf", {
+        type: "application/pdf",
+      }),
+      "",
+      "",
+    );
+    vault.lock();
+  }, phrase);
+  await page.goto("/mother/health/prescriptions");
+  await expect(
+    page.getByRole("heading", { name: "Connect your existing records" }),
+  ).toBeVisible();
+  await page
+    .getByLabel("Previous vault passphrase")
+    .fill("Incorrect legacy phrase");
+  await page.getByRole("button", { name: "Keep records and continue" }).click();
+  await expect(page.getByRole("alert")).toContainText("Unable to unlock");
+  await page.getByLabel("Previous vault passphrase").fill(phrase);
+  await page.getByRole("button", { name: "Keep records and continue" }).click();
+  await expect(page.getByText("legacy.pdf", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("legacy.pdf", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Previous vault passphrase")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Take Photo", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", {
+      name: /Create.*prescription|Save test prescription/,
+    }),
+  ).toHaveCount(0);
+});
+test("mother uploads remain on-device offline without an extra lockscreen", async ({
   page,
   context,
 }) => {
@@ -15,14 +79,11 @@ test("mother uploads remain on-device offline and idle timeout locks the vault",
   await page
     .getByRole("button", { name: "Create account", exact: true })
     .click();
-  await expect(page.getByText("Account Demo · Synthetic data")).toBeVisible();
+  await expect(
+    page.locator(".demo-banner").getByText("Signed-in account"),
+  ).toBeVisible();
   await page.clock.install();
   await page.goto("/mother/health/reports");
-  await page.getByLabel("Vault passphrase", { exact: true }).fill(phrase);
-  await page
-    .getByLabel("Confirm vault passphrase", { exact: true })
-    .fill(phrase);
-  await page.getByRole("button", { name: "Create vault", exact: true }).click();
   await page.getByLabel("Full name", { exact: true }).fill("Test Mother");
   await page.getByRole("button", { name: "Save profile", exact: true }).click();
   await expect(
@@ -35,29 +96,26 @@ test("mother uploads remain on-device offline and idle timeout locks the vault",
     "Follow-ups",
   ]);
   await context.setOffline(true);
-  await page.getByRole("button", { name: "Add Report", exact: true }).click();
   await page
-    .getByLabel("Document", { exact: true })
-    .setInputFiles({
-      name: "offline.pdf",
-      mimeType: "application/pdf",
-      buffer: Buffer.from("%PDF-1.7\nOffline test report"),
-    });
+    .getByRole("button", { name: "Upload From Device", exact: true })
+    .click();
+  await page.getByLabel("Document", { exact: true }).setInputFiles({
+    name: "offline.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.7\nOffline test report"),
+  });
   await page
     .getByRole("button", { name: "Save document", exact: true })
     .click();
   await expect(page.getByText("offline.pdf", { exact: true })).toBeVisible();
   await page.clock.fastForward(6 * 60_000);
-  await expect(
-    page.getByRole("heading", { name: "Unlock records", exact: true }),
-  ).toBeVisible();
-  await expect(page.getByText("offline.pdf", { exact: true })).toHaveCount(0);
-  await page.getByLabel("Vault passphrase", { exact: true }).fill(phrase);
-  await page.getByRole("button", { name: "Unlock", exact: true }).click();
   await expect(page.getByText("offline.pdf", { exact: true })).toBeVisible();
+  await expect(
+    page.getByLabel("Vault passphrase", { exact: true }),
+  ).toHaveCount(0);
   await context.setOffline(false);
 });
-test("encrypted records and local reports persist, lock, download and isolate accounts", async ({
+test("encrypted records open automatically, persist, download and isolate accounts", async ({
   page,
 }) => {
   test.setTimeout(90000);
@@ -79,7 +137,7 @@ test("encrypted records and local reports persist, lock, download and isolate ac
     .getByRole("button", { name: "Create account", exact: true })
     .click();
   await expect(
-    page.getByText("Private records · Device storage"),
+    page.locator(".demo-banner").getByText("Signed-in account"),
   ).toBeVisible();
   await expect(page.locator("main")).not.toContainText("Ishani");
   await page
@@ -87,13 +145,8 @@ test("encrypted records and local reports persist, lock, download and isolate ac
     .getByRole("link", { name: "Patients", exact: true })
     .click();
   await expect(
-    page.getByRole("heading", { name: "Set up encrypted records" }),
-  ).toBeVisible();
-  await page.getByLabel("Vault passphrase", { exact: true }).fill(phrase);
-  await page
-    .getByLabel("Confirm vault passphrase", { exact: true })
-    .fill(phrase);
-  await page.getByRole("button", { name: "Create vault", exact: true }).click();
+    page.getByLabel("Vault passphrase", { exact: true }),
+  ).toHaveCount(0);
   await page.getByRole("link", { name: "Add patient", exact: true }).click();
   await page
     .getByLabel("Full name", { exact: true })
@@ -116,7 +169,9 @@ test("encrypted records and local reports persist, lock, download and isolate ac
     "Follow-ups",
   ]);
   await page.getByRole("link", { name: "Reports", exact: true }).click();
-  await page.getByRole("button", { name: "Add Report", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Upload From Device", exact: true })
+    .click();
   await page.getByLabel("Document", { exact: true }).setInputFiles({
     name: "Private-test.pdf",
     mimeType: "application/pdf",
@@ -168,21 +223,11 @@ test("encrypted records and local reports persist, lock, download and isolate ac
     expect(dump).not.toContain(secret);
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "Unlock records", exact: true }),
-  ).toBeVisible();
-  await expect(page.getByText("Private-test.pdf", { exact: true })).toHaveCount(
-    0,
-  );
-  await page
-    .getByLabel("Vault passphrase", { exact: true })
-    .fill("An incorrect vault phrase");
-  await page.getByRole("button", { name: "Unlock", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("Unable to unlock");
-  await page.getByLabel("Vault passphrase", { exact: true }).fill(phrase);
-  await page.getByRole("button", { name: "Unlock", exact: true }).click();
-  await expect(
     page.getByText("Private-test.pdf", { exact: true }),
   ).toBeVisible();
+  await expect(
+    page.getByLabel("Vault passphrase", { exact: true }),
+  ).toHaveCount(0);
   const downloadEvent = page.waitForEvent("download");
   await page
     .getByRole("button", { name: "Download Document", exact: true })
@@ -200,6 +245,10 @@ test("encrypted records and local reports persist, lock, download and isolate ac
     .getByRole("button", { name: "Log Out", exact: true })
     .first()
     .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Log out", exact: true })
+    .click();
   await expect(page).toHaveURL("/");
   await page.goto("/auth/signup?role=professional");
   await page
@@ -213,12 +262,15 @@ test("encrypted records and local reports persist, lock, download and isolate ac
     .getByRole("button", { name: "Create account", exact: true })
     .click();
   await expect(
-    page.getByText("Private records · Device storage"),
+    page.locator(".demo-banner").getByText("Signed-in account"),
   ).toBeVisible();
   await page.goto(oldRoute);
   await expect(
-    page.getByRole("heading", { name: "Set up encrypted records" }),
+    page.getByText("No record is available at this address."),
   ).toBeVisible();
+  await expect(
+    page.getByLabel("Vault passphrase", { exact: true }),
+  ).toHaveCount(0);
   await expect(page.locator("main")).not.toContainText("Private Patient Test");
   await expect(page.locator("main")).not.toContainText("Private-test.pdf");
   expect(external).toEqual([]);
