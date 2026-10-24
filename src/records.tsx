@@ -9,7 +9,7 @@ import {
 } from "react";
 import { Link, NavLink, Navigate, useNavigate } from "react-router-dom";
 import { accountAuth } from "./auth";
-import { RecordVault } from "./record-vault";
+import { RecordVault, type RecordWorkspace } from "./record-vault";
 import type { LocalDocument, Patient } from "./records-model";
 import { professionalSections, maternalSections } from "./workspace-spec";
 import { profileContext } from "./ai/behavior";
@@ -321,17 +321,23 @@ export function MotherRecordForm({
 }
 export function RecordsProvider({
   uid,
+  workspace,
   children,
 }: {
   uid?: string;
+  workspace: RecordWorkspace;
   children: ReactNode;
 }) {
   const [vault] = useState(() =>
     uid
-      ? new RecordVault(uid, async () => {
-          if ((await accountAuth()).currentUser?.uid !== uid)
-            throw Error("Sign in to the account that owns these records.");
-        })
+      ? new RecordVault(
+          uid,
+          async () => {
+            if ((await accountAuth()).currentUser?.uid !== uid)
+              throw Error("Sign in to the account that owns these records.");
+          },
+          workspace,
+        )
       : undefined,
   );
   const [, update] = useState(0);

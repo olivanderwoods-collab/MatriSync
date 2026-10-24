@@ -777,9 +777,20 @@ function NotFound({ embedded = false }: { embedded?: boolean }) {
 }
 function Workspace() {
   const app = useApp();
+  const { role } = useParams();
+  const workspace =
+    role === "mother"
+      ? "mother"
+      : role === "professional"
+        ? "professional"
+        : "organization";
   const uid = !app.demo ? app.user?.uid : undefined;
   return (
-    <RecordsProvider key={uid || "guest"} uid={uid}>
+    <RecordsProvider
+      key={`${uid || "guest"}/${workspace}`}
+      uid={uid}
+      workspace={workspace}
+    >
       <WorkflowTestProvider>
         <WorkspaceBody />
       </WorkflowTestProvider>

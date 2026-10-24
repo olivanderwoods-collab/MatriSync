@@ -1,5 +1,15 @@
 # Current verification — 25 October 2026
 
+## Follow-up: unlinked family records in clinician workspace
+
+Fixed a same-account workspace leak: the professional directory previously selected every patient except `self`, which included Mother-created children. `RecordVault` now projects only the active workspace's patients and their documents. Its edit/upload/download methods enforce the same local provenance boundary. Changing workspace resets the in-memory record view. Persistence continues saving the complete encrypted account dataset, so hidden records and original attachment bytes are preserved rather than removed.
+
+Final checks for this fix: **39 unit tests, 24 general browser tests and 14 Auth/local-record browser tests passed**; the optional actual-Qwen test remains skipped. Lint, TypeScript, production and demo builds passed. The new browser regression covers same-account SPA workspace switching, empty professional list/search/count, direct child overview/report/prescription/edit URLs, direct Mother `self` URLs, and restored child/file visibility after returning to Mother and reloading. The new record-level test also denies direct edits, reclassification, uploads and downloads, and verifies clinician and Mother saves preserve each other's hidden records and original bytes.
+
+This uses the existing `self`, child kind and `parentId` provenance; no storage reset, key replacement or file migration is required. Legacy clinician-created local records remain visible in Professional. There are still no live sharing grants. This repair does not implement verified backend roles or separate encryption keys per workspace: the same authenticated account still owns the device vault and may switch development workspaces. Those release gates remain open.
+
+The earlier results below describe the initial 25 October update.
+
 Scope: [confirmed changes](DECISIONS-2026-10-25.md) and [manual checks / next steps](CHECK-THIS-BUILD-2026-10-25.md). These results replace the earlier counts for this phase; historical results below are not new test runs.
 
 - **38 unit tests passed** across seven files. Added professional/facility credential byte preservation and account isolation, separate child record/document ownership, verified synthetic direct access, denied unverified access, revoked direct grant denial, single-Mother claim and first-name formatting coverage.

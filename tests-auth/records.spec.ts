@@ -23,7 +23,7 @@ test("existing passphrase records migrate once without losing their original doc
     const { accountAuth } = await import(authPath);
     const { RecordVault } = await import(vaultPath);
     const uid = (await accountAuth()).currentUser.uid;
-    const vault = new RecordVault(uid, async () => {});
+    const vault = new RecordVault(uid, async () => {}, "mother");
     await vault.unlock(pass, true);
     await vault.savePatient(
       { name: "Legacy Mother", birthDate: "", history: "" },

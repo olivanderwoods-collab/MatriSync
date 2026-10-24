@@ -20,27 +20,67 @@ import {
   type MotherProfile,
   type RecordData,
   type LocalDocument,
+  type Patient,
 } from "./records-model";
 import {
   validateAccountFields,
   type AccountProfileKind,
 } from "./account-profile-model";
 
+export type RecordWorkspace = "mother" | "professional" | "organization";
+
+// Local provenance boundary, not a verified role or a cross-account sharing grant.
+// Existing child records already carry parentId=self; no destructive migration.
+function inWorkspace(patient: Patient, workspace: RecordWorkspace) {
+  if (workspace === "mother")
+    return (
+      patient.id === "self" ||
+      (patient.kind === "child" && patient.parentId === "self")
+    );
+  if (workspace === "professional")
+    return (
+      patient.id !== "self" &&
+      patient.kind !== "child" &&
+      patient.parentId === undefined
+    );
+  return false; // Live facility/patient sharing is not connected.
+}
+
 export class RecordVault {
   private key?: CryptoKey;
   private envelope?: VaultEnvelope;
   private epoch = 0;
   private writing = false;
-  data?: RecordData;
+  private records?: RecordData;
   constructor(
     readonly uid: string,
     private authorize: () => Promise<void>,
+    private readonly workspace: RecordWorkspace = "professional",
   ) {}
+  get data(): RecordData | undefined {
+    if (!this.records) return undefined;
+    const patients = this.records.patients.filter((p) =>
+      inWorkspace(p, this.workspace),
+    );
+    const ids = new Set(patients.map((p) => p.id));
+    return {
+      ...this.records,
+      patients,
+      documents: this.records.documents.filter((d) => ids.has(d.patientId)),
+    };
+  }
+  private requirePatientAccess(id: string) {
+    const patient = this.records?.patients.find((p) => p.id === id);
+    if (!patient || !inWorkspace(patient, this.workspace))
+      throw Error(
+        "This record is not available in this workspace. Linking is required.",
+      );
+  }
   lock() {
     this.epoch++;
     this.key = undefined;
     this.envelope = undefined;
-    this.data = undefined;
+    this.records = undefined;
   }
   async exists() {
     await this.authorize();
@@ -77,7 +117,7 @@ export class RecordVault {
       throw Error("Account changed. Open records again.");
     this.key = key;
     this.envelope = envelope;
-    this.data = data;
+    this.records = data;
     if (!envelope) {
       try {
         await this.persist(data, newSalt(), undefined, key);
@@ -130,7 +170,7 @@ export class RecordVault {
     if (epoch !== this.epoch) throw Error("The vault was locked. Try again.");
     this.key = key;
     this.envelope = envelope;
-    this.data = data;
+    this.records = data;
     if (!envelope) {
       try {
         await this.persist(data, salt);
@@ -178,7 +218,7 @@ export class RecordVault {
       );
       if (epoch !== this.epoch) return;
       this.envelope = envelope;
-      this.data = data;
+      this.records = data;
     } finally {
       this.writing = false;
     }
@@ -194,12 +234,13 @@ export class RecordVault {
     },
     id?: string,
   ) {
-    if (!this.data) throw Error("Unlock your records first.");
+    if (!this.records) throw Error("Unlock your records first.");
     const fields = patientInput(input.name, input.birthDate, input.history);
     const previous = id
-      ? this.data.patients.find((p) => p.id === id)
+      ? this.records.patients.find((p) => p.id === id)
       : undefined;
     if (id && !previous && id !== "self") throw Error("Patient not found.");
+    if (previous) this.requirePatientAccess(previous.id);
     const now = new Date().toISOString();
     if (
       input.kind === "child" &&
@@ -236,10 +277,14 @@ export class RecordVault {
       createdAt: previous?.createdAt ?? now,
       updatedAt: now,
     };
+    if (!inWorkspace(patient, this.workspace))
+      throw Error(
+        "This record cannot be created or moved into this workspace.",
+      );
     await this.persist({
-      ...this.data,
+      ...this.records,
       patients: [
-        ...this.data.patients.filter((p) => p.id !== patient.id),
+        ...this.records.patients.filter((p) => p.id !== patient.id),
         patient,
       ],
     });
@@ -250,10 +295,10 @@ export class RecordVault {
     input: Record<string, string>,
     attachment?: File,
   ) {
-    if (!this.key || !this.data) throw Error("Open your records first.");
+    if (!this.key || !this.records) throw Error("Open your records first.");
     const fields = validateAccountFields(kind, input);
     const epoch = this.epoch;
-    const previous = this.data.accountProfiles?.[kind];
+    const previous = this.records.accountProfiles?.[kind];
     let file;
     let credential = previous?.credential;
     if (attachment) {
@@ -273,12 +318,12 @@ export class RecordVault {
         size: attachment.size,
       };
     }
-    if (epoch !== this.epoch || !this.data) throw Error("Account changed.");
+    if (epoch !== this.epoch || !this.records) throw Error("Account changed.");
     await this.persist(
       {
-        ...this.data,
+        ...this.records,
         accountProfiles: {
-          ...this.data.accountProfiles,
+          ...this.records.accountProfiles,
           [kind]: {
             fields,
             code: previous?.code || `LOCAL-${crypto.randomUUID()}`,
@@ -294,7 +339,7 @@ export class RecordVault {
   async accountCredential(kind: AccountProfileKind) {
     const epoch = this.epoch;
     await this.authorize();
-    const credential = this.data?.accountProfiles?.[kind]?.credential;
+    const credential = this.records?.accountProfiles?.[kind]?.credential;
     const key = this.key;
     if (!credential || !key) throw Error("No saved credential document.");
     const bytes = await unseal(
@@ -307,6 +352,7 @@ export class RecordVault {
     return { bytes, credential };
   }
   async ownCompanionProfile() {
+    if (this.workspace !== "mother") return undefined;
     const epoch = this.epoch;
     await this.authorize();
     const envelope = await readVault(this.uid);
@@ -329,8 +375,9 @@ export class RecordVault {
     source: string,
     reportDate: string,
   ) {
-    if (!this.key || !this.data?.patients.some((p) => p.id === patientId))
+    if (!this.key || !this.records?.patients.some((p) => p.id === patientId))
       throw Error("Unlock the patient's records first.");
+    this.requirePatientAccess(patientId);
     if (
       source.length > 200 ||
       file.name.length > 240 ||
@@ -342,11 +389,11 @@ export class RecordVault {
       throw Error("Check the source, date and filename.");
     const epoch = this.epoch;
     const bytes = await validatedDocument(file);
-    if (epoch !== this.epoch || !this.key || !this.data)
+    if (epoch !== this.epoch || !this.key || !this.records)
       throw Error("The vault was locked. Select the file again.");
     const id = crypto.randomUUID();
     const sealed = await seal(this.key, bytes, `${this.uid}:file:${id}`);
-    if (epoch !== this.epoch || !this.data)
+    if (epoch !== this.epoch || !this.records)
       throw Error("The vault was locked. Select the file again.");
     const doc: LocalDocument = {
       id,
@@ -360,15 +407,16 @@ export class RecordVault {
       reportDate,
     };
     await this.persist(
-      { ...this.data, documents: [...this.data.documents, doc] },
+      { ...this.records, documents: [...this.records.documents, doc] },
       undefined,
       { id, sealed },
     );
   }
   async document(id: string) {
-    if (!this.key || !this.data) throw Error("Unlock your records first.");
-    const doc = this.data.documents.find((d) => d.id === id);
+    if (!this.key || !this.records) throw Error("Unlock your records first.");
+    const doc = this.records.documents.find((d) => d.id === id);
     if (!doc) throw Error("Document not found.");
+    this.requirePatientAccess(doc.patientId);
     const epoch = this.epoch;
     await this.authorize();
     const sealed = await readFile(this.uid, id);

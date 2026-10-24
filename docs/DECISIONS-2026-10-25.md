@@ -31,6 +31,8 @@ The organization link-request/Mother-approval sequence is unchanged; the user ch
 
 ## Storage and integration limits
 
+Follow-up correction: sharing an authenticated development account between role workspaces is not a patient link. Mother `self` and Mother-created child records must not appear in the clinician directory, counts, searches or direct record routes. The local record service now enforces that boundary on reads, edits and document operations, retaining all existing encrypted records. This repairs behavior against the approved plan; it grants no new sharing authority.
+
 Professional/facility details, child profiles and attachments use the existing account-scoped encrypted device vault. Existing passphrase migration and original document bytes are preserved. Schema additions are optional so existing records still open. These additions are excluded from the disabled cloud-backup projection; no file or record upload is enabled.
 
 Creating a patient locally in a clinician account does not yet make that profile retrievable by another account. The Load profile interface explains that it tests fictional identities only. A local child association is not verified guardianship or a cross-account family link. Facility affiliation is recorded text, not a connected verified directory. Live digital prescribing, refund accounting, referral delivery and device transport remain separate work.

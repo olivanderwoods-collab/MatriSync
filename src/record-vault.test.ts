@@ -13,6 +13,94 @@ const pass = "a separate test vault phrase";
 const authorize = async () => {};
 
 describe("encrypted device records", () => {
+  it("isolates unlinked family records and preserves them when clinicians save", async () => {
+    const uid = crypto.randomUUID();
+    const mother = new RecordVault(uid, authorize, "mother");
+    await mother.openOnDevice();
+    await mother.savePatient(
+      { name: "Private Mother", birthDate: "", history: "" },
+      "self",
+    );
+    const child = await mother.savePatient({
+      name: "Private Child",
+      birthDate: "2024-01-01",
+      history: "Keep notes",
+      kind: "child",
+      child: { sex: "", bloodGroup: "B+", allergies: "" },
+    });
+    const original = new File(
+      ["%PDF-1.7\nPrivate child original"],
+      "child.pdf",
+      { type: "application/pdf" },
+    );
+    await mother.addDocument(
+      child,
+      "reports",
+      original,
+      "Original source",
+      "2026-10-20",
+    );
+    const document = mother.data!.documents[0].id;
+    const envelope = await readVault(uid);
+    mother.lock();
+    const professional = new RecordVault(uid, authorize, "professional");
+    await professional.openOnDevice();
+    expect(professional.data!.patients).toEqual([]);
+    expect(professional.data!.documents).toEqual([]);
+    expect(await professional.ownCompanionProfile()).toBeUndefined();
+    await expect(professional.document(document)).rejects.toThrow(
+      "not available",
+    );
+    await expect(
+      professional.addDocument(child, "reports", original, "", ""),
+    ).rejects.toThrow("not available");
+    await expect(
+      professional.savePatient(
+        { name: "Reclassified", birthDate: "", history: "", kind: "mother" },
+        child,
+      ),
+    ).rejects.toThrow("not available");
+    await expect(
+      professional.savePatient(
+        { name: "Mother overwrite", birthDate: "", history: "" },
+        "self",
+      ),
+    ).rejects.toThrow("not available");
+    expect(await readVault(uid)).toEqual(envelope);
+    const clinical = await professional.savePatient({
+      name: "Clinician-created patient",
+      birthDate: "",
+      history: "",
+    });
+    expect(professional.data!.patients.map((p) => p.id)).toEqual([clinical]);
+    professional.lock();
+    await mother.openOnDevice();
+    expect(mother.data!.patients.map((p) => p.id)).toEqual(["self", child]);
+    expect(mother.data!.patients.find((p) => p.id === child)?.history).toBe(
+      "Keep notes",
+    );
+    expect(
+      new TextDecoder().decode((await mother.document(document)).bytes),
+    ).toBe(await original.text());
+    await expect(
+      mother.savePatient(
+        { name: "Not owned", birthDate: "", history: "" },
+        clinical,
+      ),
+    ).rejects.toThrow("not available");
+    await mother.savePatient(
+      { name: "Updated Mother", birthDate: "", history: "" },
+      "self",
+    );
+    await professional.openOnDevice();
+    expect(professional.data!.patients.map((p) => p.id)).toEqual([clinical]);
+    const organization = new RecordVault(uid, authorize, "organization");
+    await organization.openOnDevice();
+    expect(organization.data!.patients).toEqual([]);
+    await expect(organization.document(document)).rejects.toThrow(
+      "not available",
+    );
+  });
   it("preserves encrypted professional/facility details and credential bytes without granting verification", async () => {
     const uid = crypto.randomUUID();
     const vault = new RecordVault(uid, authorize);
@@ -54,7 +142,7 @@ describe("encrypted device records", () => {
     );
   });
   it("keeps children separate and preserves document/profile details through edits", async () => {
-    const vault = new RecordVault(crypto.randomUUID(), authorize);
+    const vault = new RecordVault(crypto.randomUUID(), authorize, "mother");
     await vault.openOnDevice();
     const one = await vault.savePatient({
       name: "First Child",

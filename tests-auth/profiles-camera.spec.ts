@@ -16,6 +16,82 @@ async function signup(page: Page, role = "mother") {
     { timeout: 15000 },
   );
 }
+test("unlinked children stay out of clinician lists, counts, direct URLs and edits", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 551, height: 651 });
+  await signup(page);
+  await page.goto("/mother/children/add");
+  await page.getByLabel("Child's full name").fill("Unlinked Synthetic Child");
+  await page.getByLabel("Date of birth", { exact: true }).fill("2024-01-01");
+  await page.getByRole("button", { name: "Save child profile" }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Unlinked Synthetic Child",
+  );
+  const childId = new URL(page.url()).pathname.split("/")[3];
+  await page.getByRole("link", { name: "Reports", exact: true }).click();
+  await page.getByRole("button", { name: "Upload From Device" }).click();
+  await page
+    .getByLabel("Document", { exact: true })
+    .setInputFiles({
+      name: "unlinked-child.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.7\nSynthetic child original"),
+    });
+  await page
+    .getByRole("button", { name: "Save document", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText("Saved encrypted");
+  // Same account and SPA: the previous workspace's record view must be discarded.
+  await page.evaluate(() => {
+    history.pushState({}, "", "/professional/patients");
+    dispatchEvent(new PopStateEvent("popstate"));
+  });
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Patients");
+  await expect(page.locator("main")).toContainText("No patients added yet.");
+  await expect(page.locator("main")).not.toContainText(
+    "Unlinked Synthetic Child",
+  );
+  await page.getByLabel("Search Patient").fill(childId);
+  await expect(page.locator(".patient-directory-entry")).toHaveCount(0);
+  await page
+    .getByRole("navigation", { name: "Mobile navigation" })
+    .getByRole("link", { name: "Home", exact: true })
+    .click();
+  await expect(page.locator("main")).toContainText("0 patients on this device");
+  for (const path of [
+    `${childId}/overview`,
+    `${childId}/reports`,
+    `${childId}/prescriptions`,
+    `${childId}/edit`,
+    "self/overview",
+    "self/edit",
+  ]) {
+    await page.goto(`/professional/patients/${path}`);
+    await expect(page.locator("main")).toContainText(
+      "No record is available at this address.",
+    );
+    await expect(page.locator("main")).not.toContainText(
+      "Unlinked Synthetic Child",
+    );
+    await expect(page.locator("main")).not.toContainText("unlinked-child.pdf");
+    await expect(
+      page.getByRole("button", { name: "Upload From Device" }),
+    ).toHaveCount(0);
+  }
+  await page.goto(`/mother/children/${childId}/reports`);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Unlinked Synthetic Child",
+  );
+  await expect(page.locator(".document-list")).toContainText(
+    "unlinked-child.pdf",
+  );
+  await page.reload();
+  await expect(page.locator(".document-list")).toContainText(
+    "unlinked-child.pdf",
+  );
+});
+
 test("Mother corrections, synthetic camera frames, reopen, cancellation and denied permission", async ({
   page,
 }) => {

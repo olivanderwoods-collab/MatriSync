@@ -1,5 +1,13 @@
 # Check this build — 25 October 2026
 
+## Latest fix to check: unlinked child visibility
+
+1. Refresh the local preview and accept the app update if prompted. Open **Professional → Patients**: the child created under Mother should no longer appear, including when searched by name or ID. Do not delete the child or clear browser storage.
+2. Try the child's old professional record URL: it should show no available record and no edit/upload/document controls. The clinician Home patient count must exclude that child.
+3. Return to **Mother → Children**: the existing profile and its original documents should remain, including after reload. Clinician-created patients should still be available in the Professional workspace.
+
+This fixes automatic cross-workspace exposure; it does not activate linking or syncing. Next remains verified roles and reviewed E2EE sharing, followed by the inventory/clinical/device stages listed below.
+
 Use a signed-in account for the saved profile/child/camera checks; Guest remains a fictional preview. The build is local, not deployed. Preserve your existing browser data.
 
 ## What to check

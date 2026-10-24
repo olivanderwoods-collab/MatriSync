@@ -1,5 +1,7 @@
 # MatriSync implementation status — 25 October 2026
 
+Latest follow-up fixes unlinked Mother/child records appearing in the clinician workspace under the same development account. Workspace-scoped record views and mutation checks now exclude them from lists, counts, direct URLs and document operations, while preserving existing local records. Verified account roles and actual cross-account sharing remain pending; see the current verification and checklist.
+
 The [25 October decisions](DECISIONS-2026-10-25.md) record the approved access-plan changes and all 19 browser comments. This phase adds encrypted local professional/facility profiles and credential documents, separate child records, shared Mother-profile creation by clinicians, camera capture, Home/form/navigation corrections and first-name AI reply formatting. Direct profile load/first Mother claim and clinician Home assignment acceptance are implemented in the isolated synthetic workflow only. Real E2EE sharing, verification, full-profile retrieval and MatriSync device transport remain pending.
 
 Use the [current manual checklist and next steps](CHECK-THIS-BUILD-2026-10-25.md). The earlier approval sequence below is historical where superseded. No service deployment or paid/cloud integration is part of this update.
