@@ -1,5 +1,16 @@
 # Current verification — 25 October 2026
 
+## Inventory continuation and sharing decisions
+
+Added encrypted device-local pending deposit/refund/settlement records under Organization → Inventory → Refunds / Settlements. The original fields remain immutable; a void operation retains them and adds an attributed reason/time. References are case-insensitively unique within this account/device dataset, including voided entries. This does not detect payments entered under different references or duplicates at another facility. No entry is marked settled/paid and no money is transferred. Physical stock/return verification and cross-facility reconciliation remain unavailable.
+
+- **42 unit tests passed** across eight files, including integer minor-unit amounts, invalid values, duplicate references, retained correction history, encryption at rest, account/workspace isolation, preservation through Mother saves, exclusion from cloud backup, stale writes and signed-out writes.
+- **24 general browser tests passed.** Navigation, role previews, synthetic sharing and the previous family-record boundary remain intact.
+- **15 account checks passed:** 14 existing cases in the full suite, then the new Inventory case passed after scoping its status assertion to distinguish it from the offline banner. The Inventory case passed again with the final screenshot check. It covers offline save, reload, duplicate rejection, void/history persistence, filters, a 390px overflow check and the old settlements redirect. The optional actual-Qwen test remains skipped; no new model-quality claim.
+- Lint, TypeScript and production/demo builds passed. The Inventory screenshot was visually reviewed. No dependencies, Firebase rules, paid connections or deployment changed.
+
+The user confirmed verified facilities as clinician credential approvers and retained offline readability after revocation while future sharing is blocked. [SHARING-ACCESS-PLAN.md](SHARING-ACCESS-PLAN.md) records the implementation contract and outstanding facility bootstrap/key-recovery/protocol-review gates. This continuation does not activate live verification or E2EE sharing.
+
 ## Follow-up: unlinked family records in clinician workspace
 
 Fixed a same-account workspace leak: the professional directory previously selected every patient except `self`, which included Mother-created children. `RecordVault` now projects only the active workspace's patients and their documents. Its edit/upload/download methods enforce the same local provenance boundary. Changing workspace resets the in-memory record view. Persistence continues saving the complete encrypted account dataset, so hidden records and original attachment bytes are preserved rather than removed.

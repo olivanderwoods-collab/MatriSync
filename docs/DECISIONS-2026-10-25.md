@@ -4,6 +4,8 @@ This continues the original v2 build, preserving existing records and the Medica
 
 ## Explicitly approved access-plan changes
 
+Later answers during the Inventory continuation: **verified facilities approve their clinicians**, and **previously saved records stay readable offline after revocation while future sharing is blocked**. These resolve the previously open verification-authority choice and offline revocation behavior. Initial facility verification and recovery/key protocol details remain pending. See [sharing access plan](SHARING-ACCESS-PLAN.md).
+
 - **Verified clinicians:** permanent username + profile code grants access without a separate Mother approval screen. The user selected this rule after the original identifier-only/approval plan was explained.
 - **Mother claiming a clinician-created profile:** the signed-in Mother claims directly with the permanent username + code, without clinician confirmation. A profile already owned by another Mother cannot be claimed again. Concurrent claims will need an authoritative atomic ownership operation before live release.
 - **Sync NFC Band:** retain this name and the compact encrypted handoff. The band does not contain the full longitudinal profile. Authorized full-profile retrieval remains a separate sharing operation.
@@ -30,6 +32,8 @@ The organization link-request/Mother-approval sequence is unchanged; the user ch
 | 18–19 | Encrypted local professional/facility profile forms, registration/affiliation/contact details and optional original credential documents; save/reload/download. Saving never marks credentials or affiliation verified. |
 
 ## Storage and integration limits
+
+Inventory continuation: signed-in Organization → Inventory → Refunds / Settlements now stores encrypted local pending deposit/refund/settlement records. Each uses a printed Band Inventory ID, facility reference, unique record reference, amount/currency and date. INR is the default; INR/USD/EUR/GBP support two decimal places. Voiding requires a reason and preserves the original entry. No settled/paid status, payment transfer, physical return verification or cross-facility reconciliation is inferred. This advances the requested storage workflow, not payment processing.
 
 Follow-up correction: sharing an authenticated development account between role workspaces is not a patient link. Mother `self` and Mother-created child records must not appear in the clinician directory, counts, searches or direct record routes. The local record service now enforces that boundary on reads, edits and document operations, retaining all existing encrypted records. This repairs behavior against the approved plan; it grants no new sharing authority.
 

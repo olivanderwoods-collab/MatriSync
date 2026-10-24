@@ -1,5 +1,14 @@
 # Check this build — 25 October 2026
 
+## New Inventory step to check
+
+1. Sign in and open **Organization → Inventory → Refunds / Settlements**. Add a fictional pending record, selecting Deposit, Refund or Settlement / reimbursement. Supply a unique record reference, printed Band Inventory ID, facility, amount/currency and date. INR is the default; INR/USD/EUR/GBP are currently supported.
+2. Save and reload. The entry should remain **Pending reconciliation**, with the original amount and reference. Try the same reference again, including different letter case; it should be rejected.
+3. Open **Void pending record**, enter a reason and confirm. The entry should remain visible as voided. Open Record history and check its original creation plus the correction reason/time; reload again.
+4. Try a save while offline after opening this page. Confirm it stays local and does not claim payment, syncing or settlement. Do not use clinical NFC data or patient details in these administrative fields.
+
+The latest sharing decisions are recorded: verified facilities approve clinicians; revocation stops future sharing while saved offline records remain readable. Live verification, E2EE, payment/reconciliation and hardware integration are still pending.
+
 ## Latest fix to check: unlinked child visibility
 
 1. Refresh the local preview and accept the app update if prompted. Open **Professional → Patients**: the child created under Mother should no longer appear, including when searched by name or ID. Do not delete the child or clear browser storage.
@@ -28,7 +37,7 @@ Use a signed-in account for the saved profile/child/camera checks; Guest remains
 
 - Define and review the live sharing protocol around the approved permanent-identifier rules: verified clinicians, atomic first ownership claim, unique directory, protected recipient keys, device enrollment/recovery and revocation/offline behavior. Then implement E2EE sharing without exposing record plaintext or keys to the server.
 - Connect professional verification and facility affiliations to authoritative roles/memberships; replace temporary cross-role testing before final release.
-- Add persistent inventory refunds/settlements, preserving the decision that financial records stay inside Inventory.
+- Complete inventory reconciliation and verified operational authority around the new persistent pending ledger; cross-facility duplicate detection and payment processing remain disconnected. Keep financial records inside Inventory.
 - Build authorized clinician prescription/referral/follow-up records with provenance and correction history; connect organization initiation separately.
 - Integrate the MatriSync device only after the BLE/firmware/compact-handoff protocol and read-back checks are available.
 - Perform real-phone camera/offline checks, further offline AI quality/safety checks and final removal of all demo fixtures. Do not expand AI to report quotations without a new approved decision.

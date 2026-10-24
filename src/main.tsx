@@ -61,6 +61,7 @@ import { defaultProfile, ProfileEditor, type Profile } from "./profile";
 import { BackButton } from "./navigation";
 import { AccountProfileEditor } from "./account-profiles";
 import { ChildRecords } from "./child-records";
+import { InventoryLedger } from "./inventory-ledger";
 import { WorkspaceScreens } from "./workspace";
 import {
   RecordsProvider,
@@ -991,6 +992,10 @@ function WorkspaceBody() {
             <MotherRecordsHome />
           ) : !app.demo && r === "mother" && section === "children" ? (
             <ChildRecords path={path} />
+          ) : !app.demo &&
+            r === "organization" &&
+            path === "inventory/refunds" ? (
+            <InventoryLedger />
           ) : !app.demo && r === "organization" && path === "more/profile" ? (
             <>
               <h1>Facility Profile</h1>

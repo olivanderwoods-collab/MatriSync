@@ -2,6 +2,8 @@
 
 ## Latest approved access rules — 25 October 2026
 
+Latest confirmed choices: verified facilities approve their clinicians; revoked staff retain readable previously saved offline copies but cannot receive future sharing. See [sharing implementation contract](SHARING-ACCESS-PLAN.md). These choices are settled; initial facility verification, key recovery, grant enforcement and protocol review are still release gates.
+
 Follow [DECISIONS-2026-10-25.md](DECISIONS-2026-10-25.md). Permanent username + profile code grants verified clinicians direct access; a signed-in Mother directly claims an unclaimed clinician-created profile with that pair. These replace the earlier matching-only/second-approval requirement for those two flows. The synthetic implementation is not live authorization.
 
 - [ ] Authoritatively verify clinician roles; deny self-declared or forged roles even with valid identifiers.

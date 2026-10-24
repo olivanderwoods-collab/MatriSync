@@ -2633,6 +2633,9 @@ dialog h3 {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.ledger-record { border-top: 1px solid var(--border); padding-block: 20px; overflow-wrap: anywhere; }
+.ledger-record details { margin-bottom: 16px; }
+.ledger-record summary { cursor: pointer; padding-block: 10px; }
 @media (max-width: 600px) {
   .local-document {
     align-items: start;

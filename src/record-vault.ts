@@ -26,6 +26,11 @@ import {
   validateAccountFields,
   type AccountProfileKind,
 } from "./account-profile-model";
+import {
+  ledgerInput,
+  type LedgerInput,
+  type LedgerEntry,
+} from "./inventory-ledger-model";
 
 export type RecordWorkspace = "mother" | "professional" | "organization";
 
@@ -67,6 +72,10 @@ export class RecordVault {
       ...this.records,
       patients,
       documents: this.records.documents.filter((d) => ids.has(d.patientId)),
+      inventoryLedger:
+        this.workspace === "organization"
+          ? this.records.inventoryLedger
+          : undefined,
     };
   }
   private requirePatientAccess(id: string) {
@@ -289,6 +298,58 @@ export class RecordVault {
       ],
     });
     return patient.id;
+  }
+  async saveLedgerEntry(input: LedgerInput) {
+    if (this.workspace !== "organization")
+      throw Error(
+        "Inventory records are only available in the organization workspace.",
+      );
+    if (!this.records) throw Error("Open your records first.");
+    const checked = ledgerInput(input);
+    const entries = this.records.inventoryLedger || [];
+    if (entries.some((e) => e.reference.toUpperCase() === checked.reference))
+      throw Error(
+        "This record reference already exists, including voided records. Use a unique reference.",
+      );
+    const entry: LedgerEntry = {
+      ...checked,
+      id: crypto.randomUUID(),
+      createdAt: new Date().toISOString(),
+      createdBy: this.uid,
+    };
+    await this.persist({
+      ...this.records,
+      inventoryLedger: [...entries, entry],
+    });
+    return entry.id;
+  }
+  async voidLedgerEntry(id: string, reason: string) {
+    if (this.workspace !== "organization")
+      throw Error(
+        "Inventory records are only available in the organization workspace.",
+      );
+    if (!this.records) throw Error("Open your records first.");
+    if (typeof reason !== "string" || !reason.trim() || reason.length > 500)
+      throw Error("Enter a correction reason of up to 500 characters.");
+    const entries = this.records.inventoryLedger || [];
+    const entry = entries.find((e) => e.id === id);
+    if (!entry || entry.voided)
+      throw Error("This pending record is unavailable or already voided.");
+    await this.persist({
+      ...this.records,
+      inventoryLedger: entries.map((e) =>
+        e.id === id
+          ? {
+              ...e,
+              voided: {
+                at: new Date().toISOString(),
+                by: this.uid,
+                reason: reason.trim(),
+              },
+            }
+          : e,
+      ),
+    });
   }
   async saveAccountProfile(
     kind: AccountProfileKind,

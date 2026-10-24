@@ -1,0 +1,33 @@
+# Sharing access plan — 25 October 2026
+
+This is the next implementation contract, not a claim that live sharing is enabled. It combines the original v2 plan with the user's explicit answers. Clinical content and private decryption keys must stay off the server in plaintext; authorization metadata and record ciphertext are separate concerns.
+
+## Confirmed decisions
+
+- Verified facilities approve their clinicians' credentials. A saved profile or a selected workspace is not verification. Facilities may confirm affiliation and assign/revoke staff patient access; they cannot claim or remove Mother ownership.
+- A verified clinician loads a profile directly with its permanent username + profile code, without a second Mother approval prompt. A signed-in Mother directly claims an unclaimed clinician-created profile with the pair. An existing different owner cannot be replaced by repeating it.
+- Facility assignments require staff acceptance. Direct clinician connections and facility assignments remain distinct grants with their respective revocation scope.
+- Revocation blocks future sharing. Previously saved records remain readable offline. No periodic online revalidation lock is requested. Revocation cannot erase exported copies or stop a disconnected device reading content it already possesses.
+- The compact NFC handoff remains separate from full-profile sharing. Use Sync NFC Band; never infer a patient connection from a band inventory ID or workspace selection.
+
+## Required behavior before live activation
+
+1. **Verification:** an authoritative service establishes verified facility identity and permitted approvers. Those approvers review clinician credentials, record attributed decisions and can suspend their verification. Unverified facilities and self-declared Doctors cannot grant clinical authority. Credential categories retain the doctor/non-doctor permission distinction.
+2. **Identity and first claim:** distinguish Auth UID, patient ID, username/code and band inventory ID. Allocate unique identities. Check first ownership claims atomically so simultaneous claims cannot both succeed. Failed claims leave the existing owner and records unchanged. The same login opening another workspace is not a patient link.
+3. **Access:** check account status, verification, recipient device and grant on each future fetch/publication. Pending assignments cannot retrieve records. A revoked direct grant cannot be recreated with the permanent pair. Facility revocation does not silently erase an independent direct connection.
+4. **Encrypted delivery:** independently review the recipient-key and profile-code proof protocol. Never send permanent codes or raw record keys to logs, telemetry or server storage. Specify recovery, first-device enrollment and recipient-key authenticity before connection. Do not replace existing keys or upload original documents as a shortcut.
+5. **Offline/revocation:** retain already-downloaded encrypted content and its existing local access. Deny later downloads, new key deliveries and queued edit publication under revoked grants when the service checks a request. Show the last successful sharing time; pending offline edits are not synchronized. Rotate future content keys as required by the reviewed protocol; do not claim this retracts old decrypted bytes. Reassignment needs fresh acceptance and authorization.
+6. **Provenance:** preserve originals, attributed edits and conflicts. Mother/child records cannot enter clinician lists before an explicit authorized link. Administrative access is not clinical editing authority.
+
+## Still unresolved before production implementation
+
+- Initial facility verification and bootstrap of approvers; evidence requirements, disputes, suspension and recovery.
+- Device enrollment, encrypted recovery, recipient-key authentication and the exact code-proof/key-envelope protocol. Permanent-code access must coexist with verification and revocation; a lookup identifier alone is not a decryption key.
+- Multi-facility credential conflicts, reinstatement and secure external referral delivery.
+- Independent review of the threat model, key protocol and production access rules. The development role switch is not verified authorization.
+
+## Acceptance checks
+
+Reject unverified facility approvals, forged clinician roles, wrong codes, revoked connections, unaccepted assignments, wrong recipient keys and replayed requests. Test racing ownership claims and preservation of the original owner; accepted assignments; offline reading of old content after revocation; denied future fetch/publication. Inspect storage, logs and network traffic for plaintext records, documents, codes and private keys. Never migrate fixtures into real accounts.
+
+Current linking remains an isolated in-memory synthetic workflow. Inventory bookkeeping is separate encrypted local storage; it does not activate this service or transfer money.

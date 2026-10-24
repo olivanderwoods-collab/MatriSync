@@ -3,6 +3,7 @@ import {
   type AccountProfile,
   type AccountProfileKind,
 } from "./account-profile-model";
+import { validateLedger, type LedgerEntry } from "./inventory-ledger-model";
 export type Patient = {
   id: string;
   name: string;
@@ -90,6 +91,7 @@ export type RecordData = {
   patients: Patient[];
   documents: LocalDocument[];
   accountProfiles?: Partial<Record<AccountProfileKind, AccountProfile>>;
+  inventoryLedger?: LedgerEntry[];
 };
 export const emptyRecords = (): RecordData => ({
   version: 1,
@@ -168,6 +170,8 @@ export function parseRecords(bytes: Uint8Array): RecordData {
     const profile = value.accountProfiles?.[kind];
     if (profile) validateAccountFields(kind, profile.fields);
   }
+  if (value.inventoryLedger !== undefined)
+    validateLedger(value.inventoryLedger);
   return value;
 }
 // Explicit allowlist: document bytes, filenames and document metadata cannot enter
