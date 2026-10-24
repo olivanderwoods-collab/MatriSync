@@ -12,7 +12,6 @@ import {
   emptyTestState,
   hasTestAccess,
   staff,
-  testPatients,
   type Actor,
   type Command,
   type TestState,
@@ -46,8 +45,126 @@ export function TestLink({ role }: { role: string }) {
     </Link>
   ) : null;
 }
+function TestLoadForm({ actor }: { actor: Actor }) {
+  const { run } = useContext(Context);
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  return (
+    <form
+      className="panel record-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        setError("");
+        setStatus("");
+        const data = new FormData(e.currentTarget);
+        try {
+          run(actor, {
+            type: "load",
+            username: String(data.get("username")),
+            code: String(data.get("code")),
+          });
+          setStatus(
+            actor === "mother" || actor === "mother2"
+              ? "Test profile claimed. No clinical account was linked."
+              : "Test profile loaded. No clinical account was linked.",
+          );
+        } catch (e) {
+          setError(e instanceof Error ? e.message : "Unable to load.");
+        }
+      }}
+    >
+      <h2>Load profile · Synthetic test</h2>
+      <p>
+        Fixed fictional identities only. Verified test clinicians can use
+        test.mother / TEST-M-001 directly. Mothers can claim an unclaimed
+        clinician-created test profile. Permanent identifiers cannot override
+        revocation or an existing owner.
+      </p>
+      <label>
+        Username
+        <input required name="username" autoComplete="off" />
+      </label>
+      <label>
+        Profile code
+        <input required name="code" autoComplete="off" />
+      </label>
+      <button className="button primary">Load test profile</button>
+      {status && <p role="status">{status}</p>}
+      {error && <p role="alert">{error}</p>}
+    </form>
+  );
+}
+export function ProfileLinkPreview({ role }: { role: string }) {
+  return (
+    <>
+      <TestLoadForm actor={role === "mother" ? "mother" : "doctor"} />
+      <TestLink role={role} />
+    </>
+  );
+}
+export function TestAssignments({ accepted = false }: { accepted?: boolean }) {
+  const { state, run } = useContext(Context);
+  const [error, setError] = useState("");
+  const profiles = state.profiles.filter((p) =>
+    accepted
+      ? hasTestAccess(state, "doctor", p.id)
+      : state.assignments.some(
+          (a) =>
+            a.patient === p.id &&
+            a.staff === "doctor" &&
+            a.status === "pending",
+        ),
+  );
+  if (!profiles.length) return null;
+  return (
+    <section className="panel">
+      <h2>
+        {accepted
+          ? "Synced test patients"
+          : "Patient assignments · Synthetic test"}
+      </h2>
+      <p className="small">
+        Test Doctor only · Memory-only workflow, no live account sharing.
+      </p>
+      {profiles.map((p) => (
+        <article className="local-document" key={p.id}>
+          <div>
+            <strong>{accepted ? p.name : "Patient assignment"}</strong>
+            <p className="record-id">{p.code}</p>
+          </div>
+          {accepted ? (
+            <Link
+              className="button secondary"
+              to={`/professional/patients/test/${p.id}/overview`}
+            >
+              Open test profile
+            </Link>
+          ) : (
+            <button
+              className="button primary"
+              onClick={() => {
+                try {
+                  run("doctor", { type: "accept", patient: p.id });
+                  setError("");
+                } catch (e) {
+                  setError(
+                    e instanceof Error ? e.message : "Unable to accept.",
+                  );
+                }
+              }}
+            >
+              Accept
+            </button>
+          )}
+        </article>
+      ))}
+      {error && <p role="alert">{error}</p>}
+    </section>
+  );
+}
 export function WorkflowTests({ role, path }: { role: string; path: string }) {
   const { state, run, reset } = useContext(Context);
+  const testPatients = state.profiles;
   const [actor, setActor] = useState<Actor>(
     role === "professional"
       ? "doctor"
@@ -129,7 +246,43 @@ export function WorkflowTests({ role, path }: { role: string; path: string }) {
       {!id ? (
         <>
           <h1>Test patients</h1>
-          {(actor === "doctor" || actor === "organization") && (
+          {actor !== "organization" && <TestLoadForm actor={actor} />}
+          {actor === "doctor" && (
+            <form
+              className="panel record-form"
+              onSubmit={(e) =>
+                submit(e, (d) => ({
+                  type: "create-patient",
+                  name: String(d.get("name")),
+                  username: String(d.get("username")),
+                }))
+              }
+            >
+              <h2>Create unclaimed test profile</h2>
+              <p>
+                Use fictional details only. Switch to a Mother actor to claim
+                the generated username/code.
+              </p>
+              <label>
+                Test patient name
+                <input name="name" required maxLength={120} />
+              </label>
+              <label>
+                Test username
+                <input name="username" required maxLength={40} />
+              </label>
+              <button className="button primary">Create test profile</button>
+              {testPatients
+                .filter((p) => p.createdBy === "doctor")
+                .map((p) => (
+                  <p className="record-id" key={p.id}>
+                    {p.username} / {p.code} ·{" "}
+                    {p.owner ? "Claimed" : "Unclaimed"}
+                  </p>
+                ))}
+            </form>
+          )}
+          {actor === "organization" && (
             <form
               className="panel record-form"
               onSubmit={(e) =>
@@ -155,11 +308,11 @@ export function WorkflowTests({ role, path }: { role: string; path: string }) {
               </label>
               <button className="button">Request test link</button>
               <button type="button" className="button secondary" disabled>
-                Scan band · Device not connected
+                Sync NFC Band · Device not connected
               </button>
             </form>
           )}
-          {actor === "mother" && (
+          {(actor === "mother" || actor === "mother2") && (
             <section className="panel">
               <h2>Connection requests</h2>
               {!state.grants.length && (
@@ -168,50 +321,52 @@ export function WorkflowTests({ role, path }: { role: string; path: string }) {
                   to request a link.
                 </p>
               )}
-              {state.grants.map((g) => (
-                <article
-                  className="local-document"
-                  key={`${g.patient}/${g.target}`}
-                >
-                  <div>
-                    <strong>
-                      {actorNames[g.target]} ·{" "}
-                      {testPatients.find((p) => p.id === g.patient)?.name}
-                    </strong>
-                    <p>{g.status}</p>
-                  </div>
-                  {g.status === "requested" && (
-                    <button
-                      className="button"
-                      onClick={() =>
-                        act({
-                          type: "consent",
-                          patient: g.patient,
-                          target: g.target,
-                          approve: true,
-                        })
-                      }
-                    >
-                      Approve link
-                    </button>
-                  )}
-                  {g.status !== "revoked" && (
-                    <button
-                      className="button secondary"
-                      onClick={() =>
-                        act({
-                          type: "consent",
-                          patient: g.patient,
-                          target: g.target,
-                          approve: false,
-                        })
-                      }
-                    >
-                      {g.status === "requested" ? "Decline" : "Revoke link"}
-                    </button>
-                  )}
-                </article>
-              ))}
+              {state.grants
+                .filter((g) => hasTestAccess(state, actor, g.patient))
+                .map((g) => (
+                  <article
+                    className="local-document"
+                    key={`${g.patient}/${g.target}`}
+                  >
+                    <div>
+                      <strong>
+                        {actorNames[g.target]} ·{" "}
+                        {testPatients.find((p) => p.id === g.patient)?.name}
+                      </strong>
+                      <p>{g.status}</p>
+                    </div>
+                    {g.status === "requested" && (
+                      <button
+                        className="button"
+                        onClick={() =>
+                          act({
+                            type: "consent",
+                            patient: g.patient,
+                            target: g.target,
+                            approve: true,
+                          })
+                        }
+                      >
+                        Approve link
+                      </button>
+                    )}
+                    {g.status !== "revoked" && (
+                      <button
+                        className="button secondary"
+                        onClick={() =>
+                          act({
+                            type: "consent",
+                            patient: g.patient,
+                            target: g.target,
+                            approve: false,
+                          })
+                        }
+                      >
+                        {g.status === "requested" ? "Decline" : "Revoke link"}
+                      </button>
+                    )}
+                  </article>
+                ))}
             </section>
           )}
           {staff.includes(actor as (typeof staff)[number]) &&
@@ -367,8 +522,10 @@ export function WorkflowTests({ role, path }: { role: string; path: string }) {
                 ))}
               {actor !== "organization" &&
                 (tab === "prescriptions"
-                  ? actor === "mother" || actor === "doctor"
-                  : actor !== "mother") && (
+                  ? actor === "mother" ||
+                    actor === "mother2" ||
+                    actor === "doctor"
+                  : actor !== "mother" && actor !== "mother2") && (
                   <>
                     <button
                       className="button secondary"
@@ -540,7 +697,7 @@ export function WorkflowTests({ role, path }: { role: string; path: string }) {
                               Mark completed
                             </button>
                             <button
-                              className="button secondary"
+                              className="button cancel"
                               onClick={() =>
                                 act({
                                   type: "follow-status",

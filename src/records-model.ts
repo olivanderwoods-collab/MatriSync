@@ -1,3 +1,8 @@
+import {
+  validateAccountFields,
+  type AccountProfile,
+  type AccountProfileKind,
+} from "./account-profile-model";
 export type Patient = {
   id: string;
   name: string;
@@ -6,6 +11,9 @@ export type Patient = {
   createdAt: string;
   updatedAt: string;
   profile?: MotherProfile;
+  kind?: "mother" | "child";
+  parentId?: string;
+  child?: { sex: string; bloodGroup: string; allergies: string };
 };
 export type MotherProfile = {
   pregnancyWeeks?: number;
@@ -81,6 +89,7 @@ export type RecordData = {
   version: 1;
   patients: Patient[];
   documents: LocalDocument[];
+  accountProfiles?: Partial<Record<AccountProfileKind, AccountProfile>>;
 };
 export const emptyRecords = (): RecordData => ({
   version: 1,
@@ -126,6 +135,15 @@ export function parseRecords(bytes: Uint8Array): RecordData {
       throw Error("Invalid patient record.");
     patientInput(p.name, p.birthDate, p.history);
     if (p.profile) motherProfileInput(p.profile);
+    if (
+      p.kind === "child" &&
+      (p.parentId !== "self" ||
+        !p.child ||
+        Object.values(p.child).some(
+          (v) => typeof v !== "string" || v.length > 1000,
+        ))
+    )
+      throw Error("Invalid child profile.");
     ids.add(p.id);
   }
   const files = new Set<string>();
@@ -145,6 +163,10 @@ export function parseRecords(bytes: Uint8Array): RecordData {
     )
       throw Error("Invalid document record.");
     files.add(d.id);
+  }
+  for (const kind of ["professional", "organization"] as const) {
+    const profile = value.accountProfiles?.[kind];
+    if (profile) validateAccountFields(kind, profile.fields);
   }
   return value;
 }

@@ -1,5 +1,15 @@
 # MatriSync release gates
 
+## Latest approved access rules — 25 October 2026
+
+Follow [DECISIONS-2026-10-25.md](DECISIONS-2026-10-25.md). Permanent username + profile code grants verified clinicians direct access; a signed-in Mother directly claims an unclaimed clinician-created profile with that pair. These replace the earlier matching-only/second-approval requirement for those two flows. The synthetic implementation is not live authorization.
+
+- [ ] Authoritatively verify clinician roles; deny self-declared or forged roles even with valid identifiers.
+- [ ] Enforce unique identities, atomic single-owner claims, authenticated recipient-key delivery, abuse controls and an approved recovery/revocation policy. Never permit a code to restore a revoked direct grant.
+- [ ] Implement real cross-account E2EE; local clinician-created profiles currently cannot be retrieved by a Mother account.
+- [ ] Keep compact band handoff separate from full-profile retrieval; retain Sync NFC Band wording.
+- [ ] Verify professional credentials/facility affiliations and family linkage separately from saving local forms.
+
 ## Account roles — user requirement, 23 October 2026
 
 The same credentials can currently open Mother/Caregiver, Healthcare Professional and Healthcare Organization workspaces. The user explicitly permits this for testing now and requires it fixed before the final build. Keep this requirement open until tested; UI hiding alone does not satisfy it.
@@ -7,7 +17,7 @@ The same credentials can currently open Mother/Caregiver, Healthcare Professiona
 - [ ] Define approved account roles and multi-role membership rules; do not infer professional/facility authority from a sign-up choice or route.
 - [ ] Enforce role and record permissions in the authoritative backend and relevant local access paths, not only navigation.
 - [ ] A mother-only account cannot obtain professional or organization privileges through login selection, a direct URL or a crafted request.
-- [ ] Verified facility membership, patient sharing/consent and accepted staff assignments govern access to shared records; revocation is enforced.
+- [ ] Verified facility membership, the approved direct-access rules and accepted staff assignments govern shared records; enforce the separately reviewed revocation rules.
 - [ ] Cross-role testing is isolated to development/test configuration and synthetic data; the final build cannot enable it accidentally.
 - [ ] Verify allowed access and denied cross-role/cross-account access, including stale sessions and offline cached records.
 

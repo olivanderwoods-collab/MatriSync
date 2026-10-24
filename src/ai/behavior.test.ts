@@ -5,9 +5,22 @@ import {
   BEHAVIOR_VERSION,
   profileQuestion,
   savedProfileAnswer,
+  addressReply,
 } from "./behavior";
 import { safetyCheck } from "./safety";
 describe("approved profile-only companion context", () => {
+  it("addresses the saved first name without inventing one or repeating it", () => {
+    expect(addressReply("Hello! How can I help?", { name: "Mira Sen" })).toBe(
+      "Hello, Mira! How can I help?",
+    );
+    expect(addressReply("Hello, Mira!", { name: "Mira Sen" })).toBe(
+      "Hello, Mira!",
+    );
+    expect(addressReply("I cannot answer that.", { name: "Ann Test" })).toBe(
+      "Ann, I cannot answer that.",
+    );
+    expect(addressReply("Hello!")).toBe("Hello!");
+  });
   it("reads exact dated profile facts without interpreting a clinical question", () => {
     expect(profileQuestion("Do you know me?")).toBe("identity");
     expect(profileQuestion("How many weeks pregnant am I?")).toBe("stage");

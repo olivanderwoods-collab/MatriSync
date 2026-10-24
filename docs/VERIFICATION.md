@@ -1,4 +1,22 @@
-# Current verification — 23 October 2026
+# Current verification — 25 October 2026
+
+Scope: [confirmed changes](DECISIONS-2026-10-25.md) and [manual checks / next steps](CHECK-THIS-BUILD-2026-10-25.md). These results replace the earlier counts for this phase; historical results below are not new test runs.
+
+- **38 unit tests passed** across seven files. Added professional/facility credential byte preservation and account isolation, separate child record/document ownership, verified synthetic direct access, denied unverified access, revoked direct grant denial, single-Mother claim and first-name formatting coverage.
+- **24 Edge UI/PWA tests passed.** Includes the new direct-load/claim flow and facility assignment appearing on Professional Home then moving to Patients after Accept, alongside existing navigation, role previews, referrals, revocation, Guest isolation, responsive layout and offline-shell tests. An earlier Home link-count expectation was updated for the explicitly requested Open MatriSathi button.
+- **13 Auth/local-record browser tests passed; one optional actual-model test skipped.** Includes Mother field persistence, first-name reply from a mocked worker, local child creation and document isolation, professional/facility forms and original credential persistence, clinician-created Mother profiles without email, input/button alignment, camera capture/reopen/cancel/denial, existing-file migration/download and account isolation.
+- **Lint, TypeScript, production and demo builds passed.** Production still excludes the synthetic workflow and research-draft JSON assets; demo retains unchanged draft bytes. No model weights or private files are committed. The existing Guest preview remains a final-release removal task.
+- Mother Home and patient-search screenshots were visually inspected at 551px. Browser screenshot outputs under `docs/screenshots/` were refreshed by the UI suite.
+
+Camera tests supply deterministic canvas video frames to a mocked `getUserMedia`, exercise the actual preview/canvas/JPEG/encrypted-save path, and check stream tracks stop on capture/cancel. They also simulate permission denial. Earlier Edge fake-device runs intermittently returned `NotFoundError`; these were test-device failures, not evidence of phone-camera compatibility. Real phone hardware, camera permissions/orientation and backgrounding still need manual acceptance.
+
+Actual Qwen generation was not rerun in this phase: the worker/model/prompt packet is unchanged, while first-name display is verified with unit and mocked-worker checks. The previous real-model findings below remain relevant but are historical. No new claim of model quality or clinical safety is made.
+
+No live E2EE, account-to-account profile retrieval, credential verification, family verification, BLE/NFC, operational refunds, paid service, cloud record/file upload, rules deployment or application deployment is activated. Firestore rules and adapter were unchanged; their prior emulator result was not rerun. Synthetic states reset on reload/logout and are not clinical account connections.
+
+---
+
+# Previous verification — 23 October 2026
 
 This section supersedes the historical results below for the changed code. Scope and manual acceptance steps are in [confirmed decisions](DECISIONS-2026-10-23.md) and [what to check / what's next](CHECK-THIS-BUILD-2026-10-23.md).
 

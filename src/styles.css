@@ -395,6 +395,8 @@ em {
   background: var(--selected);
 }
 .button {
+  background: var(--secondary-button);
+  color: var(--secondary-button-text);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2560,7 +2562,18 @@ dialog h3 {
 .patient-tools label {
   flex: 1;
   min-width: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
 }
+.patient-tools input { margin: 0; min-height: 48px; }
+.patient-tools > .button { flex-shrink: 0; }
+.button.cancel { background: var(--referral-progress); color: var(--warning-text); border-color: var(--warning); }
+.button.cancel:hover { box-shadow: inset 0 0 0 1px var(--warning); }
+.home-subheading { font-size: 1.25rem; }
+.pregnancy-week { font-size: clamp(1.8rem, 5vw, 2.5rem); }
+.camera-capture { margin-block: 16px; padding: 16px; border: 1px solid var(--border); border-radius: 16px; }
+.camera-capture video { display: block; width: 100%; max-height: 50vh; background: var(--bg); border-radius: 12px; margin-block: 12px; }
 .home-language {
   display: flex;
   align-items: center;

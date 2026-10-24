@@ -21,6 +21,10 @@ import {
   type RecordData,
   type LocalDocument,
 } from "./records-model";
+import {
+  validateAccountFields,
+  type AccountProfileKind,
+} from "./account-profile-model";
 
 export class RecordVault {
   private key?: CryptoKey;
@@ -185,6 +189,8 @@ export class RecordVault {
       birthDate: string;
       history: string;
       profile?: MotherProfile;
+      kind?: "mother" | "child";
+      child?: { sex: string; bloodGroup: string; allergies: string };
     },
     id?: string,
   ) {
@@ -195,20 +201,38 @@ export class RecordVault {
       : undefined;
     if (id && !previous && id !== "self") throw Error("Patient not found.");
     const now = new Date().toISOString();
+    if (
+      input.kind === "child" &&
+      (!input.birthDate ||
+        !input.child ||
+        Object.values(input.child).some(
+          (v) => typeof v !== "string" || v.length > 1000,
+        ))
+    )
+      throw Error("Enter the child's birth date and valid profile details.");
+    const profileId = id ?? crypto.randomUUID();
     const patient = {
       ...previous,
       ...fields,
+      ...(input.kind ? { kind: input.kind } : {}),
+      ...(input.kind === "child"
+        ? { parentId: "self", child: input.child }
+        : {}),
       ...(input.profile
         ? {
             profile: motherProfileInput({
               ...input.profile,
+              username:
+                input.profile.username ||
+                previous?.profile?.username ||
+                `mother.${profileId === "self" ? crypto.randomUUID().slice(0, 8) : profileId.slice(0, 8)}`,
               profileCode:
                 previous?.profile?.profileCode ||
                 `LOCAL-${crypto.randomUUID()}`,
             }),
           }
         : {}),
-      id: id ?? crypto.randomUUID(),
+      id: profileId,
       createdAt: previous?.createdAt ?? now,
       updatedAt: now,
     };
@@ -220,6 +244,67 @@ export class RecordVault {
       ],
     });
     return patient.id;
+  }
+  async saveAccountProfile(
+    kind: AccountProfileKind,
+    input: Record<string, string>,
+    attachment?: File,
+  ) {
+    if (!this.key || !this.data) throw Error("Open your records first.");
+    const fields = validateAccountFields(kind, input);
+    const epoch = this.epoch;
+    const previous = this.data.accountProfiles?.[kind];
+    let file;
+    let credential = previous?.credential;
+    if (attachment) {
+      if (attachment.name.length > 240)
+        throw Error("Use a shorter attachment filename.");
+      const bytes = await validatedDocument(attachment);
+      if (epoch !== this.epoch || !this.key) throw Error("Account changed.");
+      const id = crypto.randomUUID();
+      file = {
+        id,
+        sealed: await seal(this.key, bytes, `${this.uid}:file:${id}`),
+      };
+      credential = {
+        id,
+        name: attachment.name,
+        type: attachment.type,
+        size: attachment.size,
+      };
+    }
+    if (epoch !== this.epoch || !this.data) throw Error("Account changed.");
+    await this.persist(
+      {
+        ...this.data,
+        accountProfiles: {
+          ...this.data.accountProfiles,
+          [kind]: {
+            fields,
+            code: previous?.code || `LOCAL-${crypto.randomUUID()}`,
+            updatedAt: new Date().toISOString(),
+            ...(credential ? { credential } : {}),
+          },
+        },
+      },
+      this.envelope?.salt,
+      file,
+    );
+  }
+  async accountCredential(kind: AccountProfileKind) {
+    const epoch = this.epoch;
+    await this.authorize();
+    const credential = this.data?.accountProfiles?.[kind]?.credential;
+    const key = this.key;
+    if (!credential || !key) throw Error("No saved credential document.");
+    const bytes = await unseal(
+      key,
+      await readFile(this.uid, credential.id),
+      `${this.uid}:file:${credential.id}`,
+    );
+    await this.authorize();
+    if (epoch !== this.epoch) throw Error("Account changed.");
+    return { bytes, credential };
   }
   async ownCompanionProfile() {
     const epoch = this.epoch;

@@ -166,13 +166,12 @@ function Home({
     return (
       <>
         <Title
-          eyebrow={
+          title={
             profileName.trim()
               ? `Welcome ${profileName.trim().split(/\s+/)[0]}`
               : "Welcome"
           }
-          title="A little care, every day."
-          description="Your health at a glance."
+          description="A little care, every day."
         />
         <div className="home-grid">
           {!account && (
@@ -195,6 +194,9 @@ function Home({
           </Panel>
           <Panel title="Educational suggestions">
             <p>Explore topics in MatriSathi. Articles are pending review.</p>
+            <Link className="button secondary" to="/mother/matrisathi">
+              Open MatriSathi
+            </Link>
           </Panel>
         </div>
       </>

@@ -59,6 +59,8 @@ import {
 import { navigation, roleNames, TAGLINE } from "./data";
 import { defaultProfile, ProfileEditor, type Profile } from "./profile";
 import { BackButton } from "./navigation";
+import { AccountProfileEditor } from "./account-profiles";
+import { ChildRecords } from "./child-records";
 import { WorkspaceScreens } from "./workspace";
 import {
   RecordsProvider,
@@ -72,6 +74,8 @@ import {
   WorkflowTests,
   TestLink,
   workflowTestsEnabled,
+  ProfileLinkPreview,
+  TestAssignments,
 } from "./workflow-tests";
 import { distributorSections, moreMenus } from "./workspace-spec";
 import {
@@ -803,6 +807,8 @@ function WorkspaceBody() {
       ? path.split("/").length > 2
       : !!path.split("/")[1] &&
         !["add", "register", "consultation"].includes(path.split("/")[1]));
+  const childDetail =
+    r === "mother" && section === "children" && !!path.split("/")[1];
   const realRecords =
     !app.demo &&
     !testing &&
@@ -830,7 +836,9 @@ function WorkspaceBody() {
     </NavLink>
   ));
   return (
-    <div className={`app-layout ${patientDetail ? "patient-layout" : ""}`}>
+    <div
+      className={`app-layout ${patientDetail || childDetail ? "patient-layout" : ""}`}
+    >
       <aside className="sidebar">
         <Link
           to={r === "mother" ? "/mother/more/profile" : `/${r}/overview`}
@@ -942,7 +950,13 @@ function WorkspaceBody() {
         </div>
         <main id="main" tabIndex={-1} className="workspace-main">
           {path !== "overview" &&
-            (patientDetail ? (
+            section !== "health" &&
+            path !== "children" &&
+            (childDetail ? (
+              <Link className="back-button" to="/mother/children">
+                ← Back to Children
+              </Link>
+            ) : patientDetail ? (
               <Link
                 className="back-button"
                 to={`/${r}/patients${testing ? "/test" : ""}`}
@@ -964,6 +978,21 @@ function WorkspaceBody() {
             )}
           {!app.demo && r === "mother" && path === "overview" ? (
             <MotherRecordsHome />
+          ) : !app.demo && r === "mother" && section === "children" ? (
+            <ChildRecords path={path} />
+          ) : !app.demo && r === "organization" && path === "more/profile" ? (
+            <>
+              <h1>Facility Profile</h1>
+              <AccountProfileEditor
+                kind="organization"
+                email={app.user?.email || ""}
+              />
+            </>
+          ) : !app.demo && r === "mother" && path === "more/load-profile" ? (
+            <>
+              <h1>Load profile</h1>
+              <ProfileLinkPreview role="mother" />
+            </>
           ) : testing ? (
             <WorkflowTests role={r} path={path} />
           ) : !app.demo && r === "organization" && section === "patients" ? (
@@ -997,19 +1026,15 @@ function WorkspaceBody() {
           {section === "patients" && !patientDetail && !testing && (
             <TestLink role={r} />
           )}
+          {r === "professional" && path === "overview" && <TestAssignments />}
+          {app.demo && r === "professional" && path === "patients" && (
+            <TestAssignments accepted />
+          )}
           {r === "mother" && path === "more/permissions" && (
             <TestLink role={r} />
           )}
-          <footer className="workspace-footer">
-            <span>MatriSync · {TAGLINE}</span>
-            <span>
-              {app.demo || testing
-                ? "Synthetic test · No clinical advice"
-                : "Device storage · No clinical interpretation"}
-            </span>
-          </footer>
         </main>
-        {!patientDetail && (
+        {!patientDetail && !childDetail && (
           <nav
             className="mobile-nav"
             aria-label="Mobile navigation"
@@ -1032,11 +1057,14 @@ function WorkspaceBody() {
               {app.demo ? "Leave this Guest session?" : "Log out of MatriSync?"}
             </p>
             <div className="action-row">
-              <button className="button" onClick={() => void app.exit()}>
+              <button
+                className="button secondary"
+                onClick={() => void app.exit()}
+              >
                 {app.demo ? "Exit Guest" : "Log out"}
               </button>
               <button
-                className="button secondary"
+                className="button cancel"
                 onClick={() => {
                   setLogout(false);
                   navigate(`/${r}/overview`);
@@ -1127,6 +1155,11 @@ function SettingsPage({ role, section }: { role: Role; section?: string }) {
             }}
           />
         )}
+        {!app.demo && (
+          <Link className="button secondary" to="/mother/more/load-profile">
+            Load profile
+          </Link>
+        )}
       </>
     );
   const combinedProfile = role === "professional" && section === "profile";
@@ -1143,6 +1176,12 @@ function SettingsPage({ role, section }: { role: Role; section?: string }) {
             : "Appearance and language preferences stay in this tab’s demo session."
         }
       />
+      {combinedProfile && !app.demo && (
+        <AccountProfileEditor
+          kind="professional"
+          email={app.user?.email || ""}
+        />
+      )}
       <div className="two-columns">
         {(!section ||
           section === "settings" ||

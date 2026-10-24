@@ -19,6 +19,7 @@ import { safetyCheck, safeOutput } from "./safety";
 import { useLocalCompanionProfile } from "../records";
 import {
   BEHAVIOR_VERSION,
+  addressReply,
   profileQuestion,
   savedProfileAnswer,
   type CompanionProfile,
@@ -54,6 +55,7 @@ export function Companion({
   const loadProfile = useLocalCompanionProfile();
   const [generated, setGenerated] = useState(0);
   const worker = useRef<Worker | null>(null);
+  const replyProfile = useRef<CompanionProfile | undefined>(undefined);
   const operation = useRef(0);
   const timeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const topics = useRef<string[]>([]);
@@ -85,6 +87,7 @@ export function Companion({
     };
   }, [account]);
   function stop() {
+    replyProfile.current = undefined;
     operation.current++;
     worker.current?.terminate();
     worker.current = null;
@@ -154,7 +157,7 @@ export function Companion({
             {
               role: "assistant" as const,
               text:
-                text ||
+                (text && addressReply(text, replyProfile.current)) ||
                 "Thank you for sharing that. I couldn't form a reliable reply this time. You can tell me more about what's on your mind; for personal health questions, please speak with your care team.",
               label: text ? "Offline AI" : "Safety fallback · Not AI-generated",
             },
@@ -248,6 +251,7 @@ export function Companion({
       length,
       tone,
     });
+    replyProfile.current = profile;
     const tags = [
       "lonely",
       "family",
@@ -380,7 +384,7 @@ export function Companion({
                   </button>
                 )}
                 <button
-                  className="button secondary"
+                  className="button cancel"
                   onClick={() => setConfirm(false)}
                 >
                   Cancel
@@ -629,7 +633,7 @@ export function Companion({
               ? "MatriSathi is preparing a reply…"
               : progress || "Loading…"}
           </span>
-          <button className="button secondary" onClick={stop}>
+          <button className="button cancel" onClick={stop}>
             {status === "loading" ? "Cancel" : "Stop"}
           </button>
         </div>

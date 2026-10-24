@@ -23,6 +23,58 @@ function assigned() {
   });
 }
 describe("synthetic sharing authorization model", () => {
+  it("loads permanent pairs only for verified clinicians and respects revocation", () => {
+    const command = {
+      type: "load" as const,
+      username: "test.mother",
+      code: "TEST-M-001",
+    };
+    expect(() => apply(emptyTestState(), "unverified", command)).toThrow(
+      "permission",
+    );
+    expect(() =>
+      apply(emptyTestState(), "doctor", { ...command, code: "wrong" }),
+    ).toThrow("do not match");
+    let state = apply(emptyTestState(), "doctor", command);
+    expect(hasTestAccess(state, "doctor", "test-mother")).toBe(true);
+    expect(state.grants[0].status).toBe("approved");
+    state = apply(state, "mother", {
+      type: "consent",
+      patient: "test-mother",
+      target: "doctor",
+      approve: false,
+    });
+    expect(() => apply(state, "doctor", command)).toThrow(
+      "cannot override revocation",
+    );
+  });
+  it("allows a direct first Mother claim but rejects a later claim from another Mother", () => {
+    let state = apply(emptyTestState(), "doctor", {
+      type: "create-patient",
+      name: "Fictional Patient",
+      username: "new.test",
+    });
+    const created = state.profiles.find((p) => p.username === "new.test")!;
+    expect(hasTestAccess(state, "mother", created.id)).toBe(false);
+    const command = {
+      type: "load" as const,
+      username: created.username,
+      code: created.code,
+    };
+    state = apply(state, "mother", command);
+    expect(hasTestAccess(state, "mother", created.id)).toBe(true);
+    expect(() => apply(state, "mother2", command)).toThrow(
+      "already been claimed",
+    );
+    expect(() =>
+      apply(state, "mother2", {
+        type: "consent",
+        patient: created.id,
+        target: "doctor",
+        approve: false,
+      }),
+    ).toThrow("permission");
+  });
   it("requires matching identifiers, mother's approval and staff acceptance before access", () => {
     expect(() =>
       apply(emptyTestState(), "organization", {

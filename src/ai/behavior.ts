@@ -13,6 +13,23 @@ export type CompanionProfile = {
   pregnancyWeeks?: number;
   recordedOn?: string;
 };
+export function addressReply(text: string, profile?: CompanionProfile) {
+  const first = profile?.name.trim().split(/\s+/)[0];
+  if (!first) return text;
+  const escaped = first.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (
+    new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}($|[^\\p{L}\\p{N}])`, "iu").test(
+      text,
+    )
+  )
+    return text;
+  if (/^(hello|hi|hey)[!. ,]/i.test(text))
+    return text.replace(
+      /^(hello|hi|hey)[!. ,]+/i,
+      (_, greeting: string) => `${greeting}, ${first}! `,
+    );
+  return `${first}, ${text}`;
+}
 export function profileQuestion(
   input: string,
 ): "identity" | "stage" | undefined {

@@ -90,6 +90,7 @@ test("encrypted mother profile feeds only approved local fields to a mocked work
   await expect(page.getByRole("log")).toContainText(
     "Your saved name is Synthetic Mira",
   );
+  await expect(page.getByRole("log")).toContainText("Hello, Synthetic!");
   const calls = await page.evaluate(() =>
     (
       window as unknown as {

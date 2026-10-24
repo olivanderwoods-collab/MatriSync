@@ -13,6 +13,83 @@ const pass = "a separate test vault phrase";
 const authorize = async () => {};
 
 describe("encrypted device records", () => {
+  it("preserves encrypted professional/facility details and credential bytes without granting verification", async () => {
+    const uid = crypto.randomUUID();
+    const vault = new RecordVault(uid, authorize);
+    await vault.openOnDevice();
+    const bytes = "%PDF-1.7\nSynthetic credential";
+    await vault.saveAccountProfile(
+      "professional",
+      {
+        name: "Private clinician",
+        profession: "Doctor",
+        registrationNumber: "SYNTHETIC-001",
+        verified: "true",
+      },
+      new File([bytes], "credential.pdf", { type: "application/pdf" }),
+    );
+    await vault.saveAccountProfile("organization", {
+      name: "Private facility",
+      phone: "TEST-PHONE",
+    });
+    expect(
+      vault.data?.accountProfiles?.professional?.fields.verified,
+    ).toBeUndefined();
+    expect(JSON.stringify(await readVault(uid))).not.toContain(
+      "Private clinician",
+    );
+    const code = vault.data!.accountProfiles!.professional!.code;
+    vault.lock();
+    await vault.openOnDevice();
+    expect(vault.data?.accountProfiles?.professional?.code).toBe(code);
+    expect(
+      new TextDecoder().decode(
+        (await vault.accountCredential("professional")).bytes,
+      ),
+    ).toBe(bytes);
+    const other = new RecordVault(crypto.randomUUID(), authorize);
+    await other.openOnDevice();
+    await expect(other.accountCredential("professional")).rejects.toThrow(
+      "No saved",
+    );
+  });
+  it("keeps children separate and preserves document/profile details through edits", async () => {
+    const vault = new RecordVault(crypto.randomUUID(), authorize);
+    await vault.openOnDevice();
+    const one = await vault.savePatient({
+      name: "First Child",
+      birthDate: "2024-01-01",
+      history: "",
+      kind: "child",
+      child: { sex: "", bloodGroup: "B+", allergies: "" },
+    });
+    const two = await vault.savePatient({
+      name: "Second Child",
+      birthDate: "2025-01-01",
+      history: "",
+      kind: "child",
+      child: { sex: "", bloodGroup: "", allergies: "" },
+    });
+    expect(one).not.toBe(two);
+    await vault.addDocument(
+      one,
+      "reports",
+      new File(["%PDF-1.7\nChild one"], "child-one.pdf", {
+        type: "application/pdf",
+      }),
+      "",
+      "",
+    );
+    vault.lock();
+    await vault.openOnDevice();
+    expect(vault.data?.patients.find((p) => p.id === one)?.parentId).toBe(
+      "self",
+    );
+    expect(vault.data?.documents.filter((d) => d.patientId === two)).toEqual(
+      [],
+    );
+    expect(await vault.ownCompanionProfile()).toBeUndefined();
+  });
   it("opens new device records automatically and isolates account keys", async () => {
     const uid = crypto.randomUUID();
     const first = new RecordVault(uid, authorize);

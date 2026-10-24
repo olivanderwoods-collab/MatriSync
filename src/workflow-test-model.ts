@@ -1,25 +1,44 @@
 // Isolated in-memory fixtures. Never use these actors or grants as real authorization.
-export type Actor = "mother" | "organization" | "doctor" | "nurse" | "anm";
+export type Actor =
+  | "mother"
+  | "mother2"
+  | "organization"
+  | "doctor"
+  | "nurse"
+  | "anm"
+  | "unverified";
 export const staff = ["doctor", "nurse", "anm"] as const;
 export const actorNames: Record<Actor, string> = {
   mother: "Test Mother",
+  mother2: "Second Test Mother",
+  unverified: "Unverified Test Clinician",
   organization: "Test Facility",
   doctor: "Dr. Test Rao",
   nurse: "Test Nurse · GNM",
   anm: "Test Health Worker · ANM",
 };
-export const testPatients = [
+export type TestPatient = {
+  id: string;
+  name: string;
+  username: string;
+  code: string;
+  owner?: "mother" | "mother2";
+  createdBy?: Actor;
+};
+export const testPatients: TestPatient[] = [
   {
     id: "test-mother",
     name: "Test Mother",
     username: "test.mother",
     code: "TEST-M-001",
+    owner: "mother",
   },
   {
     id: "test-child",
     name: "Test Child",
     username: "test.child",
     code: "TEST-C-001",
+    owner: "mother",
   },
 ];
 export type Grant = {
@@ -60,6 +79,7 @@ export type Audit = {
   at: string;
 };
 export type TestState = {
+  profiles: TestPatient[];
   grants: Grant[];
   assignments: Assignment[];
   referrals: Referral[];
@@ -68,6 +88,7 @@ export type TestState = {
   audit: Audit[];
 };
 export const emptyTestState = (): TestState => ({
+  profiles: structuredClone(testPatients),
   grants: [],
   assignments: [],
   referrals: [],
@@ -76,6 +97,8 @@ export const emptyTestState = (): TestState => ({
   audit: [],
 });
 export type Command =
+  | { type: "load"; username: string; code: string }
+  | { type: "create-patient"; name: string; username: string }
   | { type: "request"; username: string; code: string }
   | { type: "consent"; patient: string; target: Actor; approve: boolean }
   | { type: "assign" | "revoke"; patient: string; staff: Actor }
@@ -106,8 +129,9 @@ export function hasTestAccess(
   actor: Actor,
   patient: string,
 ): boolean {
-  if (!testPatients.some((p) => p.id === patient)) return false;
-  if (actor === "mother") return true;
+  const profile = state.profiles.find((p) => p.id === patient);
+  if (!profile || actor === "unverified") return false;
+  if (actor === "mother" || actor === "mother2") return profile.owner === actor;
   if (
     state.grants.some(
       (g) =>
@@ -144,9 +168,53 @@ export function applyTestCommand(
   const deny = () => {
     throw Error("This test actor does not have permission for that action.");
   };
-  if (command.type === "request") {
+  if (command.type === "create-patient") {
+    if (actor !== "doctor") deny();
+    const username = required(command.username, 40);
+    if (
+      !/^[a-zA-Z0-9_.-]{3,40}$/.test(username) ||
+      next.profiles.some((p) => p.username === username)
+    )
+      throw Error(
+        "Choose a unique test username (3–40 letters, numbers, dots, underscores or hyphens).",
+      );
+    patient = crypto.randomUUID();
+    next.profiles.push({
+      id: patient,
+      name: required(command.name, 120),
+      username,
+      code: `TEST-${crypto.randomUUID()}`,
+      createdBy: actor,
+    });
+    next.grants.push({ patient, target: actor, status: "approved" });
+  } else if (command.type === "load") {
+    const match = next.profiles.find(
+      (p) =>
+        p.username === command.username.trim() &&
+        p.code === command.code.trim(),
+    );
+    if (!match) throw Error("The test username and profile code do not match.");
+    patient = match.id;
+    if (actor === "mother" || actor === "mother2") {
+      if (match.owner && match.owner !== actor)
+        throw Error("This profile has already been claimed by another mother.");
+      if (!match.owner && match.createdBy !== "doctor") deny();
+      match.owner = actor;
+    } else {
+      if (!staff.includes(actor as (typeof staff)[number])) deny();
+      const grant = next.grants.find(
+        (g) => g.patient === patient && g.target === actor,
+      );
+      if (grant?.status === "revoked")
+        throw Error(
+          "Access was revoked. The permanent code cannot override revocation.",
+        );
+      if (grant) grant.status = "approved";
+      else next.grants.push({ patient, target: actor, status: "approved" });
+    }
+  } else if (command.type === "request") {
     if (actor !== "doctor" && actor !== "organization") deny();
-    const match = testPatients.find(
+    const match = next.profiles.find(
       (p) =>
         p.username === command.username.trim() &&
         p.code === command.code.trim(),
@@ -165,9 +233,13 @@ export function applyTestCommand(
     );
     next.grants.push({ patient, target: actor, status: "requested" });
   } else {
-    if (!testPatients.some((p) => p.id === patient)) deny();
+    if (!next.profiles.some((p) => p.id === patient)) deny();
     if (command.type === "consent") {
-      if (actor !== "mother") deny();
+      if (
+        !hasTestAccess(next, actor, patient) ||
+        (actor !== "mother" && actor !== "mother2")
+      )
+        deny();
       const grant = next.grants.find(
         (g) => g.patient === patient && g.target === command.target,
       );
@@ -227,7 +299,8 @@ export function applyTestCommand(
             if (
               actor === "organization" ||
               (command.kind === "prescription" && actor !== "doctor") ||
-              (actor === "mother" && command.kind !== "copy")
+              ((actor === "mother" || actor === "mother2") &&
+                command.kind !== "copy")
             )
               deny();
             next.documents.push({

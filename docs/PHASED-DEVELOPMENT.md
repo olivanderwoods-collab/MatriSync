@@ -1,4 +1,12 @@
-# MatriSync implementation status — 23 October 2026
+# MatriSync implementation status — 25 October 2026
+
+The [25 October decisions](DECISIONS-2026-10-25.md) record the approved access-plan changes and all 19 browser comments. This phase adds encrypted local professional/facility profiles and credential documents, separate child records, shared Mother-profile creation by clinicians, camera capture, Home/form/navigation corrections and first-name AI reply formatting. Direct profile load/first Mother claim and clinician Home assignment acceptance are implemented in the isolated synthetic workflow only. Real E2EE sharing, verification, full-profile retrieval and MatriSync device transport remain pending.
+
+Use the [current manual checklist and next steps](CHECK-THIS-BUILD-2026-10-25.md). The earlier approval sequence below is historical where superseded. No service deployment or paid/cloud integration is part of this update.
+
+---
+
+# Previous implementation status — 23 October 2026
 
 The [confirmed product decisions](DECISIONS-2026-10-23.md) supersede the historical status below. The public role is Mother. Doctors create/approve patient-level referrals; organizations initiate them and own the eventual MatriSync device transfer. Professional navigation has four main tabs and patient profiles replace the main navigation with patient-specific tabs and a direct Back to Patients link.
 

@@ -1,5 +1,7 @@
 # Confirmed product decisions — 23 October 2026
 
+**Later access-plan changes:** [25 October decisions](DECISIONS-2026-10-25.md) supersede the identifier-only/second Mother approval rules below for verified clinicians and the first ownership claim. Historical text is retained for provenance; follow the later decision for implementation.
+
 These direct user decisions supersede the conflicting navigation, vocabulary and workflow details in the v2 guide and resolve D1–D5 of the annotation review. Preserve the approved Medical Green design, existing records and strict zero-cost constraints.
 
 ## Roles and authority

@@ -14,6 +14,8 @@ import type { LocalDocument, Patient } from "./records-model";
 import { professionalSections, maternalSections } from "./workspace-spec";
 import { profileContext } from "./ai/behavior";
 import type { MotherProfile } from "./records-model";
+import { CameraCapture } from "./camera-capture";
+import { ProfileLinkPreview, TestAssignments } from "./workflow-tests";
 
 type RecordsContext = {
   vault?: RecordVault;
@@ -21,6 +23,29 @@ type RecordsContext = {
   lock: () => void;
 };
 const Context = createContext<RecordsContext>({ refresh() {}, lock() {} });
+export const useRecords = () => useContext(Context);
+export function BloodGroupSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const groups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="">Not recorded / Unknown</option>
+      {value && !groups.includes(value) && (
+        <option value={value}>{value} (previously recorded)</option>
+      )}
+      {groups.map((group) => (
+        <option key={group} value={group}>
+          {group}
+        </option>
+      ))}
+    </select>
+  );
+}
 export function useLocalCompanionProfile() {
   const { vault } = useContext(Context);
   return useCallback(
@@ -56,17 +81,15 @@ export function MotherRecordsHome() {
     <>
       <div className="page-title">
         <div>
-          <span className="eyebrow">
+          <h1>
             {profile?.name
               ? `Welcome ${profile.name.split(/\s+/)[0]}`
               : "Welcome"}
-          </span>
-          <h1>A little care, every day.</h1>
-          <p>Your health at a glance.</p>
+          </h1>
+          <p className="home-subheading">A little care, every day.</p>
         </div>
       </div>
       <section className="panel">
-        <h2>Your profile</h2>
         {!ready ? (
           <p>Opening your saved profile…</p>
         ) : error ? (
@@ -75,18 +98,23 @@ export function MotherRecordsHome() {
           <p>No profile details added yet.</p>
         ) : (
           <>
-            <p>{profile.name}</p>
-            <p>
+            <h2 className="pregnancy-week">
               {profile.pregnancyWeeks !== undefined
-                ? `Pregnancy week ${profile.pregnancyWeeks} · Recorded ${profile.recordedOn}`
+                ? `Pregnancy week ${profile.pregnancyWeeks}`
                 : "Pregnancy stage not recorded."}
-            </p>
+            </h2>
+            {profile.pregnancyWeeks !== undefined && (
+              <p>Recorded {profile.recordedOn}</p>
+            )}
           </>
         )}
       </section>
       <section className="panel">
         <h2>Educational suggestions</h2>
         <p>Explore topics in MatriSathi. Articles are pending review.</p>
+        <Link className="button secondary" to="/mother/matrisathi">
+          Open MatriSathi
+        </Link>
       </section>
     </>
   );
@@ -104,20 +132,29 @@ export function MotherRecordProfile({
     </VaultGate>
   );
 }
-function MotherRecordForm({
+export function MotherRecordForm({
   email,
   onName,
+  patient: supplied,
+  clinician = false,
+  onSaved,
 }: {
-  email: string;
-  onName: (name: string) => void;
+  email?: string;
+  onName?: (name: string) => void;
+  patient?: Patient;
+  clinician?: boolean;
+  onSaved?: (id: string) => void;
 }) {
   const { vault, refresh } = useContext(Context);
-  const patient = vault!.data!.patients.find((p) => p.id === "self");
+  const patient = clinician
+    ? supplied
+    : vault!.data!.patients.find((p) => p.id === "self");
   useEffect(() => {
-    if (patient?.name) onName(patient.name);
+    if (patient?.name) onName?.(patient.name);
   }, [patient?.name, onName]);
   const [name, setName] = useState(patient?.name || "");
   const [birthDate, setBirthDate] = useState(patient?.birthDate || "");
+  const [history, setHistory] = useState(patient?.history || "");
   const [profile, setProfile] = useState<MotherProfile>(
     patient?.profile || {
       bloodGroup: "",
@@ -143,16 +180,21 @@ function MotherRecordForm({
         setError("");
         setStatus("");
         try {
-          await vault!.savePatient(
-            { name, birthDate, history: patient?.history || "", profile },
-            "self",
+          const id = await vault!.savePatient(
+            {
+              name,
+              birthDate,
+              history,
+              profile,
+              kind: "mother",
+            },
+            clinician ? patient?.id : "self",
           );
           refresh();
-          onName(name.trim());
-          setProfile(
-            vault!.data!.patients.find((p) => p.id === "self")!.profile!,
-          );
+          onName?.(name.trim());
+          setProfile(vault!.data!.patients.find((p) => p.id === id)!.profile!);
           setStatus("Profile saved encrypted on this device.");
+          onSaved?.(id);
         } catch (e) {
           setError(message(e));
         } finally {
@@ -161,10 +203,12 @@ function MotherRecordForm({
       }}
     >
       <h2>Mother profile</h2>
-      <label>
-        Email
-        <input value={email} readOnly />
-      </label>
+      {email !== undefined && (
+        <label>
+          Email
+          <input value={email} readOnly />
+        </label>
+      )}
       <label>
         Full name
         <input
@@ -215,7 +259,7 @@ function MotherRecordForm({
           ["username", "Username"],
           ["bloodGroup", "Blood group (as recorded)"],
           ["allergies", "Allergies (as recorded)"],
-          ["emergencyContact", "Emergency contact"],
+          ["emergencyContact", "Emergency contact person"],
           ["emergencyPhone", "Emergency contact phone"],
           ["guardian", "Guardian name"],
           ["guardianPhone", "Guardian phone"],
@@ -224,22 +268,51 @@ function MotherRecordForm({
       ).map(([key, label]) => (
         <label key={key}>
           {label}
-          <input
-            value={profile[key]}
-            maxLength={key === "allergies" || key === "residence" ? 1000 : 120}
-            onChange={(e) => setProfile({ ...profile, [key]: e.target.value })}
-          />
+          {key === "bloodGroup" ? (
+            <BloodGroupSelect
+              value={profile.bloodGroup}
+              onChange={(value) =>
+                setProfile({ ...profile, bloodGroup: value })
+              }
+            />
+          ) : (
+            <input
+              value={profile[key]}
+              maxLength={
+                key === "allergies" || key === "residence" ? 1000 : 120
+              }
+              onChange={(e) =>
+                setProfile({ ...profile, [key]: e.target.value })
+              }
+            />
+          )}
         </label>
       ))}
       <p className="small record-id">
         Profile code: {profile.profileCode || "Created when you save"}
       </p>
+      {clinician && (
+        <label>
+          Medical history / profile notes (optional)
+          <textarea
+            maxLength={8000}
+            value={history}
+            onChange={(e) => setHistory(e.target.value)}
+          />
+        </label>
+      )}
       <p className="small">
         This code and username are local until secure account linking is
         enabled. Entered health details are not professionally verified.
       </p>
-      <button className="button" disabled={busy}>
-        {busy ? "Saving…" : "Save mother profile"}
+      <button className="button primary" disabled={busy}>
+        {busy
+          ? "Saving…"
+          : clinician
+            ? patient
+              ? "Save patient profile"
+              : "Create patient profile"
+            : "Save mother profile"}
       </button>
       {error && <p role="alert">{error}</p>}
       {status && <p role="status">{status}</p>}
@@ -295,7 +368,7 @@ function message(error: unknown) {
     ? error.message
     : "Unable to complete this action.";
 }
-function VaultGate({ children }: { children: ReactNode }) {
+export function VaultGate({ children }: { children: ReactNode }) {
   const { vault, refresh } = useContext(Context);
   const [legacy, setLegacy] = useState(false);
   const [phrase, setPhrase] = useState("");
@@ -456,12 +529,12 @@ function PatientForm({
       </label>
       {error && <p role="alert">{error}</p>}
       <div className="action-row">
-        <button className="button" disabled={busy}>
+        <button className="button primary" disabled={busy}>
           {busy ? "Saving…" : "Save profile"}
         </button>
         {!self && (
           <Link
-            className="button secondary"
+            className="button cancel"
             to={
               patient
                 ? `/professional/patients/${patient.id}/overview`
@@ -475,7 +548,7 @@ function PatientForm({
     </form>
   );
 }
-function Documents({
+export function Documents({
   patient,
   kind,
 }: {
@@ -541,7 +614,7 @@ function Documents({
     <section className="panel">
       <div className="panel-heading">
         <h2>{kind === "reports" ? "Reports" : "Prescriptions"}</h2>
-        {!adding && (
+        {!adding && !camera && (
           <div className="action-row">
             <button
               className="button secondary"
@@ -554,10 +627,7 @@ function Documents({
             </button>
             <button
               className="button secondary"
-              onClick={() => {
-                setCamera(true);
-                setAdding(true);
-              }}
+              onClick={() => setCamera(true)}
             >
               Take Photo
             </button>
@@ -567,6 +637,17 @@ function Documents({
       <p className="small muted">
         Encrypted on this device · Cloud uploads disabled
       </p>
+      {camera && (
+        <CameraCapture
+          onCancel={() => setCamera(false)}
+          onCapture={(photo) => {
+            setFile(photo);
+            setCamera(false);
+            setAdding(true);
+            setError("");
+          }}
+        />
+      )}
       {adding && (
         <form className="record-form document-form" onSubmit={save}>
           <label>
@@ -579,10 +660,11 @@ function Documents({
                   : "application/pdf,image/jpeg,image/png,image/webp"
               }
               capture={camera ? "environment" : undefined}
-              required
+              required={!file}
               onChange={(e) => setFile(e.target.files?.[0])}
             />
           </label>
+          {file && <p className="small">Selected: {file.name}</p>}
           <p className="small">PDF, JPG, PNG or WebP · Up to 10 MB</p>
           <label>
             Issuing facility / source (optional)
@@ -601,12 +683,12 @@ function Documents({
             />
           </label>
           <div className="action-row">
-            <button className="button" disabled={busy || !file}>
+            <button className="button primary" disabled={busy || !file}>
               {busy ? "Saving…" : "Save document"}
             </button>
             <button
               type="button"
-              className="button secondary"
+              className="button cancel"
               disabled={busy}
               onClick={() => {
                 setAdding(false);
@@ -647,6 +729,63 @@ function Documents({
         ))}
       </div>
     </section>
+  );
+}
+function PatientAdd() {
+  const [choice, setChoice] = useState("");
+  const navigate = useNavigate();
+  return (
+    <>
+      <div
+        className="action-row patient-add-options"
+        role="group"
+        aria-label="Add patient options"
+      >
+        <button
+          className="button secondary"
+          aria-pressed={choice === "create"}
+          onClick={() => setChoice("create")}
+        >
+          Create patient profile
+        </button>
+        <button
+          className="button secondary"
+          aria-pressed={choice === "load"}
+          onClick={() => setChoice("load")}
+        >
+          Load profile
+        </button>
+        <button
+          className="button secondary"
+          aria-pressed={choice === "band"}
+          onClick={() => setChoice("band")}
+        >
+          Sync NFC Band
+        </button>
+      </div>
+      {choice === "create" && (
+        <MotherRecordForm
+          clinician
+          onSaved={(id) =>
+            navigate(`/professional/patients/${id}/overview`, { replace: true })
+          }
+        />
+      )}
+      {choice === "load" && <ProfileLinkPreview role="professional" />}
+      {choice === "band" && (
+        <section className="panel">
+          <h2>Sync NFC Band</h2>
+          <p>
+            The MatriSync device will read the compact encrypted handoff over
+            Bluetooth. Full profile retrieval requires authorized sharing. The
+            device protocol and secure sharing are not connected yet.
+          </p>
+          <button className="button secondary" disabled>
+            Connect MatriSync device
+          </button>
+        </section>
+      )}
+    </>
   );
 }
 function RecordContent({ path, self }: { path: string; self: boolean }) {
@@ -696,6 +835,7 @@ function RecordContent({ path, self }: { path: string; self: boolean }) {
         )
       ) : !id ? (
         <>
+          <TestAssignments accepted />
           <div className="patient-tools">
             <label>
               Search Patient
@@ -757,7 +897,7 @@ function RecordContent({ path, self }: { path: string; self: boolean }) {
       ) : id === "add" &&
         !extra &&
         (tab === "overview" || tab === "profile") ? (
-        <PatientForm />
+        <PatientAdd />
       ) : !patient || extra ? (
         <p>No record is available at this address.</p>
       ) : ["vitals", "visits", "history", "medications"].includes(tab) ? (
@@ -775,7 +915,11 @@ function RecordContent({ path, self }: { path: string; self: boolean }) {
             ))}
           </nav>
           {tab === "edit" ? (
-            <PatientForm key={id} patient={patient} />
+            patient.profile ? (
+              <MotherRecordForm key={id} clinician patient={patient} />
+            ) : (
+              <PatientForm key={id} patient={patient} />
+            )
           ) : tab === "overview" ? (
             <section className="panel">
               <div className="panel-heading">
@@ -792,6 +936,20 @@ function RecordContent({ path, self }: { path: string; self: boolean }) {
                   <dt>Full name</dt>
                   <dd>{patient.name}</dd>
                 </div>
+                {patient.profile && (
+                  <>
+                    <div>
+                      <dt>Username</dt>
+                      <dd>{patient.profile.username}</dd>
+                    </div>
+                    <div>
+                      <dt>Profile code</dt>
+                      <dd className="record-id">
+                        {patient.profile.profileCode}
+                      </dd>
+                    </div>
+                  </>
+                )}
                 <div>
                   <dt>Date of birth</dt>
                   <dd>{patient.birthDate || "Not supplied"}</dd>

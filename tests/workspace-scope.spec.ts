@@ -148,7 +148,8 @@ test("every specified destination, legacy bookmarks and no external traffic", as
 test("v2 role boundaries and Home action inventories", async ({ page }) => {
   await guest(page, "mother");
   const main = page.locator("main#main").first();
-  await expect(main.getByRole("link")).toHaveCount(0);
+  await expect(main.getByRole("link")).toHaveCount(1);
+  await expect(main.getByRole("link", { name: "Open MatriSathi" })).toHaveAttribute("href", "/mother/matrisathi");
   await expect(main).toContainText("34");
   await expect(main).toContainText("Welcome Mira");
   await page.goto("/mother/matrisathi/companion");

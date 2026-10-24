@@ -149,13 +149,19 @@ test("encrypted records open automatically, persist, download and isolate accoun
   ).toHaveCount(0);
   await page.getByRole("link", { name: "Add patient", exact: true }).click();
   await page
+    .getByRole("button", { name: "Create patient profile", exact: true })
+    .click();
+  await page
     .getByLabel("Full name", { exact: true })
     .fill("Private Patient Test");
   await page.getByLabel("Date of birth (optional)").fill("2000-02-29");
   await page
     .getByLabel("Medical history / profile notes (optional)")
     .fill("Private notes for testing");
-  await page.getByRole("button", { name: "Save profile", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Create patient profile", exact: true })
+    .last()
+    .click();
   await expect(
     page.getByRole("heading", { name: "Private Patient Test", exact: true }),
   ).toBeVisible();
