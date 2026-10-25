@@ -1,18 +1,27 @@
 // Isolated in-memory fixtures. Never use these actors or grants as real authorization.
+import {
+  initialTestCredentials,
+  updateTestCredentials,
+  verifiedTestClinician,
+  type TestCredential,
+  type VerificationCommand,
+} from "./verification-test-model";
 export type Actor =
   | "mother"
   | "mother2"
   | "organization"
+  | "unverified-facility"
   | "doctor"
   | "nurse"
   | "anm"
   | "unverified";
-export const staff = ["doctor", "nurse", "anm"] as const;
+export const staff = ["doctor", "nurse", "anm", "unverified"] as const;
 export const actorNames: Record<Actor, string> = {
   mother: "Test Mother",
   mother2: "Second Test Mother",
   unverified: "Unverified Test Clinician",
   organization: "Test Facility",
+  "unverified-facility": "Unverified Test Facility",
   doctor: "Dr. Test Rao",
   nurse: "Test Nurse · GNM",
   anm: "Test Health Worker · ANM",
@@ -79,6 +88,14 @@ export type Audit = {
   at: string;
 };
 export type TestState = {
+  credentials: TestCredential[];
+  savedCopies: {
+    actor: Actor;
+    patient: string;
+    name: string;
+    savedAt: string;
+    documents: TestDocument[];
+  }[];
   profiles: TestPatient[];
   grants: Grant[];
   assignments: Assignment[];
@@ -88,6 +105,8 @@ export type TestState = {
   audit: Audit[];
 };
 export const emptyTestState = (): TestState => ({
+  credentials: initialTestCredentials(),
+  savedCopies: [],
   profiles: structuredClone(testPatients),
   grants: [],
   assignments: [],
@@ -97,6 +116,8 @@ export const emptyTestState = (): TestState => ({
   audit: [],
 });
 export type Command =
+  | VerificationCommand
+  | { type: "save-copy"; patient: string }
   | { type: "load"; username: string; code: string }
   | { type: "create-patient"; name: string; username: string }
   | { type: "request"; username: string; code: string }
@@ -130,8 +151,13 @@ export function hasTestAccess(
   patient: string,
 ): boolean {
   const profile = state.profiles.find((p) => p.id === patient);
-  if (!profile || actor === "unverified") return false;
+  if (!profile || actor === "unverified-facility") return false;
   if (actor === "mother" || actor === "mother2") return profile.owner === actor;
+  if (
+    actor !== "organization" &&
+    !verifiedTestClinician(state.credentials, actor)
+  )
+    return false;
   if (
     state.grants.some(
       (g) =>
@@ -168,6 +194,20 @@ export function applyTestCommand(
   const deny = () => {
     throw Error("This test actor does not have permission for that action.");
   };
+  if (
+    command.type === "submit-credentials" ||
+    command.type === "review-credentials"
+  ) {
+    next.credentials = updateTestCredentials(next.credentials, actor, command);
+    return next;
+  }
+  // Check current credentials for every new read/publication, including invitation acceptance.
+  if (
+    staff.includes(actor as (typeof staff)[number]) &&
+    !verifiedTestClinician(next.credentials, actor)
+  )
+    deny();
+  if (actor === "unverified-facility") deny();
   if (command.type === "create-patient") {
     if (actor !== "doctor") deny();
     const username = required(command.username, 40);
@@ -273,6 +313,11 @@ export function applyTestCommand(
               !staff.includes(command.staff as (typeof staff)[number])
             )
               deny();
+            if (
+              command.type === "assign" &&
+              !verifiedTestClinician(next.credentials, command.staff)
+            )
+              deny();
             const existing = next.assignments.find(
               (a) => a.patient === patient && a.staff === command.staff,
             );
@@ -295,6 +340,21 @@ export function applyTestCommand(
             });
             break;
           }
+          case "save-copy":
+            if (!staff.includes(actor as (typeof staff)[number])) deny();
+            next.savedCopies = next.savedCopies.filter(
+              (copy) => !(copy.actor === actor && copy.patient === patient),
+            );
+            next.savedCopies.push({
+              actor,
+              patient,
+              name: next.profiles.find((p) => p.id === patient)!.name,
+              savedAt: new Date().toISOString(),
+              documents: structuredClone(
+                next.documents.filter((d) => d.patient === patient),
+              ),
+            });
+            break;
           case "document":
             if (
               actor === "organization" ||

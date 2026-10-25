@@ -1049,6 +1049,10 @@ function WorkspaceBody() {
           {r === "mother" && path === "more/permissions" && (
             <TestLink role={r} />
           )}
+          {r !== "mother" &&
+            (path === "more/verification" || path === "more/staff") && (
+              <TestLink role={r} />
+            )}
         </main>
         {!patientDetail && !childDetail && (
           <nav

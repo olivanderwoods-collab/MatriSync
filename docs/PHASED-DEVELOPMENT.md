@@ -1,5 +1,7 @@
 # MatriSync implementation status — 25 October 2026
 
+The next local test stage now exercises facility-led credential submission/review/suspension, attributed decisions, doctor/caregiver separation and authorization checks on future synthetic reads/writes. Memory-only saved snapshots demonstrate old-copy retention after revocation or suspension. This is available through Test linking & assignment, including a link from Professional Verification. It does not verify real accounts or activate E2EE; facility bootstrap and key protocol decisions remain release gates.
+
 Inventory continuation now provides encrypted local pending deposits, refunds and settlement/reimbursement records, unique reference checks and retained void/correction history. This is persistent bookkeeping, not payment or reconciliation. The user confirmed verified-facility clinician approval and continued offline reading of previously saved data after revocation; future sharing is blocked. The [sharing access plan](SHARING-ACCESS-PLAN.md) defines those next-stage requirements without enabling live access.
 
 Latest follow-up fixes unlinked Mother/child records appearing in the clinician workspace under the same development account. Workspace-scoped record views and mutation checks now exclude them from lists, counts, direct URLs and document operations, while preserving existing local records. Verified account roles and actual cross-account sharing remain pending; see the current verification and checklist.

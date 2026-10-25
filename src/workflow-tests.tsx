@@ -6,6 +6,7 @@ import {
   type FormEvent,
 } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
+import { VerificationTests, SavedTestCopies } from "./verification-tests";
 import {
   actorNames,
   applyTestCommand,
@@ -246,7 +247,11 @@ export function WorkflowTests({ role, path }: { role: string; path: string }) {
       {!id ? (
         <>
           <h1>Test patients</h1>
-          {actor !== "organization" && <TestLoadForm actor={actor} />}
+          <VerificationTests state={state} actor={actor} act={act} />
+          <SavedTestCopies state={state} actor={actor} act={act} />
+          {actor !== "organization" && actor !== "unverified-facility" && (
+            <TestLoadForm actor={actor} />
+          )}
           {actor === "doctor" && (
             <form
               className="panel record-form"
@@ -452,6 +457,14 @@ export function WorkflowTests({ role, path }: { role: string; path: string }) {
                 controls only its staff assignments.
               </p>
               <p>Username: {patient.username}</p>
+              {staff.includes(actor as (typeof staff)[number]) && (
+                <button
+                  className="button secondary"
+                  onClick={() => act({ type: "save-copy", patient: id })}
+                >
+                  Save test copy for offline reading
+                </button>
+              )}
             </section>
           )}
           {tab === "staff" && actor === "organization" && (

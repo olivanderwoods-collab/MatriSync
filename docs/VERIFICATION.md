@@ -1,5 +1,17 @@
 # Current verification — 25 October 2026
 
+## Facility verification and retained-copy test stage
+
+Added an isolated credential submission/review/suspension workflow and an explicit saved-document snapshot. Verified Test Facility approvals are attributed; unverified facilities/self-review are denied. Caregiver approval cannot grant doctor-only prescribing/referral privileges. Current verification gates profile loading, creation, staff assignment/acceptance and future document fetch/publication. Grant revocation or credential suspension leaves a previously saved snapshot unchanged and readable to its test actor. This demonstrates the approved policy only: real profiles, crypto keys and files are untouched, and all new state clears on reload/logout.
+
+- **48 unit tests passed** across nine files, including six new verification/offline-policy tests, rejected resubmission, denied suspended reinstatement, immutable history/snapshots, separate facility/direct grants and retained Mother access.
+- **26 general browser checks passed:** the 24 existing checks passed in the full run; both new mobile checks passed on targeted rerun after correcting an exact-label selector. They cover denied unverified-facility approval, approved caregiver report access without digital prescriptions, suspension, actor-scoped retained copies while offline, blocked refresh and reload reset. No application-code change was needed for the selector issue.
+- **15 account browser checks passed; one opt-in genuine Qwen check skipped.** The first account run lacked the local Auth emulator. After starting it, the full suite passed, including original-file migration, child isolation, profile/camera flows and Inventory persistence. No live Auth service was used.
+- ESLint, TypeScript, production and demo builds passed. Production asset verification excludes synthetic workflow fixtures. The 390px retained-copy screen was inspected for wrapping and overflow.
+- No deployed services, live credentials, shared keys, cloud uploads, payments, hardware operations or real-device camera/model validation were added. Facility bootstrap authority, recovery/key protocol and independent security review remain open before live activation.
+
+See the newest section of the [manual checklist](CHECK-THIS-BUILD-2026-10-25.md) and the [sharing implementation contract](SHARING-ACCESS-PLAN.md). Earlier counts below are historical.
+
 ## Inventory continuation and sharing decisions
 
 Added encrypted device-local pending deposit/refund/settlement records under Organization → Inventory → Refunds / Settlements. The original fields remain immutable; a void operation retains them and adds an attributed reason/time. References are case-insensitively unique within this account/device dataset, including voided entries. This does not detect payments entered under different references or duplicates at another facility. No entry is marked settled/paid and no money is transferred. Physical stock/return verification and cross-facility reconciliation remain unavailable.

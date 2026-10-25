@@ -2,6 +2,10 @@
 
 ## Latest approved access rules — 25 October 2026
 
+The user explicitly chose **Keep live facility verification deferred for now** after reviewing the next-stage authority question. Keep that service disabled and continue independent local work; do not treat this as permission to choose a bootstrap authority.
+
+The synthetic credential-review and retained-copy tests now exercise these rules, but do not close the live verification/E2EE gates below. Initial facility authority and approver appointment are still unresolved; the test's fixed verified facility is not a production bootstrap mechanism.
+
 Latest confirmed choices: verified facilities approve their clinicians; revoked staff retain readable previously saved offline copies but cannot receive future sharing. See [sharing implementation contract](SHARING-ACCESS-PLAN.md). These choices are settled; initial facility verification, key recovery, grant enforcement and protocol review are still release gates.
 
 Follow [DECISIONS-2026-10-25.md](DECISIONS-2026-10-25.md). Permanent username + profile code grants verified clinicians direct access; a signed-in Mother directly claims an unclaimed clinician-created profile with that pair. These replace the earlier matching-only/second-approval requirement for those two flows. The synthetic implementation is not live authorization.

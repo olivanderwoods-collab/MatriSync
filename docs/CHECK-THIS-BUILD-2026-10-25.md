@@ -1,5 +1,16 @@
 # Check this build — 25 October 2026
 
+## New facility verification test to check
+
+1. Open **Organization → More → Professional Verification → Test linking & assignment**. These are fictional actors; no real credential or account becomes verified. Test Doctor, Nurse and ANM start pre-approved to preserve the existing linking checks.
+2. Choose **Unverified Test Clinician**, enter a fictional credential reference and submit. Status becomes pending; loading `test.mother` / `TEST-M-001` must still fail. This applicant is a caregiver, not a doctor.
+3. Choose **Unverified Test Facility**, enter a review reason for the applicant and record an approval. It must be denied. Choose **Test Facility** and repeat: approval should succeed and decision history should identify the reviewer, time and reason. Rejection allows another submission; suspension does not offer reinstatement yet.
+4. Switch to the approved applicant and load the pair. Reports should be available; authoring digital prescriptions and clinically approving referrals must remain unavailable.
+5. Choose **Dr. Test Rao**, load the test Mother, add a sample report, then open the patient Overview and **Save test copy for offline reading**. Switch to Test Facility, suspend the Doctor with a reason, then switch back. The accessible-patient link disappears, but Previously saved test records still shows the saved report and last successful test fetch. Fetch latest test copy must fail. Switching to another actor must not show the Doctor's saved copy.
+6. Reload to reset the test. All credential decisions, links and saved copies here are memory-only. Existing encrypted real-account profiles, files and Inventory ledger must stay unchanged.
+
+**Next:** the user chose to keep live facility verification deferred. Continue independent local Inventory return and reconciliation workflows, followed by clinical and device stages as their prerequisites are resolved. When live verification is resumed, its facility authority, device enrollment, recovery, recipient-key verification and independent protocol review must be settled before activation. This test does not implement encryption transport, a durable offline sync queue or remote deletion.
+
 ## New Inventory step to check
 
 1. Sign in and open **Organization → Inventory → Refunds / Settlements**. Add a fictional pending record, selecting Deposit, Refund or Settlement / reimbursement. Supply a unique record reference, printed Band Inventory ID, facility, amount/currency and date. INR is the default; INR/USD/EUR/GBP are currently supported.

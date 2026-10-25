@@ -4,6 +4,8 @@ This is the next implementation contract, not a claim that live sharing is enabl
 
 ## Confirmed decisions
 
+- Latest continuation answer: **keep live facility verification deferred for now**. Continue independent local/synthetic work. Do not activate live verification or infer a facility bootstrap authority; choosing that authority remains deferred.
+
 - Verified facilities approve their clinicians' credentials. A saved profile or a selected workspace is not verification. Facilities may confirm affiliation and assign/revoke staff patient access; they cannot claim or remove Mother ownership.
 - A verified clinician loads a profile directly with its permanent username + profile code, without a second Mother approval prompt. A signed-in Mother directly claims an unclaimed clinician-created profile with the pair. An existing different owner cannot be replaced by repeating it.
 - Facility assignments require staff acceptance. Direct clinician connections and facility assignments remain distinct grants with their respective revocation scope.
@@ -31,3 +33,9 @@ This is the next implementation contract, not a claim that live sharing is enabl
 Reject unverified facility approvals, forged clinician roles, wrong codes, revoked connections, unaccepted assignments, wrong recipient keys and replayed requests. Test racing ownership claims and preservation of the original owner; accepted assignments; offline reading of old content after revocation; denied future fetch/publication. Inspect storage, logs and network traffic for plaintext records, documents, codes and private keys. Never migrate fixtures into real accounts.
 
 Current linking remains an isolated in-memory synthetic workflow. Inventory bookkeeping is separate encrypted local storage; it does not activate this service or transfer money.
+
+## Implemented local test stage
+
+The synthetic workflow now has credential submission, verified-facility approval/rejection and suspension, with attributed decision history. Test Facility is a fixed fictional verified approver, not a public self-verification control. Doctor/Nurse/ANM remain initially approved fixtures; the unverified applicant has an immutable caregiver category. An unverified facility cannot approve; caregivers cannot acquire doctor-only privileges through approval. Rejected applications can be resubmitted. Suspended reinstatement and multi-facility authority remain unresolved and unavailable.
+
+Current credential checks gate profile loading, patient creation, assignments, acceptance, new document fetches and publication. A separately copied synthetic document snapshot demonstrates retained old reads after credential suspension or grant revocation, while future fetch/publication is denied. Snapshots record the last successful test fetch and are visible only to their test actor. They clear on reload/logout; they are not real downloads, persistent offline storage, key rotation or live encrypted sharing. Production bundles exclude this workflow. Real account profile/credential forms still confer no authority.
