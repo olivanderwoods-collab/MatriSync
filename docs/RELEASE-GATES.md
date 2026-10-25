@@ -6,6 +6,8 @@ For 5 November 2026, the user approved real encrypted sharing between explicitly
 
 ## Latest approved access rules — 25 October 2026
 
+26 October progress: `ENCRYPTED-SHARING-PILOT.md` documents the development-only, operator-approved encrypted original-document transport. Local three-account transfer and denial tests do not close the broader profile, production verification, key recovery, cloud rollout or referral/handoff gates below.
+
 The user explicitly chose **Keep live facility verification deferred for now** after reviewing the next-stage authority question. Keep that service disabled and continue independent local work; do not treat this as permission to choose a bootstrap authority.
 
 The synthetic credential-review and retained-copy tests now exercise these rules, but do not close the live verification/E2EE gates below. Initial facility authority and approver appointment are still unresolved; the test's fixed verified facility is not a production bootstrap mechanism.

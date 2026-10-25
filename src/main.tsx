@@ -6,6 +6,14 @@ import React, {
   useState,
 } from "react";
 import { createRoot } from "react-dom/client";
+import { sharingPilotEnabled } from "./sharing-config";
+const SharingPage = sharingPilotEnabled
+  ? React.lazy(() =>
+      import("./sharing-page").then((module) => ({
+        default: module.SharingPage,
+      })),
+    )
+  : () => null;
 import {
   BrowserRouter,
   Link,
@@ -953,7 +961,9 @@ function WorkspaceBody() {
             <span className="banner-description">
               {app.demo
                 ? "Fictional profiles."
-                : "Records stay on this device."}
+                : sharingPilotEnabled
+                  ? "Local records · Explicit encrypted sharing pilot"
+                  : "Records stay on this device."}
             </span>
           </div>
           <button onClick={() => setLogout(true)}>
@@ -988,7 +998,13 @@ function WorkspaceBody() {
                 content is shown in English.
               </p>
             )}
-          {!app.demo && r === "mother" && path === "overview" ? (
+          {!app.demo && sharingPilotEnabled && path === "more/sharing" ? (
+            <React.Suspense
+              fallback={<p role="status">Opening encrypted sharing…</p>}
+            >
+              <SharingPage uid={app.user!.uid} role={r} />
+            </React.Suspense>
+          ) : !app.demo && r === "mother" && path === "overview" ? (
             <MotherRecordsHome />
           ) : !app.demo && r === "mother" && section === "children" ? (
             <ChildRecords path={path} />
@@ -1044,6 +1060,11 @@ function WorkspaceBody() {
           )}
           {section === "patients" && !patientDetail && !testing && (
             <TestLink role={r} />
+          )}
+          {!app.demo && sharingPilotEnabled && path === "more" && (
+            <Link className="button secondary" to={`/${r}/more/sharing`}>
+              Encrypted sharing pilot
+            </Link>
           )}
           {r === "professional" && path === "overview" && <TestAssignments />}
           {app.demo && r === "professional" && path === "patients" && (

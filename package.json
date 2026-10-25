@@ -13,11 +13,14 @@
     "test:e2e": "playwright test",
     "lint": "eslint .",
     "test:rules": "vitest run --config vitest.rules.config.ts",
-    "test:auth": "playwright test --config playwright.auth.config.ts"
+    "test:auth": "playwright test --config playwright.auth.config.ts",
+    "dev:sharing": "node scripts/start-sharing-pilot.mjs",
+    "test:sharing": "playwright test --config playwright.sharing.config.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "3.8.1",
     "firebase": "^12.0.0",
+    "jose": "6.2.13",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
