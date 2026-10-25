@@ -1,5 +1,7 @@
 # MatriSync implementation status — 25 October 2026
 
+Inventory now also supports encrypted local return intake, preserved inspection/correction history, and linked administrative reconciliation notes on pending refunds/settlements. Return changes flag prior notes for another review. No stock is cleared for reuse or payment confirmed. The next independent stages are stock receipt/issuance and explicit lifecycle links, then authorized collection/reconciliation and hardware clearance; live facility verification remains deferred by the user.
+
 The next local test stage now exercises facility-led credential submission/review/suspension, attributed decisions, doctor/caregiver separation and authorization checks on future synthetic reads/writes. Memory-only saved snapshots demonstrate old-copy retention after revocation or suspension. This is available through Test linking & assignment, including a link from Professional Verification. It does not verify real accounts or activate E2EE; facility bootstrap and key protocol decisions remain release gates.
 
 Inventory continuation now provides encrypted local pending deposits, refunds and settlement/reimbursement records, unique reference checks and retained void/correction history. This is persistent bookkeeping, not payment or reconciliation. The user confirmed verified-facility clinician approval and continued offline reading of previously saved data after revocation; future sharing is blocked. The [sharing access plan](SHARING-ACCESS-PLAN.md) defines those next-stage requirements without enabling live access.

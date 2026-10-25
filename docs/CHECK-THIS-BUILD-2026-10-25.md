@@ -1,5 +1,15 @@
 # Check this build — 25 October 2026
 
+## New return and reconciliation checks
+
+1. Sign in and open **Organization → Inventory → Return Band**. Record a fictional return with a unique reference, printed Band Inventory ID, receiving facility and date. Save, then reload. The record should remain **Reuse not cleared**. Saving also works offline after the page has opened.
+2. Try another return reference for the same band, including a different letter case. The app should reject a duplicate active intake. Record an inspection on the existing entry instead. Choose Appears functional, then record a later Damaged inspection; both notes must remain in history. Neither observation adds available stock or certifies hygiene/erasure.
+3. In **Refunds / Settlements**, add a pending refund or settlement with the same printed band ID. Choose **Review against return**, select the matching intake, enter an administrative evidence reference and review notes, and save a local consistency/discrepancy note. Reload and open Reconciliation note history. Amount and original entry must remain unchanged; payment remains unconfirmed and the entry remains pending reconciliation.
+4. Record another inspection on that return. Its ledger note should now say **Linked return changed or was voided. Review again.** Add another review to retain both observations. Voiding a return requires a reason, preserves its history and blocks new inspections/reviews against it. It must not void or pay its linked financial entry.
+5. Try a ledger entry with a different band ID: its review form must not offer the unrelated return. Check a Mother/Professional account workspace still retains its original records and does not expose Inventory return data.
+
+**What's next:** local stock receipt/issuance and full issue→return lifecycle links; deposit/refund matching and authorized collection/reconciliation; secure erase/hygiene clearance and device transport. Live facility verification remains explicitly deferred. Payment policy, partial refunds, damaged-band liability, multi-facility duplicate prevention and verified operational authority must be resolved before those actions are activated. This build records administrative observations; it does not perform payment or certify physical handling.
+
 ## New facility verification test to check
 
 1. Open **Organization → More → Professional Verification → Test linking & assignment**. These are fictional actors; no real credential or account becomes verified. Test Doctor, Nurse and ANM start pre-approved to preserve the existing linking checks.

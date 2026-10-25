@@ -33,6 +33,18 @@ import {
 } from "./inventory-ledger-model";
 
 export type RecordWorkspace = "mother" | "professional" | "organization";
+import {
+  returnInput,
+  inspectionInput,
+  reviewInput,
+  inventoryText,
+  bandKey,
+  returnRevision,
+  type ReturnInput,
+  type InspectionInput,
+  type ReviewInput,
+  type BandReturn,
+} from "./inventory-returns-model";
 
 // Local provenance boundary, not a verified role or a cross-account sharing grant.
 // Existing child records already carry parentId=self; no destructive migration.
@@ -75,6 +87,10 @@ export class RecordVault {
       inventoryLedger:
         this.workspace === "organization"
           ? this.records.inventoryLedger
+          : undefined,
+      inventoryReturns:
+        this.workspace === "organization"
+          ? this.records.inventoryReturns
           : undefined,
     };
   }
@@ -322,6 +338,129 @@ export class RecordVault {
       inventoryLedger: [...entries, entry],
     });
     return entry.id;
+  }
+  private requireInventory() {
+    if (this.workspace !== "organization")
+      throw Error(
+        "Inventory records are only available in the organization workspace.",
+      );
+    if (!this.records) throw Error("Open your records first.");
+    return this.records;
+  }
+  async saveBandReturn(input: ReturnInput) {
+    const records = this.requireInventory();
+    const checked = returnInput(input);
+    const entries = records.inventoryReturns || [];
+    if (
+      entries.some((item) => item.reference.toUpperCase() === checked.reference)
+    )
+      throw Error(
+        "This return reference already exists, including voided records.",
+      );
+    if (
+      entries.some(
+        (item) =>
+          !item.voided && bandKey(item.bandId) === bandKey(checked.bandId),
+      )
+    )
+      throw Error(
+        "This band already has an active return record. Record an inspection on that entry instead.",
+      );
+    const item: BandReturn = {
+      ...checked,
+      id: crypto.randomUUID(),
+      createdAt: new Date().toISOString(),
+      createdBy: this.uid,
+      inspections: [],
+    };
+    await this.persist({ ...records, inventoryReturns: [...entries, item] });
+    return item.id;
+  }
+  async inspectBandReturn(id: string, input: InspectionInput) {
+    const records = this.requireInventory();
+    const checked = inspectionInput(input);
+    const item = records.inventoryReturns?.find((item) => item.id === id);
+    if (!item || item.voided)
+      throw Error("This return record is unavailable or voided.");
+    await this.persist({
+      ...records,
+      inventoryReturns: records.inventoryReturns!.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              inspections: [
+                ...item.inspections,
+                {
+                  ...checked,
+                  id: crypto.randomUUID(),
+                  at: new Date().toISOString(),
+                  by: this.uid,
+                },
+              ],
+            }
+          : item,
+      ),
+    });
+  }
+  async voidBandReturn(id: string, reason: string) {
+    const records = this.requireInventory();
+    const checked = inventoryText(reason, "a correction reason", 500);
+    const item = records.inventoryReturns?.find((item) => item.id === id);
+    if (!item || item.voided)
+      throw Error("This return record is unavailable or already voided.");
+    await this.persist({
+      ...records,
+      inventoryReturns: records.inventoryReturns!.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              voided: {
+                reason: checked,
+                at: new Date().toISOString(),
+                by: this.uid,
+              },
+            }
+          : item,
+      ),
+    });
+  }
+  async reviewLedgerEntry(id: string, input: ReviewInput) {
+    const records = this.requireInventory();
+    const checked = reviewInput(input);
+    const entry = records.inventoryLedger?.find((entry) => entry.id === id);
+    const linked = records.inventoryReturns?.find(
+      (item) => item.id === checked.returnId,
+    );
+    if (!entry || entry.voided || entry.kind === "deposit")
+      throw Error("Select an active refund or settlement record.");
+    if (
+      !linked ||
+      linked.voided ||
+      bandKey(linked.bandId) !== bandKey(entry.bandId)
+    )
+      throw Error(
+        "Select an active return with the same printed Band Inventory ID.",
+      );
+    await this.persist({
+      ...records,
+      inventoryLedger: records.inventoryLedger!.map((entry) =>
+        entry.id === id
+          ? {
+              ...entry,
+              reviews: [
+                ...(entry.reviews || []),
+                {
+                  ...checked,
+                  id: crypto.randomUUID(),
+                  returnRevision: returnRevision(linked),
+                  at: new Date().toISOString(),
+                  by: this.uid,
+                },
+              ],
+            }
+          : entry,
+      ),
+    });
   }
   async voidLedgerEntry(id: string, reason: string) {
     if (this.workspace !== "organization")

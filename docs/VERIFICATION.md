@@ -1,5 +1,18 @@
 # Current verification — 25 October 2026
 
+## Inventory returns and local reconciliation notes
+
+Added encrypted device-local return intake, append-only inspections, retained void corrections and matching return links for administrative refund/settlement reviews. Reviews preserve original ledger fields and earlier notes. Changes to the return's inspection/correction history flag its latest linked review for another check. No available stock, secure erasure, hygiene clearance, payment, refund eligibility, distributor authority or cross-facility synchronization is inferred.
+
+- **54 unit tests passed** across ten files, including six new return/reconciliation tests. Covered validation, duplicate active intake/reference prevention, encrypted persistence, original history retention, wrong-band/deposit/voided review rejection, corrupted link validation, stale note detection, other-workspace/cloud exclusion and stale/signed-out writes.
+- **26 general Edge browser tests passed** in the full suite. Guest preview scope, navigation, role boundaries, synthetic verification/sharing, PWA updates and existing checks remained intact.
+- **16 account browser checks passed; one opt-in genuine Qwen test skipped.** The new 390px flow checks offline return and review saves, reloads, duplicate intake denial, functional→damaged inspection history, unchanged pending payment status, review invalidation and voided-return blocking. Existing child isolation, account/profile/camera, original-document migration and pending-ledger tests passed.
+- TypeScript, ESLint and production/demo builds passed. The mobile return screen was visually inspected. No dependencies, Firebase rules, live service activation or deployment changed.
+
+These are local administrative records, not verified physical or financial events. Current role switching remains a development affordance, with authoritative facility/staff permissions still deferred. The schema additions are optional for existing vaults; original document ciphertext and attachments are preserved. Existing records under unrelated accounts/workspaces remain excluded.
+
+See the newest [manual check and next-step list](CHECK-THIS-BUILD-2026-10-25.md). Historical counts below refer to earlier milestones.
+
 ## Facility verification and retained-copy test stage
 
 Added an isolated credential submission/review/suspension workflow and an explicit saved-document snapshot. Verified Test Facility approvals are attributed; unverified facilities/self-review are denied. Caregiver approval cannot grant doctor-only prescribing/referral privileges. Current verification gates profile loading, creation, staff assignment/acceptance and future document fetch/publication. Grant revocation or credential suspension leaves a previously saved snapshot unchanged and readable to its test actor. This demonstrates the approved policy only: real profiles, crypto keys and files are untouched, and all new state clears on reload/logout.

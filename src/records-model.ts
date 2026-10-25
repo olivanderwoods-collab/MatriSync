@@ -4,6 +4,12 @@ import {
   type AccountProfileKind,
 } from "./account-profile-model";
 import { validateLedger, type LedgerEntry } from "./inventory-ledger-model";
+import {
+  validateReturns,
+  bandKey,
+  returnRevision,
+  type BandReturn,
+} from "./inventory-returns-model";
 export type Patient = {
   id: string;
   name: string;
@@ -92,6 +98,7 @@ export type RecordData = {
   documents: LocalDocument[];
   accountProfiles?: Partial<Record<AccountProfileKind, AccountProfile>>;
   inventoryLedger?: LedgerEntry[];
+  inventoryReturns?: BandReturn[];
 };
 export const emptyRecords = (): RecordData => ({
   version: 1,
@@ -172,6 +179,22 @@ export function parseRecords(bytes: Uint8Array): RecordData {
   }
   if (value.inventoryLedger !== undefined)
     validateLedger(value.inventoryLedger);
+  if (value.inventoryReturns !== undefined)
+    validateReturns(value.inventoryReturns);
+  for (const entry of value.inventoryLedger || []) {
+    for (const review of entry.reviews || []) {
+      const linked = value.inventoryReturns?.find(
+        (item) => item.id === review.returnId,
+      );
+      if (
+        !linked ||
+        entry.kind === "deposit" ||
+        bandKey(linked.bandId) !== bandKey(entry.bandId) ||
+        review.returnRevision > returnRevision(linked)
+      )
+        throw Error("Invalid return reconciliation link.");
+    }
+  }
   return value;
 }
 // Explicit allowlist: document bytes, filenames and document metadata cannot enter

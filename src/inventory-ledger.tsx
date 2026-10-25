@@ -2,6 +2,8 @@ import { useState, type FormEvent } from "react";
 import { NavLink } from "react-router-dom";
 import { useRecords, VaultGate } from "./records";
 import { inventorySections } from "./workspace-spec";
+import { InventoryReturns } from "./inventory-returns";
+import { LedgerReconciliation } from "./inventory-reconciliation";
 import {
   ledgerKinds,
   ledgerCurrencies,
@@ -9,7 +11,11 @@ import {
   type LedgerEntry,
 } from "./inventory-ledger-model";
 
-export function InventoryLedger() {
+export function InventoryLedger({
+  showReturns = false,
+}: {
+  showReturns?: boolean;
+}) {
   return (
     <>
       <h1>Inventory</h1>
@@ -24,7 +30,7 @@ export function InventoryLedger() {
         ))}
       </nav>
       <VaultGate>
-        <LedgerContent />
+        {showReturns ? <InventoryReturns /> : <LedgerContent />}
       </VaultGate>
     </>
   );
@@ -274,6 +280,7 @@ function LedgerRecord({ entry }: { entry: LedgerEntry }) {
         </div>
       </dl>
       {entry.notes && <p className="preserve-lines">{entry.notes}</p>}
+      <LedgerReconciliation entry={entry} />
       <details>
         <summary>Record history</summary>
         <p>

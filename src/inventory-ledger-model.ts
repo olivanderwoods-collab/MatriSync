@@ -1,3 +1,4 @@
+import { validateReviews, type LedgerReview } from "./inventory-returns-model";
 export const ledgerKinds = {
   deposit: "Deposit",
   refund: "Refund",
@@ -20,6 +21,7 @@ export type LedgerEntry = Omit<LedgerInput, "amount"> & {
   createdAt: string;
   createdBy: string;
   voided?: { at: string; by: string; reason: string };
+  reviews?: LedgerReview[];
 };
 function field(value: string, label: string, max: number, required = true) {
   if (
@@ -101,6 +103,7 @@ export function validateLedger(entries: LedgerEntry[]) {
     )
       throw Error("Invalid inventory correction history.");
     ids.add(entry.id);
+    if (entry.reviews !== undefined) validateReviews(entry.reviews);
     references.add(checked.reference);
   }
 }

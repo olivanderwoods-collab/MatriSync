@@ -994,8 +994,11 @@ function WorkspaceBody() {
             <ChildRecords path={path} />
           ) : !app.demo &&
             r === "organization" &&
-            path === "inventory/refunds" ? (
-            <InventoryLedger />
+            (path === "inventory/refunds" || path === "inventory/return") ? (
+            <InventoryLedger
+              key={path}
+              showReturns={path === "inventory/return"}
+            />
           ) : !app.demo && r === "organization" && path === "more/profile" ? (
             <>
               <h1>Facility Profile</h1>
