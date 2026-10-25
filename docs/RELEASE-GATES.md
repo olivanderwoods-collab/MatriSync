@@ -1,5 +1,9 @@
 # MatriSync release gates
 
+## Submission target — latest priority
+
+For 5 November 2026, the user approved real encrypted sharing between explicitly approved test accounts, complete referral/document/handoff and the Mother workspace with RUHI. Public facility verification remains deferred. A labelled BLE software simulator may substitute for the unavailable physical MatriSync device, but physical NFC claims remain gated on hardware tests. See `SUBMISSION-CORE-PLAN.md`. The current implementation has not yet passed this new end-to-end target; existing synthetic tests do not close these gates.
+
 ## Latest approved access rules — 25 October 2026
 
 The user explicitly chose **Keep live facility verification deferred for now** after reviewing the next-stage authority question. Keep that service disabled and continue independent local work; do not treat this as permission to choose a bootstrap authority.

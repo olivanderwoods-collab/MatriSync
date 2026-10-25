@@ -1,5 +1,7 @@
 # MatriSync working agreement
 
+Latest submission priority (25 October): follow `docs/SUBMISSION-CORE-PLAN.md`. Deadline 5 November 2026. Pause further secondary Inventory expansion; prioritize complete referral/document/handoff, Mother workspace with RUHI, and real encrypted Mother–Doctor–Organization sharing between explicitly approved test accounts. Public facility verification remains deferred. A clearly labelled BLE software simulator is authorized if the physical MatriSync device is unavailable; do not claim physical NFC success from simulation. RUHI comes from **R**asheek, r**U**maan, ne**H**a and zuba**I**r.
+
 Direct user instruction, 23 October 2026:
 
 - Before implementing a new instruction, compare it with `docs/MatriSync-Master-Development-Guide-v2.txt`, the AI instructions and subsequently confirmed decisions. If it conflicts, explain the specific conflict and ask the user before implementing the conflicting part. Continue independent, already authorized work. Once the user resolves a conflict, record the decision and do not ask again for that same decision.

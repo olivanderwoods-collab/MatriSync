@@ -4,6 +4,8 @@ This is the next implementation contract, not a claim that live sharing is enabl
 
 ## Confirmed decisions
 
+- **Latest submission-scope update:** the user now authorizes real encrypted sharing between explicitly approved test accounts while public facility onboarding/verification remains deferred. Follow `SUBMISSION-CORE-PLAN.md` for the 5 November submission. Controlled account approval must be explicit and enforced; it is not public self-verification or permission to expose real clinical data. The earlier synthetic-only milestone below describes the baseline, not the new implementation target.
+
 - Latest continuation answer: **keep live facility verification deferred for now**. Continue independent local/synthetic work. Do not activate live verification or infer a facility bootstrap authority; choosing that authority remains deferred.
 
 - Verified facilities approve their clinicians' credentials. A saved profile or a selected workspace is not verification. Facilities may confirm affiliation and assign/revoke staff patient access; they cannot claim or remove Mother ownership.
