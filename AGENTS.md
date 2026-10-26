@@ -1,5 +1,7 @@
 # MatriSync working agreement
 
+Latest review preference (26 October): the assistant owns all technical verification and developer-build testing. Do not ask the user to run commands, operate developer pilots, approve test accounts through scripts, or diagnose infrastructure. Present only finished user-facing work for review of appearance and usability; keep background implementation details out of routine updates. Verify and open the normal preview before handing it over. Report material limitations honestly without calling an unfinished feature final. This supersedes earlier developer-facing manual checklists; user review is not a substitute for automated or technical acceptance checks.
+
 Latest submission priority (25 October): follow `docs/SUBMISSION-CORE-PLAN.md`. Deadline 5 November 2026. Pause further secondary Inventory expansion; prioritize complete referral/document/handoff, Mother workspace with RUHI, and real encrypted Mother–Doctor–Organization sharing between explicitly approved test accounts. Public facility verification remains deferred. A clearly labelled BLE software simulator is authorized if the physical MatriSync device is unavailable; do not claim physical NFC success from simulation. RUHI comes from **R**asheek, r**U**maan, ne**H**a and zuba**I**r.
 
 Direct user instruction, 23 October 2026:
