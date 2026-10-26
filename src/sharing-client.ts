@@ -19,7 +19,9 @@ import {
 import {
   checkPublicDevice,
   encryptTransfer,
-  decryptTransfer,
+  decryptSharedTransfer,
+  encryptProfileTransfer,
+  type SharedContent,
   type PublicDevice,
   type SharedDocument,
   type TransferContext,
@@ -30,6 +32,7 @@ import {
   saveReceived,
   type SavedTransfer,
 } from "./sharing-storage";
+import type { SharedProfileSnapshot } from "./sharing-profile";
 
 export type SharingChannel = {
   id: string;
@@ -143,6 +146,44 @@ export async function sendSharedDocument(
   document: SharedDocument,
   transferId: string,
 ) {
+  return sendContent(
+    uid,
+    role,
+    device,
+    channelId,
+    fingerprint,
+    { kind: "document", document },
+    transferId,
+  );
+}
+export async function sendSharedProfile(
+  uid: string,
+  role: string,
+  device: SharingDevice,
+  channelId: string,
+  fingerprint: string,
+  profile: SharedProfileSnapshot,
+  transferId: string,
+) {
+  return sendContent(
+    uid,
+    role,
+    device,
+    channelId,
+    fingerprint,
+    { kind: "profile", profile },
+    transferId,
+  );
+}
+async function sendContent(
+  uid: string,
+  role: string,
+  device: SharingDevice,
+  channelId: string,
+  fingerprint: string,
+  content: SharedContent,
+  transferId: string,
+) {
   const { db, channel } = await checkedChannel(uid, channelId, device, role);
   if (channel.senderUid !== uid || channel.sender.keyId !== device.keyId)
     throw Error("This account cannot send on this connection.");
@@ -167,12 +208,20 @@ export async function sendSharedDocument(
     throw Error(
       "This transfer ID is already stored. Check the recipient before sending another copy.",
     );
-  const ciphertext = await encryptTransfer(
-    context,
-    document,
-    device,
-    channel.recipient,
-  );
+  const ciphertext =
+    content.kind === "document"
+      ? await encryptTransfer(
+          context,
+          content.document,
+          device,
+          channel.recipient,
+        )
+      : await encryptProfileTransfer(
+          context,
+          content.profile,
+          device,
+          channel.recipient,
+        );
   await sharingAccount(uid);
   await setDoc(ref, {
     version: 1,
@@ -229,7 +278,13 @@ export async function receiveSharedDocuments(
       data.recipientKeyId !== item.recipientKeyId
     )
       throw Error("Transfer metadata does not match the approved connection.");
-    await decryptTransfer(item.ciphertext, item, device, channel.sender);
+    const content = await decryptSharedTransfer(
+      item.ciphertext,
+      item,
+      device,
+      channel.sender,
+    );
+    item.kind = content.kind;
     await sharingAccount(uid);
     await saveReceived(uid, item);
     await sharingAccount(uid);

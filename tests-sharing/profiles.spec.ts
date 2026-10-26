@@ -1,0 +1,249 @@
+import { test, expect, type Page } from "@playwright/test";
+import { readFile } from "node:fs/promises";
+import {
+  approveMember,
+  approveChannel,
+  revokeChannel,
+} from "../scripts/sharing-operator.mjs";
+
+async function account(page: Page, role: string) {
+  await page.goto(`/auth/signup?role=${role}`);
+  await page
+    .getByLabel("Email address", { exact: true })
+    .fill(`profile-sharing-${role}-${Date.now()}@example.test`);
+  await page.getByLabel("Password", { exact: true }).fill("Synthetic-test-42!");
+  await page
+    .getByLabel("Confirm password", { exact: true })
+    .fill("Synthetic-test-42!");
+  await page
+    .getByRole("button", { name: "Create account", exact: true })
+    .click();
+  await expect(page.locator(".demo-banner")).toContainText("Signed-in account");
+  await page.goto(`/${role}/more/sharing`);
+  await expect(page.getByTestId("sharing-fingerprint")).toHaveText(
+    /^[a-f0-9]{64}$/,
+  );
+  const uid = (await page.getByTestId("sharing-uid").innerText()).trim(),
+    fingerprint = (
+      await page.getByTestId("sharing-fingerprint").innerText()
+    ).trim();
+  await page
+    .getByRole("button", { name: "Request approval / Refresh connections" })
+    .click();
+  await expect(page.getByRole("alert")).toContainText(
+    "awaiting explicit pilot approval",
+  );
+  return { uid, fingerprint, role };
+}
+async function connection(page: Page, id: string, fingerprint: string) {
+  await page
+    .getByRole("button", { name: "Request approval / Refresh connections" })
+    .click();
+  await page
+    .getByRole("combobox", { name: "Approved connection", exact: true })
+    .selectOption(id);
+  await page.getByLabel("Other device fingerprint").fill(fingerprint);
+}
+async function sendProfile(page: Page) {
+  await page
+    .getByRole("combobox", { name: "Local patient profile", exact: true })
+    .selectOption({ label: "Asha Profile Test" });
+  await page
+    .getByRole("button", { name: "Encrypt and share profile", exact: true })
+    .click();
+  await expect(
+    page
+      .getByRole("status")
+      .filter({ hasText: "Encrypted profile version stored" }),
+  ).toBeVisible();
+}
+async function fetchRecords(page: Page) {
+  await page.getByRole("button", { name: "Fetch approved records" }).click();
+  await expect(
+    page
+      .getByRole("status")
+      .filter({ hasText: "encrypted transfer(s) checked" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Open saved profiles", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Open saved profiles", exact: true }),
+  ).toBeEnabled();
+}
+test("profile versions retain identity, match original bytes, exclude unshared children and survive revocation", async ({
+  browser,
+}, testInfo) => {
+  test.setTimeout(90000);
+  const contexts = await Promise.all(
+    [1, 2, 3].map(() =>
+      browser.newContext({ baseURL: "http://127.0.0.1:4175" }),
+    ),
+  );
+  const [mother, doctor, outsider] = await Promise.all(
+    contexts.map((context) => context.newPage()),
+  );
+  const external: string[] = [];
+  for (const page of [mother, doctor, outsider])
+    page.on("request", (r) => {
+      if (!["127.0.0.1", "localhost"].includes(new URL(r.url()).hostname))
+        external.push(r.url());
+    });
+  try {
+    const m = await account(mother, "mother"),
+      d = await account(doctor, "professional");
+    await account(outsider, "professional");
+    await mother.goto("/mother/more/profile");
+    await mother
+      .getByLabel("Full name", { exact: true })
+      .fill("Asha Profile Test");
+    await mother.getByLabel("Recorded pregnancy week (optional)").fill("20");
+    await mother.getByLabel("Pregnancy week recorded on").fill("2026-10-20");
+    await mother.getByRole("button", { name: "Save mother profile" }).click();
+    await expect(mother.getByRole("status")).toContainText("saved encrypted");
+    const bytes = Buffer.from(
+      "%PDF-1.7\nFictional original profile report\n%%EOF",
+    );
+    await mother.goto("/mother/health/reports");
+    await mother.getByRole("button", { name: "Upload From Device" }).click();
+    await mother
+      .getByLabel("Document", { exact: true })
+      .setInputFiles({
+        name: "profile-original.pdf",
+        mimeType: "application/pdf",
+        buffer: bytes,
+      });
+    await mother
+      .getByRole("button", { name: "Save document", exact: true })
+      .click();
+    await expect(mother.getByRole("status")).toContainText("Saved encrypted");
+    await mother.goto("/mother/children/add");
+    await mother.getByLabel("Child's full name").fill("Unshared Child Test");
+    await mother
+      .getByLabel("Date of birth", { exact: true })
+      .fill("2024-01-01");
+    await mother.getByRole("button", { name: "Save child profile" }).click();
+    await expect(mother.getByRole("heading", { level: 1 })).toHaveText(
+      "Unshared Child Test",
+    );
+    for (const value of [m, d])
+      await approveMember(value.uid, value.role, value.fingerprint);
+    const id = `profile-pair-${Date.now()}`;
+    await approveChannel(id, m.uid, d.uid);
+    await mother.goto("/mother/more/sharing");
+    await connection(mother, id, d.fingerprint);
+    await connection(doctor, id, m.fingerprint);
+    await doctor
+      .getByRole("button", { name: "Open saved profiles", exact: true })
+      .click();
+    await expect(
+      doctor.getByText("No profile snapshots saved on this device."),
+    ).toBeVisible();
+    await sendProfile(mother);
+    await fetchRecords(doctor);
+    const patientSelect = doctor.getByRole("combobox", {
+      name: "Shared patient",
+      exact: true,
+    });
+    await expect(patientSelect.locator("option")).toHaveCount(2);
+    await expect(patientSelect).not.toContainText("Unshared Child Test");
+    await patientSelect.selectOption({ index: 1 });
+    const versionSelect = doctor.getByRole("combobox", {
+      name: "Saved profile version",
+      exact: true,
+    });
+    await versionSelect.selectOption({ index: 1 });
+    const view = doctor.getByTestId("shared-profile-view");
+    await expect(view).toContainText("20 · Recorded 2026-10-20");
+    await expect(view).toContainText("Original not received");
+    const profileId = await view.getByText(/^Shared profile ID:/).innerText();
+    const response = await fetch(
+      `http://127.0.0.1:8087/v1/projects/demo-matrisync/databases/(default)/documents/channels/${id}/transfers`,
+      { headers: { Authorization: "Bearer owner" } },
+    );
+    expect(response.ok).toBeTruthy();
+    const relay = await response.text();
+    for (const privateValue of [
+      "Asha Profile Test",
+      "profile-original.pdf",
+      "Unshared Child Test",
+      profileId.replace("Shared profile ID: ", ""),
+    ])
+      expect(relay).not.toContain(privateValue);
+    await mother
+      .getByRole("combobox", { name: "Saved local document", exact: true })
+      .selectOption({ label: "profile-original.pdf" });
+    await mother
+      .getByRole("button", { name: "Encrypt and send document" })
+      .click();
+    await expect(
+      mother
+        .getByRole("status")
+        .filter({ hasText: "Encrypted document stored" }),
+    ).toBeVisible();
+    await fetchRecords(doctor);
+    await expect(
+      view.getByRole("button", { name: "Download matched original" }),
+    ).toBeVisible();
+    const downloaded = doctor.waitForEvent("download");
+    await view
+      .getByRole("button", { name: "Download matched original" })
+      .click();
+    expect(await readFile((await (await downloaded).path())!)).toEqual(bytes);
+    await mother.goto("/mother/more/profile");
+    await mother.getByLabel("Recorded pregnancy week (optional)").fill("21");
+    await mother.getByRole("button", { name: "Save mother profile" }).click();
+    await expect(mother.getByRole("status")).toContainText("saved encrypted");
+    await mother.goto("/mother/more/sharing");
+    await connection(mother, id, d.fingerprint);
+    await sendProfile(mother);
+    await sendProfile(mother); // A repeated unchanged snapshot must not duplicate a version.
+    await fetchRecords(doctor);
+    await expect(patientSelect.locator("option")).toHaveCount(2);
+    await expect(versionSelect.locator("option")).toHaveCount(3);
+    await versionSelect.selectOption({ index: 1 });
+    await expect(view).toContainText("20 · Recorded 2026-10-20");
+    await versionSelect.selectOption({ index: 2 });
+    await expect(view).toContainText("21 · Recorded 2026-10-20");
+    await expect(view.getByText(/^Shared profile ID:/)).toHaveText(profileId);
+    await outsider
+      .getByRole("button", { name: "Open saved profiles", exact: true })
+      .click();
+    await expect(
+      outsider.getByText("No profile snapshots saved on this device."),
+    ).toBeVisible();
+    await expect(outsider.locator("main")).not.toContainText(
+      "Asha Profile Test",
+    );
+    await revokeChannel(id);
+    await doctor
+      .getByRole("button", { name: "Fetch approved records" })
+      .click();
+    await expect(doctor.getByRole("alert")).toContainText(
+      "Future sharing is blocked",
+    );
+    await doctor.reload();
+    await expect(
+      doctor.getByRole("button", { name: "Open saved profiles", exact: true }),
+    ).toBeEnabled();
+    await contexts[1].setOffline(true);
+    await doctor
+      .getByRole("button", { name: "Open saved profiles", exact: true })
+      .click();
+    await patientSelect.selectOption({ index: 1 });
+    await versionSelect.selectOption({ index: 2 });
+    await expect(view).toContainText("21 · Recorded 2026-10-20");
+    await doctor.setViewportSize({ width: 551, height: 850 });
+    await doctor.screenshot({
+      path: testInfo.outputPath("saved-shared-profile.png"),
+      fullPage: true,
+    });
+    await mother.goto("/mother/health/reports");
+    await expect(
+      mother.getByText("profile-original.pdf", { exact: true }),
+    ).toBeVisible();
+    expect(external).toEqual([]);
+  } finally {
+    await Promise.all(contexts.map((context) => context.close()));
+  }
+});

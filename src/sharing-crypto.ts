@@ -8,6 +8,14 @@ import {
   importJWK,
   type JWK,
 } from "jose";
+import {
+  checkProfileSnapshot,
+  type SharedProfileSnapshot,
+} from "./sharing-profile";
+
+export type SharedContent =
+  | { kind: "document"; document: SharedDocument }
+  | { kind: "profile"; profile: SharedProfileSnapshot };
 
 export const SHARING_FILE_LIMIT = 256 * 1024;
 export type PublicDevice = { encryption: JWK; signing: JWK; keyId: string };
@@ -140,7 +148,38 @@ export async function encryptTransfer(
   sender: SharingDevice,
   recipient: PublicDevice,
 ) {
-  validateDocument(document);
+  return encryptContent(
+    context,
+    { kind: "document", document },
+    sender,
+    recipient,
+  );
+}
+export async function encryptProfileTransfer(
+  context: TransferContext,
+  profile: SharedProfileSnapshot,
+  sender: SharingDevice,
+  recipient: PublicDevice,
+) {
+  return encryptContent(
+    context,
+    { kind: "profile", profile },
+    sender,
+    recipient,
+  );
+}
+async function encryptContent(
+  context: TransferContext,
+  content: SharedContent,
+  sender: SharingDevice,
+  recipient: PublicDevice,
+) {
+  if (content.kind === "document") validateDocument(content.document);
+  else
+    content = {
+      kind: "profile",
+      profile: await checkProfileSnapshot(content.profile, context.senderUid),
+    };
   await checkPublicDevice(recipient);
   if (
     context.senderKeyId !== sender.keyId ||
@@ -148,12 +187,16 @@ export async function encryptTransfer(
   )
     throw Error("The approved device keys changed.");
   const payload = new TextEncoder().encode(
-    JSON.stringify({ version: 1, ...context, document }),
+    JSON.stringify(
+      content.kind === "document"
+        ? { version: 1, ...context, document: content.document }
+        : { version: 2, ...context, profile: content.profile },
+    ),
   );
   const signed = await new CompactSign(payload)
     .setProtectedHeader({
       alg: "ES256",
-      typ: "matrisync-document+jws",
+      typ: `matrisync-${content.kind}+jws`,
       kid: sender.keyId,
     })
     .sign(sender.signKey);
@@ -161,7 +204,7 @@ export async function encryptTransfer(
     .setProtectedHeader({
       alg: "ECDH-ES",
       enc: "A256GCM",
-      typ: "matrisync-document+jwe",
+      typ: `matrisync-${content.kind}+jwe`,
       kid: recipient.keyId,
     })
     .encrypt(await importJWK(publicPoint(recipient.encryption), "ECDH-ES"));
@@ -175,6 +218,22 @@ export async function decryptTransfer(
   recipient: SharingDevice,
   sender: PublicDevice,
 ): Promise<SharedDocument> {
+  const content = await decryptSharedTransfer(
+    ciphertext,
+    expected,
+    recipient,
+    sender,
+  );
+  if (content.kind !== "document")
+    throw Error("This transfer contains a profile, not an original document.");
+  return content.document;
+}
+export async function decryptSharedTransfer(
+  ciphertext: string,
+  expected: TransferContext,
+  recipient: SharingDevice,
+  sender: PublicDevice,
+): Promise<SharedContent> {
   if (
     typeof ciphertext !== "string" ||
     ciphertext.length > 700000 ||
@@ -188,7 +247,9 @@ export async function decryptTransfer(
     contentEncryptionAlgorithms: ["A256GCM"],
   });
   if (
-    opened.protectedHeader.typ !== "matrisync-document+jwe" ||
+    !["matrisync-document+jwe", "matrisync-profile+jwe"].includes(
+      opened.protectedHeader.typ || "",
+    ) ||
     opened.protectedHeader.kid !== recipient.keyId
   )
     throw Error("Invalid encrypted header.");
@@ -198,13 +259,24 @@ export async function decryptTransfer(
     { algorithms: ["ES256"] },
   );
   if (
-    signed.protectedHeader.typ !== "matrisync-document+jws" ||
+    signed.protectedHeader.typ !==
+      opened.protectedHeader.typ?.replace("+jwe", "+jws") ||
     signed.protectedHeader.kid !== sender.keyId
   )
     throw Error("Invalid sender signature.");
   const payload = JSON.parse(new TextDecoder().decode(signed.payload));
-  if (payload.version !== 1 || !sameContext(payload, expected))
+  if (!sameContext(payload, expected))
     throw Error("The signed document does not match this transfer.");
+  if (opened.protectedHeader.typ === "matrisync-profile+jwe") {
+    if (payload.version !== 2)
+      throw Error("Unsupported shared profile version.");
+    return {
+      kind: "profile",
+      profile: await checkProfileSnapshot(payload.profile, expected.senderUid),
+    };
+  }
+  if (payload.version !== 1)
+    throw Error("Unsupported shared document version.");
   validateDocument(payload.document);
-  return payload.document;
+  return { kind: "document", document: payload.document };
 }

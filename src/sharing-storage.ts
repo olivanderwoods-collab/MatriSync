@@ -5,6 +5,7 @@ import {
   type TransferContext,
 } from "./sharing-crypto";
 export type SavedTransfer = TransferContext & {
+  kind?: "document" | "profile";
   ciphertext: string;
   sender: PublicDevice;
   savedAt: string;

@@ -5,6 +5,7 @@ import {
   requestSharingDevice,
   sharingChannels,
   sendSharedDocument,
+  sendSharedProfile,
   receiveSharedDocuments,
   type SharingChannel,
 } from "./sharing-client";
@@ -20,6 +21,12 @@ import {
   type SharingDevice,
   type SharedDocument,
 } from "./sharing-crypto";
+import {
+  createProfileSnapshot,
+  contentDigest,
+  type ProfileDocument,
+} from "./sharing-profile";
+import { SharedProfilePanel } from "./sharing-profile-panel";
 
 export function SharingPage({ uid, role }: { uid: string; role: string }) {
   return (
@@ -38,6 +45,7 @@ function SharingContent({ uid, role }: { uid: string; role: string }) {
   const [opened, setOpened] = useState<SharedDocument>();
   const [file, setFile] = useState<File>();
   const [documentId, setDocumentId] = useState("");
+  const [patientId, setPatientId] = useState("");
   const [transferId, setTransferId] = useState(() => crypto.randomUUID());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -88,8 +96,9 @@ function SharingContent({ uid, role }: { uid: string; role: string }) {
         <h2>Approved test accounts only</h2>
         <p>
           Local relay pilot · Real encrypted transfer between separate accounts.
-          Use fictional test documents. Public sharing and full-profile syncing
-          are not connected yet.
+          Use fictional test records. Profile versions and original documents
+          are shared explicitly; automatic syncing and public sharing are not
+          connected yet.
         </p>
         <p>
           One enrolled browser per account. Private device keys stay here;
@@ -132,7 +141,7 @@ function SharingContent({ uid, role }: { uid: string; role: string }) {
       </section>
       {channels.length > 0 && (
         <section className="panel">
-          <h2>Share an original document</h2>
+          <h2>Share patient records</h2>
           <p>
             PDF or image · Pilot limit 256 KiB. Metadata and original bytes are
             encrypted. Larger documents and automatic profile merging are
@@ -187,6 +196,90 @@ function SharingContent({ uid, role }: { uid: string; role: string }) {
                 other person's own device through a separate trusted channel. It
                 is pinned locally after verification. A changed key is blocked.
               </p>
+              {channel.enabled &&
+                channel.senderUid === uid &&
+                vault!.data!.patients.length > 0 && (
+                  <form
+                    className="record-form"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void act(async () => {
+                        if (!navigator.onLine)
+                          throw Error(
+                            "Go online to share a profile version. Your saved records are unchanged.",
+                          );
+                        const patient = vault!.data!.patients.find(
+                          (p) => p.id === patientId,
+                        );
+                        if (!patient)
+                          throw Error(
+                            "Choose a patient from your current workspace.",
+                          );
+                        const refs: ProfileDocument[] = [];
+                        for (const item of vault!.data!.documents.filter(
+                          (d) => d.patientId === patient.id,
+                        )) {
+                          const { doc, bytes } = await vault!.document(item.id);
+                          refs.push({
+                            id: doc.id,
+                            name: doc.name,
+                            kind: doc.kind,
+                            type: doc.type,
+                            size: doc.size,
+                            addedAt: doc.addedAt,
+                            source: doc.source,
+                            reportDate: doc.reportDate,
+                            sha256: await contentDigest(bytes),
+                          });
+                        }
+                        const profile = await createProfileSnapshot(
+                          uid,
+                          patient,
+                          refs,
+                        );
+                        await sendSharedProfile(
+                          uid,
+                          role,
+                          device!,
+                          channelId,
+                          fingerprint,
+                          profile,
+                          transferId,
+                        );
+                        setTransferId(crypto.randomUUID());
+                        setStatus(
+                          "Encrypted profile version stored by the relay. Original documents are sent separately.",
+                        );
+                      });
+                    }}
+                  >
+                    <h3>Share a profile version</h3>
+                    <p>
+                      Includes recorded profile details and references to that
+                      patient's original files. Username and profile code are
+                      excluded. This does not share linked family profiles
+                      automatically.
+                    </p>
+                    <label>
+                      Local patient profile
+                      <select
+                        aria-label="Local patient profile"
+                        value={patientId}
+                        onChange={(e) => setPatientId(e.target.value)}
+                      >
+                        <option value="">Choose a patient</option>
+                        {vault!.data!.patients.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button className="button primary" disabled={busy}>
+                      Encrypt and share profile
+                    </button>
+                  </form>
+                )}
               {!channel.enabled ? (
                 <p>
                   Future sharing is blocked. Previously saved copies remain
@@ -309,7 +402,7 @@ function SharingContent({ uid, role }: { uid: string; role: string }) {
                     })
                   }
                 >
-                  Fetch approved documents
+                  Fetch approved records
                 </button>
               )}
             </>
@@ -326,33 +419,35 @@ function SharingContent({ uid, role }: { uid: string; role: string }) {
           including after future sharing is revoked.
         </p>
         {!saved.length && <p>No shared documents saved on this device.</p>}
-        {saved.map((item) => (
-          <article
-            className="ledger-record"
-            key={`${item.channelId}/${item.id}`}
-          >
-            <p className="record-id">Transfer {item.id}</p>
-            <p>Saved {new Date(item.savedAt).toLocaleString()}</p>
-            <button
-              className="button secondary"
-              disabled={busy || !device}
-              onClick={() =>
-                void act(async () => {
-                  const document = await decryptTransfer(
-                    item.ciphertext,
-                    item,
-                    device!,
-                    item.sender,
-                  );
-                  await sharingAccount(uid);
-                  setOpened(document);
-                })
-              }
+        {saved
+          .filter((item) => item.kind !== "profile")
+          .map((item) => (
+            <article
+              className="ledger-record"
+              key={`${item.channelId}/${item.id}`}
             >
-              Open saved document
-            </button>
-          </article>
-        ))}
+              <p className="record-id">Transfer {item.id}</p>
+              <p>Saved {new Date(item.savedAt).toLocaleString()}</p>
+              <button
+                className="button secondary"
+                disabled={busy || !device}
+                onClick={() =>
+                  void act(async () => {
+                    const document = await decryptTransfer(
+                      item.ciphertext,
+                      item,
+                      device!,
+                      item.sender,
+                    );
+                    await sharingAccount(uid);
+                    setOpened(document);
+                  })
+                }
+              >
+                Open saved document
+              </button>
+            </article>
+          ))}
         {opened && (
           <div className="notice">
             <div>
@@ -385,6 +480,7 @@ function SharingContent({ uid, role }: { uid: string; role: string }) {
           </div>
         )}
       </section>
+      {device && <SharedProfilePanel uid={uid} device={device} saved={saved} />}
     </>
   );
 }

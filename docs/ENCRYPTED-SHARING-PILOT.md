@@ -2,6 +2,22 @@
 
 This is the first implemented submission-core milestone: real original-document encryption and transfer between explicitly approved test accounts in separate browser contexts. The relay is a local Firestore emulator. This is not public sharing, completed profile syncing, a deployed cloud service or a production security certification. Use fictional documents only.
 
+Engineering-only procedure: the assistant operates this pilot and all technical checks. The user reviews finished app screens and usability, not enrollment commands or developer test builds. The normal preview stays on its verified snapshot while this work proceeds.
+
+## Profile versions added on 26 October
+
+Approved endpoints can now send and read encrypted, immutable profile snapshots using the same transport. A snapshot contains the selected patient's recorded details and original-document references, not every patient on the device. Mother username/profile-code credentials are explicitly excluded. Child snapshots have distinct identities; a parent reference never implicitly grants access to the parent or child records.
+
+`profileId` is SHA-256 over a domain-separated tuple of origin account UID and its local patient ID. This is a stable **source-scoped** identity, not the final authoritative clinical Patient ID or an ownership claim. Renaming/updating one source profile retains that identity; same-name profiles, different local IDs, accounts and children remain separate. Cross-origin reconciliation requires the future identity/claim service; names or matching demographic data must never silently merge them.
+
+The profile payload is version 2, signed as `matrisync-profile+jws` and encrypted as `matrisync-profile+jwe`, with the existing account/channel/device/transfer bindings. Original-document version-1 packages remain readable. Profile origin must equal the authenticated signed sender; this does not yet support forwarding another origin's profile or delegated edits. The outer relay envelope remains version 1 with exactly the same schema and access rules; the encrypted payload type is not a new plaintext routing field.
+
+A revision hash covers normalized profile contents, source update timestamp and a deterministic ordered document manifest. Received identical revisions deduplicate within one source profile, including repeat sends; different revisions are retained. The reader explicitly selects a saved version. Receipt order and source timestamps do not establish clinical authority, monotonic source versions or conflict resolution. No snapshot overwrites the recipient's local patient vault.
+
+Each document reference carries the original byte SHA-256, size, MIME type, local document ID, recorded date and source. The reader offers a matched original only when its verified sender, source patient ID, source document ID, digest, size and type all match. A filename or byte match alone is insufficient. Missing originals remain labelled as references until separately delivered. Original source records are preserved.
+
+Saved profile snapshots are encrypted in the existing per-account inbox and can be reopened after reload, while the loaded app is offline, and after future sharing is revoked. Decrypted names and details stay in component memory. Received records are not yet merged into the normal patient directory; public deployment, automated syncing, authoritative ownership/claims, accepted staff assignments, shared editing and durable retries remain open.
+
 ## What this build does
 
 - A signed-in account enrolls one browser's public device keys. An external local operator approves the account, role and exact device fingerprint, then creates a directional connection between approved accounts.
@@ -34,7 +50,7 @@ Rules deny client approval/channel changes, foreign enrollment reads, unbounded 
 - Nonempty PDF/PNG/JPEG/WebP files up to **256 KiB**. This is a first-slice transfer limit, not the intended final attachment limit. MIME declarations are not malware scanning; originals are downloaded, not interpreted.
 - Up to 20 connections and the newest 20 transfers per connection. Pagination, larger-file transport and history synchronization remain pending.
 - Explicit send/fetch only. No automatic profile merge, direct permanent-code loading, staff-assignment acceptance or Mother-claim implementation in this transport yet. Those existing demonstrations remain synthetic.
-- Offline opening works in the already-loaded signed-in pilot after packages are saved. The development server is not an installable offline pilot; a cold offline launch on a new device has not been demonstrated.
+- Offline opening works for saved documents and profile versions in the already-loaded signed-in pilot. The development server is not an installable offline pilot; a cold offline launch on a new device has not been demonstrated.
 - No durable send outbox. Offline sends are refused before starting. A connection loss after starting can leave an SDK request pending; the UI does not report completion until the relay acknowledges it. Recovery of ambiguous delivery across reloads, conflict handling and resumable transfer remain next-stage work.
 - Local Firebase emulators intentionally have administrative bypasses. Keep them bound to loopback, use fictional data and never treat their operator endpoint as a deployable authentication design.
 
@@ -106,9 +122,17 @@ The sharing browser test uses three isolated account contexts, compares download
 - General browser suite: 26 passed. Isolated account suite: 16 passed, 1 optional genuine-Qwen test skipped. One earlier concurrent account run was invalidated by a dev-page reload while the general suite wrote screenshots; the clean isolated rerun passed. Run these suites sequentially in this shared checkout.
 - The received-document screen was visually inspected at a 551-pixel mobile viewport. Actual phone camera, cold offline pilot launch, physical BLE/NFC and live-cloud operation were not established by these tests.
 
+## Profile continuation verification — 27 October 2026
+
+- Unit suite: 66 passed across 12 files; ESLint passed. Profile tests cover stable source identity, excluded access credentials, separate child identities, malformed snapshots, immutable revision checks, receipt-order deduplication and exact original-document provenance.
+- Both sharing browser scenarios passed on the final code. Separate accounts exchanged original documents and profile versions; repeat delivery retained two distinct revisions without duplicates, unshared children stayed absent, matching originals downloaded byte-for-byte, and saved versions reopened offline after revocation.
+- The first resumed browser run stopped at sign-up because the local emulators had stopped. After restarting the local services, the complete sharing rerun passed. No application access rule was weakened to resolve that failure.
+- Continuation regression checks also passed: TypeScript, production/demo builds with pilot exclusion, 11 rules tests, 26 general browser tests and 16 account browser tests. The optional genuine-Qwen test remains skipped; these results do not establish actual-model, physical-device or cloud readiness.
+- The received-profile screen was visually inspected at a 551-pixel viewport. The normal preview was restarted and reloaded successfully on its verified snapshot; no developer-pilot review was assigned to the user.
+
 ## Next implementation milestones
 
-1. Stable shared patient identity, explicit record versions, authorized profile loading/claim and accepted staff assignments; prevent duplication and revoked-code regrant.
+1. Bind the implemented source-scoped identities and preserved versions to authoritative patient identities, profile loading/claim and accepted staff assignments; integrate authorized records into patient workspaces and prevent revoked-code regrant.
 2. Larger encrypted original attachments, durable acknowledged outbox, pagination, restart/retry/conflict handling and a reviewed multi-device/recovery protocol.
 3. Doctor-reviewed referral document, organization initiation, receiving acknowledgment and correct authorized profile retrieval.
 4. Compact handoff protocol plus actual MatriSync hardware or honestly labelled BLE simulator; then RUHI branding and genuine offline-model acceptance on intended devices.

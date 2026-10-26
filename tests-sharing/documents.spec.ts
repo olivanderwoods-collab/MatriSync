@@ -141,7 +141,7 @@ test("separate accounts exchange original encrypted bytes; revocation preserves 
     expect(JSON.parse(relay).documents).toHaveLength(1);
     await clinician.getByLabel("Other device fingerprint").fill(m.fingerprint);
     await clinician
-      .getByRole("button", { name: "Fetch approved documents" })
+      .getByRole("button", { name: "Fetch approved records" })
       .click();
     await expect(
       clinician
@@ -149,7 +149,7 @@ test("separate accounts exchange original encrypted bytes; revocation preserves 
         .filter({ hasText: "1 encrypted transfer(s) checked" }),
     ).toBeVisible();
     await clinician
-      .getByRole("button", { name: "Fetch approved documents" })
+      .getByRole("button", { name: "Fetch approved records" })
       .click();
     await expect(
       clinician.getByRole("button", { name: "Open saved document" }),
@@ -191,7 +191,7 @@ test("separate accounts exchange original encrypted bytes; revocation preserves 
       .getByLabel("Other device fingerprint")
       .fill(c.fingerprint);
     await organization
-      .getByRole("button", { name: "Fetch approved documents" })
+      .getByRole("button", { name: "Fetch approved records" })
       .click();
     await expect(
       organization.getByRole("button", { name: "Open saved document" }),
@@ -205,7 +205,7 @@ test("separate accounts exchange original encrypted bytes; revocation preserves 
       .getByRole("combobox", { name: "Approved connection", exact: true })
       .selectOption(connection);
     await clinician
-      .getByRole("button", { name: "Fetch approved documents" })
+      .getByRole("button", { name: "Fetch approved records" })
       .click();
     await expect(clinician.getByRole("alert")).toContainText(
       "Future sharing is blocked",
@@ -222,7 +222,7 @@ test("separate accounts exchange original encrypted bytes; revocation preserves 
     await contexts[1].setOffline(false);
     await revokeMember(o.uid);
     await organization
-      .getByRole("button", { name: "Fetch approved documents" })
+      .getByRole("button", { name: "Fetch approved records" })
       .click();
     await expect(organization.getByRole("alert")).toContainText("not approved");
     await organization

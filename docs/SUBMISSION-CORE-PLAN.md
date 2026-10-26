@@ -44,6 +44,8 @@ Submission deadline: **5 November 2026**. This plan prioritizes a complete mater
 
 26 October implementation update: the first controlled encrypted-document transport is implemented in a separate local-emulator pilot. See `ENCRYPTED-SHARING-PILOT.md` for protocol, enrollment/recovery boundaries, checks and limits. This is partial progress on the first pillar; full-profile syncing and the complete referral journey remain open.
 
+26 October continuation: the transport now also carries source-scoped profile identities, preserved immutable profile versions and byte-verified original-document references. Shared versions stay read-only and separate from local records. Authoritative clinical identity/claims, patient-directory integration, assignment acceptance, shared editing and automatic synchronization are still pending; the source-scoped hash is not a substitute for those requirements. Technical review is performed by the assistant; the user receives only finished user-facing work for usability review.
+
 - Working locally: encrypted account records, profiles, original document uploads/camera capture, child separation, scoped workspace access, local companion integration and limited profile context, navigation and local Inventory records.
 - Synthetic only: cross-account linking/claims/assignment, credential review, referral initiation and retained-copy policy demonstrations.
 - Not yet complete: real encrypted multi-account sharing, source-preserving AI referral drafting, final approved referral document generation, BLE handoff/read-back and receiving-profile retrieval.
