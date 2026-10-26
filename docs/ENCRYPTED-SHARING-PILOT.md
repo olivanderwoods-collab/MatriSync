@@ -16,7 +16,30 @@ A revision hash covers normalized profile contents, source update timestamp and 
 
 Each document reference carries the original byte SHA-256, size, MIME type, local document ID, recorded date and source. The reader offers a matched original only when its verified sender, source patient ID, source document ID, digest, size and type all match. A filename or byte match alone is insufficient. Missing originals remain labelled as references until separately delivered. Original source records are preserved.
 
-Saved profile snapshots are encrypted in the existing per-account inbox and can be reopened after reload, while the loaded app is offline, and after future sharing is revoked. Decrypted names and details stay in component memory. Received records are not yet merged into the normal patient directory; public deployment, automated syncing, authoritative ownership/claims, accepted staff assignments, shared editing and durable retries remain open.
+Saved profile snapshots are encrypted in the existing per-account inbox and can be reopened after reload, while the loaded app is offline, and after future sharing is revoked. Decrypted names and details stay in component memory. Received records are not yet merged into the normal patient directory; public deployment, automated syncing, authoritative ownership/claims, normal-workspace assignment integration, shared editing and durable retries remain open.
+
+## Staff assignment acceptance — 27 October
+
+The controlled pilot now supports an Organization offering an assignment, the named professional accepting it, and the assigning Organization revoking future sharing. These are authenticated, server-enforced changes between separate accounts; the earlier in-memory assignment demonstration is not used for this transport.
+
+An operator first approves **one source patient / facility / professional relationship** in `assignmentRoutes/{id}` and binds a directional channel to it with `assignmentRouteId`. The route contains only scoped identifiers and approved device fingerprints. This approval represents the explicitly approved test-account/facility relationship; it is not public facility verification, a Mother ownership claim, or a grant to inspect every local patient. The source profile ID remains source-scoped, not a completed authoritative patient registry. Clinical names, permanent codes and private keys do not enter assignment metadata.
+
+The Organization then creates `staffAssignments/{routeId}` in `pending` state through the pilot UI. Only that route's professional may move it to `accepted`. Only its Organization may move a pending or accepted assignment to `revoked`. Creation/acceptance/revocation retain server timestamps and accountable actor IDs. Schema validation applies to both creation and updates; clients cannot replace routes, remove required fields, change original attribution, delete assignments or revive a revoked assignment. Reassignment requires a fresh approved route and fresh acceptance.
+
+The relay blocks transfer reads and writes until acceptance, and checks all three current approvals and enrolled fingerprints on subsequent requests. A disabled route, revoked assignment, disabled account or changed key blocks future delivery. Existing independently approved direct channels remain separate; assignment revocation does not erase them. It does not change Mother ownership or delete any source records. Previously received encrypted copies remain readable under the existing offline policy.
+
+The source and recipient also check the signed content against the exact approved source account and patient identity. The assigned Mother's children are not implicitly included. As with other encrypted transfers, rules cannot inspect the ciphertext or prove medical truth: a compromised authorized source can misdescribe its own content. No new encryption primitive or server-held clinical key was introduced.
+
+Engineering setup after the three accounts enroll and are approved:
+
+```powershell
+node scripts/sharing-operator.mjs approve-assignment-scope <scope-id> <source-uid> <source-patient-id> <facility-uid> <staff-uid>
+node scripts/sharing-operator.mjs connect <connection-id> <source-uid> <staff-uid> <scope-id>
+```
+
+Both new routes and channels use a create-only precondition, preventing accidental replacement of an existing scope. The operator must never issue a new direct channel to bypass a revoked patient grant. The local emulator operator remains trusted and can bypass rules; public authorization and direct-code proof still require the planned separate service.
+
+The assistant operates this engineering workflow. Patient-directory integration, home-screen assignment cards, permanent-code loading, atomic Mother claims, forwardable referral packages and automatic synchronization are not yet implemented by this slice. Assignment metadata loads online and is not cached as an offline claim of current access. A transaction or refresh interrupted by disconnection must not be interpreted as a confirmed remote result.
 
 ## What this build does
 
@@ -49,7 +72,7 @@ Rules deny client approval/channel changes, foreign enrollment reads, unbounded 
 - Pilot UI requires development mode plus `VITE_SHARING_PILOT=1`; production and demo distribution builds are checked for accidental inclusion.
 - Nonempty PDF/PNG/JPEG/WebP files up to **256 KiB**. This is a first-slice transfer limit, not the intended final attachment limit. MIME declarations are not malware scanning; originals are downloaded, not interpreted.
 - Up to 20 connections and the newest 20 transfers per connection. Pagination, larger-file transport and history synchronization remain pending.
-- Explicit send/fetch only. No automatic profile merge, direct permanent-code loading, staff-assignment acceptance or Mother-claim implementation in this transport yet. Those existing demonstrations remain synthetic.
+- Explicit send/fetch only. No automatic profile merge, direct permanent-code loading or Mother-claim implementation in this transport yet. Those demonstrations remain synthetic. Staff acceptance now gates explicitly approved assignment channels in the development pilot; normal patient-workspace integration remains pending.
 - Offline opening works for saved documents and profile versions in the already-loaded signed-in pilot. The development server is not an installable offline pilot; a cold offline launch on a new device has not been demonstrated.
 - No durable send outbox. Offline sends are refused before starting. A connection loss after starting can leave an SDK request pending; the UI does not report completion until the relay acknowledges it. Recovery of ambiguous delivery across reloads, conflict handling and resumable transfer remain next-stage work.
 - Local Firebase emulators intentionally have administrative bypasses. Keep them bound to loopback, use fictional data and never treat their operator endpoint as a deployable authentication design.
@@ -130,9 +153,18 @@ The sharing browser test uses three isolated account contexts, compares download
 - Continuation regression checks also passed: TypeScript, production/demo builds with pilot exclusion, 11 rules tests, 26 general browser tests and 16 account browser tests. The optional genuine-Qwen test remains skipped; these results do not establish actual-model, physical-device or cloud readiness.
 - The received-profile screen was visually inspected at a 551-pixel viewport. The normal preview was restarted and reloaded successfully on its verified snapshot; no developer-pilot review was assigned to the user.
 
+## Assignment verification — 27 October 2026
+
+- TypeScript, ESLint, production build and demo build passed. Distribution checks now explicitly exclude `assignmentRoutes` and `staffAssignments` as well as the existing pilot markers. The normal distribution bundles remain unchanged.
+- Unit suite: 67 passed. Rules suite: 19 passed, including eight assignment tests. The emulator compiled and enforced the updated rules; no production rule deployment occurred.
+- Three sharing browser scenarios passed: existing original-document exchange, preserved profile versions, and the new three-account assignment offer/accept/deliver/revoke flow. The last confirms the recipient cannot fetch before acceptance and can reopen its saved profile offline after revocation. External network calls are rejected by these scenarios.
+- Account browser regression: 16 passed, one optional actual-Qwen test skipped. Account switching, unlinked children, separate child documents, camera failure/cancellation and original preservation still pass. The received profile was visually inspected at mobile width; the normal user preview remains on its verified snapshot.
+- Adversarial rule outcomes: unauthenticated/unbounded queries, outsider reads, forged routes/roles, direct accepted creation, wrong accepting/revoking actors, missing/extra/type-invalid/oversized fields, original-author or creation-time changes, forged timestamps, replayed acceptance, assignment deletion, revoked restoration, channel substitution and orphan scopes were all denied. Simultaneous acceptance and revocation ended revoked. Each source/staff/facility suspension or changed approved fingerprint blocked future transfer access. Independent direct authorization remained usable after assignment revocation.
+- No counters or numeric financial fields are introduced. The full generic crypto tamper suite and the exact-source-patient unit check remain passing. These are prototype access rules tested for the controlled local scope; independent protocol and security review remains required before broader release. Technical checks remain the assistant's responsibility, not a task for the nontechnical user.
+
 ## Next implementation milestones
 
-1. Bind the implemented source-scoped identities and preserved versions to authoritative patient identities, profile loading/claim and accepted staff assignments; integrate authorized records into patient workspaces and prevent revoked-code regrant.
+1. Bind the implemented source-scoped identities and preserved versions to authoritative patient identities and profile loading/claim; integrate approved assignments and authorized records into patient workspaces and prevent revoked-code regrant.
 2. Larger encrypted original attachments, durable acknowledged outbox, pagination, restart/retry/conflict handling and a reviewed multi-device/recovery protocol.
 3. Doctor-reviewed referral document, organization initiation, receiving acknowledgment and correct authorized profile retrieval.
 4. Compact handoff protocol plus actual MatriSync hardware or honestly labelled BLE simulator; then RUHI branding and genuine offline-model acceptance on intended devices.

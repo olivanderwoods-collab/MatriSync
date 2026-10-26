@@ -27,6 +27,7 @@ import {
   type ProfileDocument,
 } from "./sharing-profile";
 import { SharedProfilePanel } from "./sharing-profile-panel";
+import { SharingAssignmentPanel } from "./sharing-assignment-panel";
 
 export function SharingPage({ uid, role }: { uid: string; role: string }) {
   return (
@@ -139,6 +140,9 @@ function SharingContent({ uid, role }: { uid: string; role: string }) {
           performed outside the app; this button cannot approve an account.
         </p>
       </section>
+      {device && (
+        <SharingAssignmentPanel uid={uid} role={role} device={device} />
+      )}
       {channels.length > 0 && (
         <section className="panel">
           <h2>Share patient records</h2>

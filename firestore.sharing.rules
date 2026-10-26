@@ -8,6 +8,13 @@ rules_version = '2';
 // channels/{id}/transfers/{uuid}: immutable {version:1,senderUid,recipientUid,
 // senderKeyId,recipientKeyId,ciphertext:JWE string<=700000,createdAt:server timestamp}.
 // No client writes to approvals/channels, no transfer updates/deletes. Deny everything else.
+// assignmentRoutes/{id}: OPERATOR ONLY approved test scope {enabled,participants:
+// [sourceUid,facilityUid,staffUid],sourceUid,sourcePatientId,profileId:hex64,
+// facilityUid,staffUid,sourceKeyId,facilityKeyId,staffKeyId}. No names or clinical data.
+// channels may carry assignmentRouteId. Assignment channels require accepted status.
+// staffAssignments/{routeId}: {status:pending|accepted|revoked,createdBy,updatedBy,
+// createdAt,updatedAt,acceptedAt:null|timestamp,revokedAt:null|timestamp}.
+// Named facility creates/revokes; named staff accepts. Revocation is terminal.
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null && request.auth.token.firebase.sign_in_provider != 'anonymous'; }
@@ -26,11 +33,48 @@ service cloud.firestore {
         && point(d.encryption) && point(d.signing) && fingerprint(d.keyId);
     }
     function channel(id) { return get(/databases/$(database)/documents/channels/$(id)).data; }
+    function route(id) { return get(/databases/$(database)/documents/assignmentRoutes/$(id)).data; }
+    function activeRoute(r) {
+      return r.enabled == true && approved(r.sourceUid) && approved(r.staffUid) && approved(r.facilityUid)
+        && member(r.facilityUid).role == 'organization' && member(r.staffUid).role == 'professional'
+        && member(r.sourceUid).role in ['mother','professional']
+        && member(r.sourceUid).keyId == r.sourceKeyId
+        && member(r.staffUid).keyId == r.staffKeyId && member(r.facilityUid).keyId == r.facilityKeyId;
+    }
+    function assignmentAccess(c) {
+      let r = route(c.assignmentRouteId);
+      let a = get(/databases/$(database)/documents/staffAssignments/$(c.assignmentRouteId)).data;
+      return activeRoute(r) && a.status == 'accepted'
+        && c.senderUid == r.sourceUid && c.recipientUid == r.staffUid
+        && c.sender.keyId == r.sourceKeyId && c.recipient.keyId == r.staffKeyId;
+    }
     function active(c) {
       return signedIn() && request.auth.uid in c.members && c.enabled == true
         && c.senderUid != c.recipientUid && c.members == [c.senderUid,c.recipientUid]
         && approved(c.senderUid) && approved(c.recipientUid)
-        && member(c.senderUid).keyId == c.sender.keyId && member(c.recipientUid).keyId == c.recipient.keyId;
+        && member(c.senderUid).keyId == c.sender.keyId && member(c.recipientUid).keyId == c.recipient.keyId
+        && (!('assignmentRouteId' in c) || assignmentAccess(c));
+    }
+    function isValidAssignment(d, r) {
+      return d.keys().hasAll(['status','createdBy','updatedBy','createdAt','updatedAt','acceptedAt','revokedAt'])
+        && d.keys().hasOnly(['status','createdBy','updatedBy','createdAt','updatedAt','acceptedAt','revokedAt'])
+        && d.status in ['pending','accepted','revoked']
+        && d.createdBy == r.facilityUid && d.updatedBy in [r.facilityUid,r.staffUid]
+        && d.createdAt is timestamp && d.updatedAt is timestamp && d.updatedAt >= d.createdAt
+        && (d.acceptedAt == null || (d.acceptedAt is timestamp && d.acceptedAt >= d.createdAt && d.acceptedAt <= d.updatedAt))
+        && (d.revokedAt == null || (d.revokedAt is timestamp && d.revokedAt >= d.createdAt && d.revokedAt <= d.updatedAt));
+    }
+    function assignmentTransition(id) {
+      let r = route(id);
+      let d = request.resource.data;
+      let old = resource.data;
+      return signedIn() && activeRoute(r) && isValidAssignment(d, r)
+        && d.createdAt == old.createdAt && d.createdBy == old.createdBy
+        && d.updatedBy == request.auth.uid && d.updatedAt == request.time
+        && ((own(r.staffUid) && old.status == 'pending' && d.status == 'accepted'
+              && d.acceptedAt == request.time && d.revokedAt == null)
+          || (own(r.facilityUid) && old.status in ['pending','accepted'] && d.status == 'revoked'
+              && d.acceptedAt == old.acceptedAt && d.revokedAt == request.time));
     }
     function isValidTransfer(d, c, id) {
       return d.keys().hasAll(['version','senderUid','recipientUid','senderKeyId','recipientKeyId','ciphertext','createdAt'])
@@ -46,6 +90,18 @@ service cloud.firestore {
       allow create: if own(uid) && isValidDevice(request.resource.data);
     }
     match /members/{uid} { allow get: if own(uid); }
+    match /assignmentRoutes/{id} {
+      allow get: if signedIn() && request.auth.uid in resource.data.participants && approved(request.auth.uid);
+      allow list: if signedIn() && request.auth.uid in resource.data.participants && approved(request.auth.uid) && request.query.limit <= 20;
+    }
+    match /staffAssignments/{id} {
+      allow get: if signedIn() && request.auth.uid in route(id).participants && approved(request.auth.uid);
+      allow create: if own(route(id).facilityUid) && activeRoute(route(id)) && isValidAssignment(request.resource.data, route(id))
+        && request.resource.data.status == 'pending' && request.resource.data.updatedBy == request.auth.uid
+        && request.resource.data.createdAt == request.time && request.resource.data.updatedAt == request.time
+        && request.resource.data.acceptedAt == null && request.resource.data.revokedAt == null;
+      allow update: if assignmentTransition(id);
+    }
     match /channels/{id} {
       // A disabled channel's nonclinical metadata remains visible to its own approved
       // members so the UI can explain revocation. Clinical transfers remain blocked.

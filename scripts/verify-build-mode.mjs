@@ -7,6 +7,8 @@ for (const file of assets.filter((name) => name.endsWith(".js"))) {
   if (
     text.includes("Encrypted sharing pilot") ||
     text.includes("deviceRequests") ||
+    text.includes("assignmentRoutes") ||
+    text.includes("staffAssignments") ||
     text.includes("matrisync-sharing-pilot-v1")
   )
     throw Error("Local sharing pilot leaked into a distributable build");

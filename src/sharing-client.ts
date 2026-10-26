@@ -14,6 +14,7 @@ import {
   orderBy,
   setDoc,
   serverTimestamp,
+  runTransaction,
   type Firestore,
 } from "firebase/firestore";
 import {
@@ -33,6 +34,11 @@ import {
   type SavedTransfer,
 } from "./sharing-storage";
 import type { SharedProfileSnapshot } from "./sharing-profile";
+import {
+  assertAssignmentContent,
+  type AssignmentRoute,
+  type StaffAssignment,
+} from "./sharing-assignment";
 
 export type SharingChannel = {
   id: string;
@@ -42,6 +48,7 @@ export type SharingChannel = {
   recipientUid: string;
   sender: PublicDevice;
   recipient: PublicDevice;
+  assignmentRouteId?: string;
 };
 export type SharingMember = {
   enabled: boolean;
@@ -134,8 +141,130 @@ async function checkedChannel(
     throw Error("Future sharing is blocked for this connection.");
   await checkPublicDevice(channel.sender);
   await checkPublicDevice(channel.recipient);
+  let scope: AssignmentRoute | undefined;
+  if (channel.assignmentRouteId) {
+    const routeSnap = await getDocFromServer(
+      doc(db, "assignmentRoutes", channel.assignmentRouteId),
+    );
+    const assignment = await getDocFromServer(
+      doc(db, "staffAssignments", channel.assignmentRouteId),
+    );
+    if (
+      !routeSnap.exists() ||
+      !routeSnap.data().enabled ||
+      assignment.data()?.status !== "accepted"
+    )
+      throw Error(
+        "The named staff member must accept this assignment before sharing. Revoked assignments cannot be reopened.",
+      );
+    scope = { ...routeSnap.data(), id: routeSnap.id } as AssignmentRoute;
+    if (
+      scope.sourceUid !== channel.senderUid ||
+      scope.staffUid !== channel.recipientUid ||
+      scope.sourceKeyId !== channel.sender.keyId ||
+      scope.staffKeyId !== channel.recipient.keyId
+    )
+      throw Error("Assignment does not match this approved connection.");
+  }
   await sharingAccount(uid);
-  return { db, channel };
+  return { db, channel, scope };
+}
+export async function sharingAssignments(
+  uid: string,
+  role: string,
+  device: SharingDevice,
+) {
+  // Validate the live approved account, workspace and enrolled key first.
+  await sharingChannels(uid, role, device);
+  const db = await database(uid);
+  const routes = await getDocsFromServer(
+    query(
+      collection(db, "assignmentRoutes"),
+      where("participants", "array-contains", uid),
+      limit(20),
+    ),
+  );
+  const result = [];
+  for (const route of routes.docs) {
+    const assignment = await getDocFromServer(
+      doc(db, "staffAssignments", route.id),
+    );
+    result.push({
+      route: { ...route.data(), id: route.id } as AssignmentRoute,
+      assignment: assignment.exists()
+        ? (assignment.data() as StaffAssignment)
+        : undefined,
+    });
+  }
+  await sharingAccount(uid);
+  return result;
+}
+export async function changeStaffAssignment(
+  uid: string,
+  role: string,
+  device: SharingDevice,
+  routeId: string,
+  action: "offer" | "accept" | "revoke",
+) {
+  if (!navigator.onLine)
+    throw Error(
+      "Go online to change an assignment. No acceptance or revocation was confirmed.",
+    );
+  await sharingChannels(uid, role, device);
+  const db = await database(uid);
+  await runTransaction(db, async (tx) => {
+    await sharingAccount(uid);
+    const routeSnap = await tx.get(doc(db, "assignmentRoutes", routeId));
+    if (!routeSnap.exists() || !routeSnap.data().enabled)
+      throw Error("Assignment scope is unavailable.");
+    const r = routeSnap.data() as AssignmentRoute;
+    const ref = doc(db, "staffAssignments", routeId),
+      old = await tx.get(ref);
+    if (action === "offer") {
+      if (uid !== r.facilityUid || role !== "organization" || old.exists())
+        throw Error("Only the approved facility can offer a new assignment.");
+      tx.set(ref, {
+        status: "pending",
+        createdBy: uid,
+        updatedBy: uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        acceptedAt: null,
+        revokedAt: null,
+      });
+    } else if (action === "accept") {
+      if (
+        uid !== r.staffUid ||
+        role !== "professional" ||
+        old.data()?.status !== "pending"
+      )
+        throw Error(
+          "Only the named professional can accept a pending assignment.",
+        );
+      tx.update(ref, {
+        status: "accepted",
+        updatedBy: uid,
+        updatedAt: serverTimestamp(),
+        acceptedAt: serverTimestamp(),
+      });
+    } else {
+      if (
+        uid !== r.facilityUid ||
+        role !== "organization" ||
+        !["pending", "accepted"].includes(old.data()?.status)
+      )
+        throw Error(
+          "Only the assigning facility can revoke a current assignment.",
+        );
+      tx.update(ref, {
+        status: "revoked",
+        updatedBy: uid,
+        updatedAt: serverTimestamp(),
+        revokedAt: serverTimestamp(),
+      });
+    }
+  });
+  await sharingAccount(uid);
 }
 export async function sendSharedDocument(
   uid: string,
@@ -184,7 +313,13 @@ async function sendContent(
   content: SharedContent,
   transferId: string,
 ) {
-  const { db, channel } = await checkedChannel(uid, channelId, device, role);
+  const { db, channel, scope } = await checkedChannel(
+    uid,
+    channelId,
+    device,
+    role,
+  );
+  if (scope) await assertAssignmentContent(scope, content, uid);
   if (channel.senderUid !== uid || channel.sender.keyId !== device.keyId)
     throw Error("This account cannot send on this connection.");
   await verifyPeerPin(
@@ -242,7 +377,12 @@ export async function receiveSharedDocuments(
   channelId: string,
   fingerprint: string,
 ) {
-  const { db, channel } = await checkedChannel(uid, channelId, device, role);
+  const { db, channel, scope } = await checkedChannel(
+    uid,
+    channelId,
+    device,
+    role,
+  );
   if (channel.recipientUid !== uid || channel.recipient.keyId !== device.keyId)
     throw Error("This account cannot receive on this connection.");
   await verifyPeerPin(
@@ -284,6 +424,7 @@ export async function receiveSharedDocuments(
       device,
       channel.sender,
     );
+    if (scope) await assertAssignmentContent(scope, content, channel.senderUid);
     item.kind = content.kind;
     await sharingAccount(uid);
     await saveReceived(uid, item);

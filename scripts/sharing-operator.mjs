@@ -43,15 +43,18 @@ export async function operatorRead(path) {
   const json = await response.json();
   return decode({ mapValue: { fields: json.fields } });
 }
-export async function operatorWrite(path, value) {
-  const response = await fetch(`${root}/${path}`, {
-    method: "PATCH",
-    headers: {
-      Authorization: "Bearer owner",
-      "Content-Type": "application/json",
+export async function operatorWrite(path, value, createOnly = false) {
+  const response = await fetch(
+    `${root}/${path}${createOnly ? "?currentDocument.exists=false" : ""}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: "Bearer owner",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ fields: encode(value).mapValue.fields }),
     },
-    body: JSON.stringify({ fields: encode(value).mapValue.fields }),
-  });
+  );
   if (!response.ok)
     throw Error(`Local relay write failed (${response.status}).`);
 }
@@ -99,7 +102,12 @@ export async function approveMember(uid, role, fingerprint) {
     keyId: fingerprint,
   });
 }
-export async function approveChannel(id, senderUid, recipientUid) {
+export async function approveChannel(
+  id,
+  senderUid,
+  recipientUid,
+  assignmentRouteId,
+) {
   segment(id);
   segment(senderUid);
   segment(recipientUid);
@@ -111,14 +119,88 @@ export async function approveChannel(id, senderUid, recipientUid) {
     throw Error("Both accounts must be explicitly approved first.");
   const sender = await verifiedRequest(senderUid, from.keyId),
     recipient = await verifiedRequest(recipientUid, to.keyId);
-  await operatorWrite(`channels/${id}`, {
-    enabled: true,
-    members: [senderUid, recipientUid],
-    senderUid,
-    recipientUid,
-    sender,
-    recipient,
-  });
+  if (assignmentRouteId) {
+    segment(assignmentRouteId);
+    const route = await operatorRead(`assignmentRoutes/${assignmentRouteId}`);
+    if (
+      !route?.enabled ||
+      route.sourceUid !== senderUid ||
+      route.staffUid !== recipientUid ||
+      route.sourceKeyId !== sender.keyId ||
+      route.staffKeyId !== recipient.keyId
+    )
+      throw Error("Assignment scope does not match the connection.");
+  }
+  await operatorWrite(
+    `channels/${id}`,
+    {
+      enabled: true,
+      members: [senderUid, recipientUid],
+      senderUid,
+      recipientUid,
+      sender,
+      recipient,
+      ...(assignmentRouteId ? { assignmentRouteId } : {}),
+    },
+    true,
+  );
+}
+// Controlled approval of one facility-patient-staff scope. This does not assign
+// the patient: the facility must offer it and the named staff must accept it.
+export async function approveAssignmentRoute(
+  id,
+  sourceUid,
+  sourcePatientId,
+  facilityUid,
+  staffUid,
+) {
+  for (const value of [id, sourceUid, sourcePatientId, facilityUid, staffUid])
+    segment(value);
+  if (new Set([sourceUid, facilityUid, staffUid]).size !== 3)
+    throw Error("Use three distinct approved test accounts.");
+  const source = await operatorRead(`members/${sourceUid}`),
+    facility = await operatorRead(`members/${facilityUid}`),
+    staff = await operatorRead(`members/${staffUid}`);
+  if (
+    !source?.enabled ||
+    !["mother", "professional"].includes(source.role) ||
+    !facility?.enabled ||
+    facility.role !== "organization" ||
+    !staff?.enabled ||
+    staff.role !== "professional"
+  )
+    throw Error(
+      "Approve the source, facility and professional before this scope.",
+    );
+  await verifiedRequest(sourceUid, source.keyId);
+  await verifiedRequest(facilityUid, facility.keyId);
+  await verifiedRequest(staffUid, staff.keyId);
+  const profileId = createHash("sha256")
+    .update(
+      JSON.stringify([
+        "matrisync-source-profile-v1",
+        sourceUid,
+        sourcePatientId,
+      ]),
+    )
+    .digest("hex");
+  await operatorWrite(
+    `assignmentRoutes/${id}`,
+    {
+      enabled: true,
+      participants: [sourceUid, facilityUid, staffUid],
+      sourceUid,
+      sourcePatientId,
+      profileId,
+      facilityUid,
+      staffUid,
+      sourceKeyId: source.keyId,
+      facilityKeyId: facility.keyId,
+      staffKeyId: staff.keyId,
+    },
+    true,
+  );
+  return profileId;
 }
 export async function revokeChannel(id) {
   segment(id);
@@ -140,13 +222,14 @@ if (
   const actions = {
     approve: approveMember,
     connect: approveChannel,
+    "approve-assignment-scope": approveAssignmentRoute,
     "revoke-connection": revokeChannel,
     "revoke-account": revokeMember,
   };
   try {
     if (!actions[action])
       throw Error(
-        "Usage: approve <uid> <role> <device-fingerprint> | connect <connection-id> <sender-uid> <recipient-uid> | revoke-connection <id> | revoke-account <uid>",
+        "Usage: approve <uid> <role> <device-fingerprint> | approve-assignment-scope <id> <source-uid> <source-patient-id> <facility-uid> <staff-uid> | connect <connection-id> <sender-uid> <recipient-uid> [assignment-scope-id] | revoke-connection <id> | revoke-account <uid>",
       );
     await actions[action](...args);
     console.log(

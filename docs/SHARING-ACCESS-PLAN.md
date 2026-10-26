@@ -34,7 +34,9 @@ This is the next implementation contract, not a claim that live sharing is enabl
 
 Reject unverified facility approvals, forged clinician roles, wrong codes, revoked connections, unaccepted assignments, wrong recipient keys and replayed requests. Test racing ownership claims and preservation of the original owner; accepted assignments; offline reading of old content after revocation; denied future fetch/publication. Inspect storage, logs and network traffic for plaintext records, documents, codes and private keys. Never migrate fixtures into real accounts.
 
-Current linking remains an isolated in-memory synthetic workflow. Inventory bookkeeping is separate encrypted local storage; it does not activate this service or transfer money.
+Permanent-code linking and Mother claims remain an isolated in-memory synthetic workflow. The approved-account encrypted pilot now independently implements the staff acceptance boundary described below. Inventory bookkeeping is separate encrypted local storage; it does not activate this service or transfer money.
+
+27 October controlled-pilot update: an explicitly approved patient/facility/staff scope now supports authenticated Organization offers, named-staff acceptance and terminal revocation. Future encrypted transfers are server-gated by accepted status and current approval/device keys; saved copies remain readable offline. This is source-scoped test-account authorization, not public facility verification or final patient identity. See `ENCRYPTED-SHARING-PILOT.md` for constraints and checks. No permanent code is used as a decryption key or sent to the relay by this implementation.
 
 ## Implemented local test stage
 
