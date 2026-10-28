@@ -15,6 +15,7 @@ import { professionalSections, maternalSections } from "./workspace-spec";
 import { profileContext } from "./ai/behavior";
 import type { MotherProfile } from "./records-model";
 import { CameraCapture } from "./camera-capture";
+import { ReferralDrafts } from "./referral-drafts";
 import { ProfileLinkPreview, TestAssignments } from "./workflow-tests";
 
 type RecordsContext = {
@@ -974,6 +975,8 @@ function RecordContent({ path, self }: { path: string; self: boolean }) {
             </section>
           ) : tab === "reports" || tab === "prescriptions" ? (
             <Documents key={`${id}/${tab}`} patient={patient} kind={tab} />
+          ) : tab === "referrals" ? (
+            <ReferralDrafts key={id} patient={patient} />
           ) : (
             <section className="panel">
               <h2>

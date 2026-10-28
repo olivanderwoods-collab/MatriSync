@@ -2633,6 +2633,11 @@ dialog h3 {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.referral-workspace > label { display: block; margin-top: 20px; }
+.referral-document { border: 1px solid var(--border); border-radius: 16px; margin: 24px 0; padding: 20px; overflow-wrap: anywhere; }
+.referral-document > h3 { margin-top: 0; }
+.referral-document .local-document { flex-wrap: wrap; }
+.referral-document summary { cursor: pointer; }
 .ledger-record { border-top: 1px solid var(--border); padding-block: 20px; overflow-wrap: anywhere; }
 .ledger-record details { margin-bottom: 16px; }
 .ledger-record summary { cursor: pointer; padding-block: 10px; }

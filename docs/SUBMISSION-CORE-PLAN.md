@@ -59,6 +59,8 @@ RUHI branding is now implemented, including the confirmed founder-name origin. T
 
 The user has reaffirmed that the assistant owns all developer checks and should deliver the core product for usability review only after it works end to end. No developer checklist is assigned to the user at this checkpoint.
 
+29 October continuation: the professional patient's Referrals tab now supports encrypted manual drafts, immutable saved versions, original-document references/downloads, an organized preview and draft-marked HTML/print/PDF copies. Offline editing, stale-tab protection, selected-version exports, original-byte preservation and multi-page output are checked. This is local drafting only: verified approval, shared-patient drafting, AI documentation assistance, facility initiation and BLE handoff remain open. See `VERIFICATION-2026-10-29.md` for the exact evidence and boundaries.
+
 ## Implementation order and target dates
 
 These are planning targets, not completion promises. Reassess against working evidence daily and reduce secondary scope before cutting the three core flows.

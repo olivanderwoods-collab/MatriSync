@@ -6,6 +6,11 @@ import {
   type VaultEnvelope,
 } from "./vault-crypto";
 import {
+  referralInput,
+  validateReferralDrafts,
+  type ReferralFields,
+} from "./referral-draft";
+import {
   commitVault,
   readFile,
   readVault,
@@ -84,6 +89,12 @@ export class RecordVault {
       ...this.records,
       patients,
       documents: this.records.documents.filter((d) => ids.has(d.patientId)),
+      referralDrafts:
+        this.workspace === "professional"
+          ? this.records.referralDrafts?.filter(
+              (d) => ids.has(d.patientId) && d.authorUid === this.uid,
+            )
+          : undefined,
       inventoryLedger:
         this.workspace === "organization"
           ? this.records.inventoryLedger
@@ -247,6 +258,77 @@ export class RecordVault {
     } finally {
       this.writing = false;
     }
+  }
+  async saveReferralDraft(
+    patientId: string,
+    fields: ReferralFields,
+    documentIds: string[],
+    draftId?: string,
+    expectedVersion?: string,
+  ) {
+    await this.authorize();
+    if (this.workspace !== "professional" || !this.records)
+      throw Error("Open the professional records workspace first.");
+    this.requirePatientAccess(patientId);
+    const records = this.records;
+    const patient = records.patients.find((p) => p.id === patientId)!;
+    const drafts = records.referralDrafts || [];
+    const previous = draftId
+      ? drafts.find(
+          (d) =>
+            d.id === draftId &&
+            d.patientId === patientId &&
+            d.authorUid === this.uid,
+        )
+      : undefined;
+    if (
+      (draftId && !previous) ||
+      previous?.versions.at(-1)?.id !== expectedVersion
+    )
+      throw Error(
+        "The draft changed. Reopen its latest saved version before saving.",
+      );
+    if (
+      documentIds.length > 50 ||
+      new Set(documentIds).size !== documentIds.length
+    )
+      throw Error("Choose up to 50 distinct original documents.");
+    const documents = documentIds.map((id) => {
+      const document = records.documents.find(
+        (d) => d.id === id && d.patientId === patientId,
+      );
+      if (!document)
+        throw Error("A selected document is not available for this patient.");
+      return {
+        id,
+        name: document.name,
+        source: document.source,
+        reportDate: document.reportDate,
+      };
+    });
+    const item = {
+      id: previous?.id || crypto.randomUUID(),
+      patientId,
+      authorUid: this.uid,
+      versions: [
+        ...(previous?.versions || []),
+        {
+          id: crypto.randomUUID(),
+          savedAt: new Date().toISOString(),
+          fields: referralInput(fields),
+          patient: {
+            name: patient.name,
+            birthDate: patient.birthDate,
+            updatedAt: patient.updatedAt,
+          },
+          documents,
+        },
+      ],
+    };
+    const next = [...drafts.filter((d) => d.id !== item.id), item];
+    validateReferralDrafts(next);
+    await this.persist({ ...records, referralDrafts: next });
+    return item.id;
   }
   async savePatient(
     input: {
