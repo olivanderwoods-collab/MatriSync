@@ -5,18 +5,16 @@ import {
   type TransferContext,
 } from "./sharing-crypto";
 export type SavedTransfer = TransferContext & {
+  // Set only after the live approved receiving workspace has been checked.
+  recipientRole?: string;
   kind?: "document" | "profile";
   ciphertext: string;
   sender: PublicDevice;
   savedAt: string;
 };
 const DB = "matrisync-sharing-pilot-v1";
-async function access<T>(
-  store: string,
-  mode: IDBTransactionMode,
-  action: (s: IDBObjectStore) => IDBRequest<T>,
-): Promise<T> {
-  const db = await new Promise<IDBDatabase>((resolve, reject) => {
+async function openStorage() {
+  return new Promise<IDBDatabase>((resolve, reject) => {
     const req = indexedDB.open(DB, 1);
     req.onupgradeneeded = () => {
       for (const name of ["devices", "pins", "inbox"])
@@ -29,6 +27,13 @@ async function access<T>(
     req.onerror = req.onblocked = () =>
       reject(Error("Unable to open encrypted-sharing device storage."));
   });
+}
+async function access<T>(
+  store: string,
+  mode: IDBTransactionMode,
+  action: (s: IDBObjectStore) => IDBRequest<T>,
+): Promise<T> {
+  const db = await openStorage();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(store, mode);
     const req = action(tx.objectStore(store));
@@ -93,18 +98,55 @@ export async function verifyPeerPin(
 }
 export async function saveReceived(uid: string, item: SavedTransfer) {
   if (item.recipientUid !== uid) throw Error("Wrong receiving account.");
-  const existing = await access<SavedTransfer | undefined>(
-    "inbox",
-    "readonly",
-    (s) => s.get([uid, item.channelId, item.id]),
-  );
-  if (existing) {
-    if (existing.ciphertext !== item.ciphertext)
-      throw Error("A saved transfer cannot be replaced.");
-    return;
-  }
-  await access("inbox", "readwrite", (s) =>
-    s.add(item, [uid, item.channelId, item.id]),
+  const db = await openStorage();
+  // Read/check/write in one transaction: concurrent tabs cannot replace a
+  // received envelope or assign a legacy copy to different workspaces.
+  return new Promise<void>((resolve, reject) => {
+    const tx = db.transaction("inbox", "readwrite");
+    const store = tx.objectStore("inbox");
+    const key = [uid, item.channelId, item.id];
+    const request = store.get(key);
+    let failure = "Unable to save sharing state on this device.";
+    request.onsuccess = () => {
+      const existing = request.result as SavedTransfer | undefined;
+      if (!existing) {
+        store.add(item, key);
+        return;
+      }
+      if (existing.ciphertext !== item.ciphertext)
+        failure = "A saved transfer cannot be replaced.";
+      else if (
+        existing.recipientRole &&
+        item.recipientRole &&
+        existing.recipientRole !== item.recipientRole
+      )
+        failure = "A saved transfer cannot move to another workspace.";
+      else {
+        // Authorized re-fetch annotates only the workspace. Preserve receipt,
+        // provenance and ciphertext even when the caller supplies newer values.
+        if (!existing.recipientRole && item.recipientRole)
+          store.put({ ...existing, recipientRole: item.recipientRole }, key);
+        return;
+      }
+      tx.abort();
+    };
+    tx.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    tx.onerror = tx.onabort = () => {
+      db.close();
+      reject(Error(failure));
+    };
+  });
+}
+export function transfersForWorkspace(
+  items: SavedTransfer[],
+  uid: string,
+  role: string,
+) {
+  return items.filter(
+    (item) => item.recipientUid === uid && item.recipientRole === role,
   );
 }
 export async function savedTransfers(uid: string) {

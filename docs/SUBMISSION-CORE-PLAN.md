@@ -51,7 +51,13 @@ Submission deadline: **5 November 2026**. This plan prioritizes a complete mater
 - Working locally: encrypted account records, profiles, original document uploads/camera capture, child separation, scoped workspace access, local companion integration and limited profile context, navigation and local Inventory records.
 - Synthetic only: cross-account linking/claims/assignment, credential review, referral initiation and retained-copy policy demonstrations.
 - Not yet complete: real encrypted multi-account sharing, source-preserving AI referral drafting, final approved referral document generation, BLE handoff/read-back and receiving-profile retrieval.
-- Actual-model/device acceptance needs a fresh run; the latest regression suite skipped the optional genuine Qwen test. Existing unit/browser success does not establish submission readiness for the missing end-to-end journey.
+- Actual-model acceptance passed on the Windows/Edge development machine in the continuation below. Intended-phone acceptance and the complete submission journey remain open.
+
+28 October continuation: authorized saved profile versions now appear in the professional and Organization Patients screens inside the controlled sharing build. Overview, Reports and Prescriptions preserve the explicitly selected version and original-file matching. Receiving-account/workspace separation, unrelated direct URLs, unshared children, separate Organization receipt and retained offline access are covered by browser checks. These are read-only received copies; authoritative identity/claims, shared edits, automatic synchronization and the complete referral journey remain open.
+
+RUHI branding is now implemented, including the confirmed founder-name origin. The actual cached Qwen model passed offline conversation, first-name use, medicine/report refusal, dated profile answers, context opt-out, worker restart and full offline page reload on this Windows/Edge test machine. Testing found and fixed companion/user-name confusion, a load-button/device-check race and an opt-out that previously reset on reload. This is evidence for this machine, not all intended phones or a guarantee of model behavior. Profile context still excludes reports, diagnoses and clinical history.
+
+The user has reaffirmed that the assistant owns all developer checks and should deliver the core product for usability review only after it works end to end. No developer checklist is assigned to the user at this checkpoint.
 
 ## Implementation order and target dates
 

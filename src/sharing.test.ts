@@ -13,7 +13,9 @@ import {
   verifyPeerPin,
   saveReceived,
   savedTransfers,
+  transfersForWorkspace,
 } from "./sharing-storage";
+import { readSharedInbox } from "./sharing-inbox";
 const document = {
   name: "private-report.pdf",
   type: "application/pdf",
@@ -45,6 +47,86 @@ async function fixture() {
   return { sender, recipient, context, ciphertext };
 }
 describe("signed encrypted sharing envelopes", () => {
+  it("isolates received records by account and verified receiving workspace", async () => {
+    const { sender, recipient, context, ciphertext } = await fixture();
+    const item = {
+      ...context,
+      ciphertext,
+      sender,
+      savedAt: "2026-10-20T00:00:00Z",
+    };
+    const scoped = {
+      ...item,
+      recipientRole: "professional",
+      kind: "profile" as const,
+    };
+    expect(
+      transfersForWorkspace(
+        [item, scoped],
+        context.recipientUid,
+        "professional",
+      ),
+    ).toEqual([scoped]);
+    expect(
+      transfersForWorkspace([scoped], "unrelated", "professional"),
+    ).toEqual([]);
+    expect(
+      await readSharedInbox(
+        context.recipientUid,
+        "organization",
+        [scoped],
+        recipient,
+      ),
+    ).toEqual({ profiles: [], documents: [] });
+    const opened = await readSharedInbox(
+      context.recipientUid,
+      "professional",
+      [scoped],
+      recipient,
+    );
+    expect(opened.profiles).toEqual([]); // Unsigned kind metadata cannot relabel content.
+    expect(opened.documents[0].document).toEqual(document);
+    await expect(
+      readSharedInbox(
+        context.recipientUid,
+        "professional",
+        [{ ...scoped, ciphertext: ciphertext + "x" }],
+        recipient,
+      ),
+    ).rejects.toThrow();
+  });
+  it("atomically annotates legacy copies on authorized re-fetch without replacing receipt or allowing workspace races", async () => {
+    const { sender, context, ciphertext } = await fixture();
+    const item = {
+      ...context,
+      ciphertext,
+      sender,
+      savedAt: "2026-10-20T00:00:00Z",
+    };
+    await saveReceived(context.recipientUid, item);
+    const attempts = await Promise.allSettled(
+      ["professional", "organization"].map((recipientRole) =>
+        saveReceived(context.recipientUid, {
+          ...item,
+          recipientRole,
+          savedAt: "2026-10-27T00:00:00Z",
+        }),
+      ),
+    );
+    expect(attempts.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(attempts.filter((r) => r.status === "rejected")).toHaveLength(1);
+    const saved = (await savedTransfers(context.recipientUid)).find(
+      (s) => s.id === item.id,
+    )!;
+    expect(saved).toEqual({ ...item, recipientRole: saved.recipientRole });
+    expect(["professional", "organization"]).toContain(saved.recipientRole);
+    await saveReceived(context.recipientUid, item);
+    expect(
+      (await savedTransfers(context.recipientUid)).find(
+        (s) => s.id === item.id,
+      ),
+    ).toEqual(saved);
+  });
   it("preserves original bytes and keeps document fields out of the relay envelope", async () => {
     const { sender, recipient, context, ciphertext } = await fixture();
     expect(ciphertext.split(".")).toHaveLength(5);

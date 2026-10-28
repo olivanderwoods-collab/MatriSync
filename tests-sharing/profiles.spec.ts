@@ -76,15 +76,15 @@ test("profile versions retain identity, match original bytes, exclude unshared c
 }, testInfo) => {
   test.setTimeout(90000);
   const contexts = await Promise.all(
-    [1, 2, 3].map(() =>
+    [1, 2, 3, 4].map(() =>
       browser.newContext({ baseURL: "http://127.0.0.1:4175" }),
     ),
   );
-  const [mother, doctor, outsider] = await Promise.all(
+  const [mother, doctor, outsider, facility] = await Promise.all(
     contexts.map((context) => context.newPage()),
   );
   const external: string[] = [];
-  for (const page of [mother, doctor, outsider])
+  for (const page of [mother, doctor, outsider, facility])
     page.on("request", (r) => {
       if (!["127.0.0.1", "localhost"].includes(new URL(r.url()).hostname))
         external.push(r.url());
@@ -92,6 +92,7 @@ test("profile versions retain identity, match original bytes, exclude unshared c
   try {
     const m = await account(mother, "mother"),
       d = await account(doctor, "professional");
+    const o = await account(facility, "organization");
     await account(outsider, "professional");
     await mother.goto("/mother/more/profile");
     await mother
@@ -106,13 +107,11 @@ test("profile versions retain identity, match original bytes, exclude unshared c
     );
     await mother.goto("/mother/health/reports");
     await mother.getByRole("button", { name: "Upload From Device" }).click();
-    await mother
-      .getByLabel("Document", { exact: true })
-      .setInputFiles({
-        name: "profile-original.pdf",
-        mimeType: "application/pdf",
-        buffer: bytes,
-      });
+    await mother.getByLabel("Document", { exact: true }).setInputFiles({
+      name: "profile-original.pdf",
+      mimeType: "application/pdf",
+      buffer: bytes,
+    });
     await mother
       .getByRole("button", { name: "Save document", exact: true })
       .click();
@@ -126,7 +125,7 @@ test("profile versions retain identity, match original bytes, exclude unshared c
     await expect(mother.getByRole("heading", { level: 1 })).toHaveText(
       "Unshared Child Test",
     );
-    for (const value of [m, d])
+    for (const value of [m, d, o])
       await approveMember(value.uid, value.role, value.fingerprint);
     const id = `profile-pair-${Date.now()}`;
     await approveChannel(id, m.uid, d.uid);
@@ -215,6 +214,89 @@ test("profile versions retain identity, match original bytes, exclude unshared c
     await expect(outsider.locator("main")).not.toContainText(
       "Asha Profile Test",
     );
+    const sharedPath = `/professional/patients/shared-${profileId.replace("Shared profile ID: ", "")}/overview`;
+    await doctor.goto("/professional/patients");
+    const directory = doctor.getByRole("region", {
+      name: "Shared patients",
+      exact: true,
+    });
+    await expect(directory.getByRole("link")).toHaveCount(1);
+    await expect(directory).not.toContainText("Unshared Child Test");
+    await doctor
+      .getByLabel("Search shared patients", { exact: true })
+      .fill("unshared");
+    await expect(
+      directory.getByText("No matching shared patients."),
+    ).toBeVisible();
+    await doctor
+      .getByLabel("Search shared patients", { exact: true })
+      .fill("Asha");
+    await directory.getByRole("link").click();
+    await expect(doctor).toHaveURL(new RegExp(`${sharedPath}$`));
+    await doctor.setViewportSize({ width: 551, height: 850 });
+    await expect(doctor.locator(".mobile-nav")).toHaveCount(0);
+    await expect(
+      doctor.getByText("Saved shared profile · Read-only"),
+    ).toBeVisible();
+    await versionSelect.selectOption({ index: 1 });
+    await expect(view).toContainText("20 · Recorded 2026-10-20");
+    const firstVersion = new URL(doctor.url()).searchParams.get("version");
+    await doctor
+      .getByRole("navigation", { name: "Patient sections" })
+      .getByRole("link", { name: "Reports" })
+      .click();
+    expect(new URL(doctor.url()).searchParams.get("version")).toBe(
+      firstVersion,
+    );
+    const directoryDownload = doctor.waitForEvent("download");
+    await view
+      .getByRole("button", { name: "Download matched original" })
+      .click();
+    expect(await readFile((await (await directoryDownload).path())!)).toEqual(
+      bytes,
+    );
+    await doctor
+      .getByRole("navigation", { name: "Patient sections" })
+      .getByRole("link", { name: "Prescriptions" })
+      .click();
+    await expect(
+      view.getByText("No document references in this version."),
+    ).toBeVisible();
+    await expect(view.getByRole("button")).toHaveCount(0);
+    await doctor.getByRole("link", { name: "Back to Patients" }).click();
+    await expect(doctor).toHaveURL(/\/professional\/patients$/);
+    // The same authenticated account selecting another workspace is not a grant.
+    await doctor.goto(sharedPath.replace("professional", "organization"));
+    await expect(
+      doctor.getByRole("heading", { name: "Shared profile unavailable" }),
+    ).toBeVisible();
+    await outsider.goto(sharedPath);
+    await expect(
+      outsider.getByRole("heading", { name: "Shared profile unavailable" }),
+    ).toBeVisible();
+    await expect(outsider.locator("main")).not.toContainText(
+      "Asha Profile Test",
+    );
+    // Independently authorized Organization receives its own encrypted copy.
+    const orgChannel = `profile-facility-${Date.now()}`;
+    await approveChannel(orgChannel, m.uid, o.uid);
+    await connection(mother, orgChannel, o.fingerprint);
+    await connection(facility, orgChannel, m.fingerprint);
+    await sendProfile(mother);
+    await fetchRecords(facility);
+    await facility.goto("/organization/patients");
+    await facility
+      .getByRole("region", { name: "Shared patients", exact: true })
+      .getByRole("link")
+      .click();
+    await facility
+      .getByRole("combobox", { name: "Saved profile version", exact: true })
+      .selectOption({ index: 1 });
+    await expect(facility.getByTestId("shared-profile-view")).toContainText(
+      "21 · Recorded 2026-10-20",
+    );
+    await doctor.goto("/professional/more/sharing");
+    await connection(doctor, id, m.fingerprint);
     await revokeChannel(id);
     await doctor
       .getByRole("button", { name: "Fetch approved records" })
@@ -222,15 +304,10 @@ test("profile versions retain identity, match original bytes, exclude unshared c
     await expect(doctor.getByRole("alert")).toContainText(
       "Future sharing is blocked",
     );
-    await doctor.reload();
-    await expect(
-      doctor.getByRole("button", { name: "Open saved profiles", exact: true }),
-    ).toBeEnabled();
+    await doctor.goto("/professional/patients");
+    await expect(directory.getByRole("link")).toHaveCount(1);
     await contexts[1].setOffline(true);
-    await doctor
-      .getByRole("button", { name: "Open saved profiles", exact: true })
-      .click();
-    await patientSelect.selectOption({ index: 1 });
+    await directory.getByRole("link").click();
     await versionSelect.selectOption({ index: 2 });
     await expect(view).toContainText("21 · Recorded 2026-10-20");
     await doctor.setViewportSize({ width: 551, height: 850 });

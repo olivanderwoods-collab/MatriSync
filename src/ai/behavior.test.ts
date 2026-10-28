@@ -6,9 +6,29 @@ import {
   profileQuestion,
   savedProfileAnswer,
   addressReply,
+  confusesCompanionWithUser,
 } from "./behavior";
 import { safetyCheck } from "./safety";
 describe("approved profile-only companion context", () => {
+  it("rejects calling the user by the companion's name without blocking the companion introduction", () => {
+    const profile = { name: "Mira Sen" };
+    for (const text of [
+      "I'm here to support you, RUHI.",
+      "RUHI, tell me about your day.",
+      "Dear RUHI, hello.",
+    ])
+      expect(confusesCompanionWithUser(text, profile)).toBe(true);
+    expect(
+      confusesCompanionWithUser(
+        "I'm RUHI, your offline AI companion.",
+        profile,
+      ),
+    ).toBe(false);
+    expect(confusesCompanionWithUser("Hello, Mira!", profile)).toBe(false);
+    expect(
+      confusesCompanionWithUser("RUHI, how are you?", { name: "Ruhi Sen" }),
+    ).toBe(false);
+  });
   it("addresses the saved first name without inventing one or repeating it", () => {
     expect(addressReply("Hello! How can I help?", { name: "Mira Sen" })).toBe(
       "Hello, Mira! How can I help?",

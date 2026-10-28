@@ -12,6 +12,7 @@ import {
 import {
   localSharingDevice,
   savedTransfers,
+  transfersForWorkspace,
   type SavedTransfer,
 } from "./sharing-storage";
 import {
@@ -43,6 +44,7 @@ function SharingContent({ uid, role }: { uid: string; role: string }) {
   const [channelId, setChannelId] = useState("");
   const [fingerprint, setFingerprint] = useState("");
   const [saved, setSaved] = useState<SavedTransfer[]>([]);
+  const [unscoped, setUnscoped] = useState(0);
   const [opened, setOpened] = useState<SharedDocument>();
   const [file, setFile] = useState<File>();
   const [documentId, setDocumentId] = useState("");
@@ -60,7 +62,8 @@ function SharingContent({ uid, role }: { uid: string; role: string }) {
       await sharingAccount(uid);
       if (live) {
         setDevice(key);
-        setSaved(inbox);
+        setSaved(transfersForWorkspace(inbox, uid, role));
+        setUnscoped(inbox.filter((item) => !item.recipientRole).length);
       }
     })().catch((e) => {
       if (live)
@@ -71,7 +74,7 @@ function SharingContent({ uid, role }: { uid: string; role: string }) {
     return () => {
       live = false;
     };
-  }, [uid]);
+  }, [uid, role]);
   async function act(work: () => Promise<void>) {
     setBusy(true);
     setError("");
@@ -399,7 +402,11 @@ function SharingContent({ uid, role }: { uid: string; role: string }) {
                         channelId,
                         fingerprint,
                       );
-                      setSaved(await savedTransfers(uid));
+                      const inbox = await savedTransfers(uid);
+                      setSaved(transfersForWorkspace(inbox, uid, role));
+                      setUnscoped(
+                        inbox.filter((item) => !item.recipientRole).length,
+                      );
                       setStatus(
                         `${count} encrypted transfer(s) checked and saved on this device.`,
                       );
@@ -416,6 +423,13 @@ function SharingContent({ uid, role }: { uid: string; role: string }) {
       {busy && <p role="status">Working · Waiting for confirmation…</p>}
       {error && <p role="alert">{error}</p>}
       {status && <p role="status">{status}</p>}
+      {unscoped > 0 && (
+        <p className="notice">
+          {unscoped} older encrypted copy/copies are preserved but hidden
+          because their receiving workspace was not recorded. An authorized
+          re-fetch can verify the workspace; revoked connections cannot do this.
+        </p>
+      )}
       <section className="panel">
         <h2>Previously saved documents</h2>
         <p>
@@ -484,7 +498,14 @@ function SharingContent({ uid, role }: { uid: string; role: string }) {
           </div>
         )}
       </section>
-      {device && <SharedProfilePanel uid={uid} device={device} saved={saved} />}
+      {device && (
+        <SharedProfilePanel
+          uid={uid}
+          role={role}
+          device={device}
+          saved={saved}
+        />
+      )}
     </>
   );
 }

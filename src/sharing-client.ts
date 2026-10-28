@@ -401,6 +401,7 @@ export async function receiveSharedDocuments(
   for (const snap of result.docs) {
     const data = snap.data();
     const item: SavedTransfer = {
+      recipientRole: role,
       id: snap.id,
       channelId,
       senderUid: channel.senderUid,

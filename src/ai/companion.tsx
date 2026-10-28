@@ -16,9 +16,15 @@ import {
   type Capability,
 } from "./offline";
 import { safetyCheck, safeOutput } from "./safety";
-import { useLocalCompanionProfile } from "../records";
+import { useLocalCompanionProfile, useRecords } from "../records";
+import {
+  profileContextEnabled,
+  saveProfileContextPreference,
+} from "./preferences";
 import {
   BEHAVIOR_VERSION,
+  RUHI_ORIGIN,
+  confusesCompanionWithUser,
   addressReply,
   profileQuestion,
   savedProfileAnswer,
@@ -51,7 +57,11 @@ export function Companion({
   const [length, setLength] = useState<"short" | "medium">("short");
   const [tone, setTone] = useState<"gentle" | "practical">("gentle");
   const [context, setContext] = useState(true);
-  const [useProfile, setUseProfile] = useState(true);
+  const { vault } = useRecords();
+  const profileAccount = account ? vault?.uid : undefined;
+  const [useProfile, setUseProfile] = useState(() =>
+    profileContextEnabled(profileAccount),
+  );
   const loadProfile = useLocalCompanionProfile();
   const [generated, setGenerated] = useState(0);
   const worker = useRef<Worker | null>(null);
@@ -94,7 +104,7 @@ export function Companion({
     clearTimeout(timeout.current);
     setStatus("not-loaded");
     setProgress("");
-    setNotice("Stopped. Load Offline AI to continue.");
+    setNotice("Stopped. Load RUHI to continue.");
     if (!hasModel)
       void removeModel().catch(() =>
         setNotice(
@@ -149,7 +159,11 @@ export function Companion({
       } else if (data.type === "error") fail(data.message);
       else if (data.type === "result") {
         clearTimeout(timeout.current);
-        const text = safeOutput(String(data.text));
+        const output = safeOutput(String(data.text));
+        const text =
+          output && !confusesCompanionWithUser(output, replyProfile.current)
+            ? output
+            : "";
         setGenerated((n) => n + 1);
         setMessages((items) =>
           [
@@ -159,7 +173,9 @@ export function Companion({
               text:
                 (text && addressReply(text, replyProfile.current)) ||
                 "Thank you for sharing that. I couldn't form a reliable reply this time. You can tell me more about what's on your mind; for personal health questions, please speak with your care team.",
-              label: text ? "Offline AI" : "Safety fallback · Not AI-generated",
+              label: text
+                ? "RUHI · Offline AI"
+                : "Safety fallback · Not AI-generated",
             },
           ].slice(-40),
         );
@@ -182,8 +198,8 @@ export function Companion({
     if (!safe && !profileRequest && status !== "ready") {
       setNotice(
         hasModel
-          ? "Load Offline AI before chatting."
-          : "Install Offline AI in AI settings to chat on a compatible device.",
+          ? "Load RUHI before chatting."
+          : "Install RUHI in AI settings to chat on a compatible device.",
       );
       return;
     }
@@ -317,7 +333,8 @@ export function Companion({
       {page === "settings" ? (
         <div className="ai-settings-grid">
           <section>
-            <h3>Offline MatriSathi</h3>
+            <h3>RUHI · Offline companion</h3>
+            <p className="small muted">{RUHI_ORIGIN}</p>
             {offline}
             {!account && (
               <p className="notice">
@@ -336,7 +353,7 @@ export function Companion({
                     }
                     onClick={() => setConfirm(true)}
                   >
-                    Install Offline AI
+                    Install RUHI
                   </button>
                 ) : (
                   <>
@@ -345,7 +362,7 @@ export function Companion({
                       disabled={status === "ready" || !device?.supported}
                       onClick={() => load(false)}
                     >
-                      Load Offline AI
+                      Load RUHI
                     </button>
                     <button
                       className="button secondary"
@@ -466,14 +483,25 @@ export function Companion({
                 type="checkbox"
                 checked={useProfile}
                 disabled={!account || busy}
-                onChange={(e) => setUseProfile(e.target.checked)}
+                onChange={(e) => {
+                  const saved = saveProfileContextPreference(
+                    profileAccount,
+                    e.target.checked,
+                  );
+                  setUseProfile(saved && e.target.checked);
+                  if (!saved)
+                    setNotice(
+                      "Profile context is off for this session. This browser could not save your preference; check it again after reopening the app.",
+                    );
+                }}
               />
               Use saved name and recorded pregnancy stage
             </label>
             <p className="small">
               Read on this device when you send a message. Report contents,
               clinical history, contacts and diagnoses are excluded. You can
-              turn this off.
+              turn this off. Your choice is saved for this account on this
+              browser.
             </p>
             <p className="small">
               Behavior instructions: {BEHAVIOR_VERSION}. These guide replies;
@@ -530,7 +558,7 @@ export function Companion({
             </p>
           </section>
           <section className="ai-meter">
-            <h3>MatriSathi Offline</h3>
+            <h3>RUHI · Offline</h3>
             {offline}
             <dl className="record-details">
               <div>
@@ -548,13 +576,24 @@ export function Companion({
       ) : (
         <>
           <p className="small muted">
-            MatriSathi is an AI companion, not a healthcare professional.
-            English · Offline only.
+            RUHI is an AI companion, not a healthcare professional. English ·
+            Offline only.
           </p>
           {hasModel && status !== "ready" && !busy && (
-            <button className="button secondary" onClick={() => load(false)}>
-              Load Offline AI
-            </button>
+            <>
+              <button
+                className="button secondary"
+                disabled={!device?.supported}
+                onClick={() => load(false)}
+              >
+                Load RUHI
+              </button>
+              {!device?.supported && (
+                <p className="small" role="status">
+                  {device?.message || "Checking device compatibility…"}
+                </p>
+              )}
+            </>
           )}
           <div
             ref={log}
@@ -599,7 +638,7 @@ export function Companion({
               rows={3}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Tell MatriSathi how you're feeling…"
+              placeholder="Tell RUHI how you're feeling…"
             />
             <div className="ai-toolbar">
               <button
@@ -630,7 +669,7 @@ export function Companion({
         <div className="ai-operation" role="status">
           <span>
             {status === "generating"
-              ? "MatriSathi is preparing a reply…"
+              ? "RUHI is preparing a reply…"
               : progress || "Loading…"}
           </span>
           <button className="button cancel" onClick={stop}>

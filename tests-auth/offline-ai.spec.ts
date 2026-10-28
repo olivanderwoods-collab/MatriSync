@@ -1,7 +1,7 @@
 import { test, expect, chromium } from "@playwright/test";
 // Explicit opt-in downloads public weights. The ignored profile retains only
 // public model/runtime caches and synthetic emulator test data between runs.
-test("genuine Qwen conversation, exact saved profile facts and cached restart work offline", async () => {
+test("genuine RUHI conversation, clinical refusals, context opt-out and cached restart work offline", async () => {
   test.skip(
     process.env.TEST_OFFLINE_MODEL !== "1",
     "Explicit model download test only",
@@ -44,7 +44,7 @@ test("genuine Qwen conversation, exact saved profile facts and cached restart wo
       page.locator(".demo-banner").getByText("Signed-in account"),
     ).toBeVisible();
     await page.goto("http://127.0.0.1:4174/mother/more/profile");
-    await page.getByLabel("Full name", { exact: true }).fill("Synthetic Mira");
+    await page.getByLabel("Full name", { exact: true }).fill("Mira Synthetic");
     await page.getByLabel("Recorded pregnancy week (optional)").fill("22");
     await page.getByLabel("Pregnancy week recorded on").fill("2026-10-23");
     await page.getByRole("button", { name: "Save mother profile" }).click();
@@ -62,12 +62,10 @@ test("genuine Qwen conversation, exact saved profile facts and cached restart wo
       await page.waitForFunction(() => !!navigator.serviceWorker.controller);
     }
     await expect(page.locator("main")).toContainText("WebGPU detected");
-    if (
-      await page.getByRole("button", { name: "Install Offline AI" }).count()
-    ) {
-      await page.getByRole("button", { name: "Install Offline AI" }).click();
+    if (await page.getByRole("button", { name: "Install RUHI" }).count()) {
+      await page.getByRole("button", { name: "Install RUHI" }).click();
       await page.getByRole("button", { name: "Confirm download" }).click();
-    } else await page.getByRole("button", { name: "Load Offline AI" }).click();
+    } else await page.getByRole("button", { name: "Load RUHI" }).click();
     await expect
       .poll(
         async () => {
@@ -131,19 +129,60 @@ test("genuine Qwen conversation, exact saved profile facts and cached restart wo
       ).not.toContainText(
         /I(?:'m| am|’m) (?:not )?(?:scared|afraid|pregnant|lonely)/i,
       );
+      await expect(
+        page.locator(".chat-bubble.assistant").last(),
+      ).not.toContainText(/you, RUHI|Dear RUHI|^RUHI,/i);
     }
     console.log(
       "Synthetic offline conversation:",
       await page.getByRole("log").innerText(),
     );
-    await expect(
-      page.getByRole("log").getByText("Offline AI", { exact: true }),
-    ).toHaveCount(2);
-    await expect(
-      page
+    // Require actual inference; safety fallback counts may legitimately vary
+    // with model output and must never be mistaken for generated replies.
+    expect(
+      await page
         .getByRole("log")
-        .getByText("Safety fallback · Not AI-generated", { exact: true }),
-    ).toHaveCount(1);
+        .getByText("RUHI · Offline AI", { exact: true })
+        .count(),
+    ).toBeGreaterThan(0);
+    await expect(page.locator(".chat-bubble.assistant").first()).toContainText(
+      "Mira",
+    );
+    for (const [message, answer] of [
+      ["What medicine should I take?", "Please consult your physician"],
+      ["What does this report represent?", "not enabled yet"],
+      ["What is my recorded pregnancy week?", "week 22 on 2026-10-23"],
+    ]) {
+      await page.getByLabel("Your message", { exact: true }).fill(message);
+      await page.getByRole("button", { name: "Send", exact: true }).click();
+      await expect(page.locator(".chat-bubble.assistant")).toHaveCount(
+        ++replyCount,
+      );
+      await expect(page.locator(".chat-bubble.assistant").last()).toContainText(
+        answer,
+      );
+      await expect(page.locator(".chat-bubble.assistant").last()).toContainText(
+        "Not AI-generated",
+      );
+    }
+    await page.getByRole("link", { name: "AI settings", exact: true }).click();
+    await page
+      .getByLabel("Use saved name and recorded pregnancy stage")
+      .uncheck();
+    await page.getByRole("link", { name: "Back to Chat" }).click();
+    await page
+      .getByLabel("Your message", { exact: true })
+      .fill("What is my name?");
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+    await expect(page.locator(".chat-bubble.assistant")).toHaveCount(
+      ++replyCount,
+    );
+    await expect(page.locator(".chat-bubble.assistant").last()).toContainText(
+      "don't have saved profile details",
+    );
+    await expect(
+      page.locator(".chat-bubble.assistant").last(),
+    ).not.toContainText("Mira");
     if (process.env.TEST_AI_PRODUCTION === "1") {
       await page
         .getByLabel("Your message", { exact: true })
@@ -151,7 +190,7 @@ test("genuine Qwen conversation, exact saved profile facts and cached restart wo
       await page.getByRole("button", { name: "Send", exact: true }).click();
       await page.getByRole("button", { name: "Stop", exact: true }).click();
       await page
-        .getByRole("button", { name: "Load Offline AI", exact: true })
+        .getByRole("button", { name: "Load RUHI", exact: true })
         .click();
       await expect
         .poll(
@@ -167,18 +206,19 @@ test("genuine Qwen conversation, exact saved profile facts and cached restart wo
         "data-model-status",
         "ready",
       );
-      await page
-        .getByLabel("Your message", { exact: true })
-        .fill("I'm scared about giving birth.");
+      await page.getByLabel("Your message", { exact: true }).fill("Hello");
       await page.getByRole("button", { name: "Send", exact: true }).click();
       await expect(page.locator(".ai-workspace")).toHaveAttribute(
         "data-model-status",
         "ready",
         { timeout: 120_000 },
       );
-      await expect(page.locator(".chat-bubble.assistant")).toHaveCount(6, {
-        timeout: 120_000,
-      });
+      await expect(page.locator(".chat-bubble.assistant")).toHaveCount(
+        ++replyCount,
+        {
+          timeout: 120_000,
+        },
+      );
       await expect(
         page.locator(".chat-bubble.assistant").last(),
       ).not.toContainText(
@@ -188,9 +228,40 @@ test("genuine Qwen conversation, exact saved profile facts and cached restart wo
         "Reply after cached restart:",
         await page.locator(".chat-bubble.assistant").last().innerText(),
       );
+      await expect(page.locator(".chat-bubble.assistant").last()).toContainText(
+        "RUHI · Offline AI",
+      );
+      await expect(
+        page.locator(".chat-bubble.assistant").last(),
+      ).not.toContainText("Mira");
+      // Cold page reload stays offline; the shell, preference and model cache
+      // must restore without an external provider or silently enabling context.
+      await page.reload();
+      await page
+        .getByRole("button", { name: "Load RUHI", exact: true })
+        .click();
+      await expect
+        .poll(
+          () => page.locator(".ai-workspace").getAttribute("data-model-status"),
+          { timeout: 120_000 },
+        )
+        .toBe("ready");
+      await page.getByLabel("Your message", { exact: true }).fill("Hello");
+      await page.getByRole("button", { name: "Send", exact: true }).click();
+      await expect(page.locator(".chat-bubble.assistant")).toHaveCount(1, {
+        timeout: 120_000,
+      });
+      await expect(page.locator(".chat-bubble.assistant")).toContainText(
+        "RUHI · Offline AI",
+      );
+      await expect(page.locator(".chat-bubble.assistant")).not.toContainText(
+        "Mira",
+      );
     }
     expect(
-      calls.filter((url) => !url.startsWith("http://127.0.0.1:4174")),
+      calls.filter(
+        (url) => !["127.0.0.1", "localhost"].includes(new URL(url).hostname),
+      ),
     ).toEqual([]);
   } finally {
     await context.close();

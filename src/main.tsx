@@ -14,6 +14,13 @@ const SharingPage = sharingPilotEnabled
       })),
     )
   : () => null;
+const SharedPatients = sharingPilotEnabled
+  ? React.lazy(() =>
+      import("./shared-patients").then((module) => ({
+        default: module.SharedPatients,
+      })),
+    )
+  : () => null;
 import {
   BrowserRouter,
   Link,
@@ -1004,6 +1011,20 @@ function WorkspaceBody() {
             >
               <SharingPage uid={app.user!.uid} role={r} />
             </React.Suspense>
+          ) : !app.demo &&
+            sharingPilotEnabled &&
+            r !== "mother" &&
+            path.startsWith("patients/shared-") ? (
+            <React.Suspense
+              fallback={<p role="status">Opening shared patient…</p>}
+            >
+              <SharedPatients
+                key={`${app.user!.uid}/${r}`}
+                uid={app.user!.uid}
+                role={r}
+                path={path}
+              />
+            </React.Suspense>
           ) : !app.demo && r === "mother" && path === "overview" ? (
             <MotherRecordsHome />
           ) : !app.demo && r === "mother" && section === "children" ? (
@@ -1033,9 +1054,11 @@ function WorkspaceBody() {
           ) : !app.demo && r === "organization" && section === "patients" ? (
             <>
               <h1>Patients</h1>
-              <section className="panel">
-                <p>No patients linked yet.</p>
-              </section>
+              {!sharingPilotEnabled && (
+                <section className="panel">
+                  <p>No patients linked yet.</p>
+                </section>
+              )}
             </>
           ) : realRecords ? (
             path === "overview" ? (
@@ -1058,6 +1081,21 @@ function WorkspaceBody() {
               notFound={<NotFound embedded />}
             />
           )}
+          {!app.demo &&
+            sharingPilotEnabled &&
+            r !== "mother" &&
+            path === "patients" && (
+              <React.Suspense
+                fallback={<p role="status">Opening shared patients…</p>}
+              >
+                <SharedPatients
+                  key={`${app.user!.uid}/${r}`}
+                  uid={app.user!.uid}
+                  role={r}
+                  path={path}
+                />
+              </React.Suspense>
+            )}
           {section === "patients" && !patientDetail && !testing && (
             <TestLink role={r} />
           )}

@@ -549,7 +549,7 @@ export function MatriSathi({
         <NavLink to="/mother/matrisathi/information">
           Information & Education
         </NavLink>
-        <NavLink to="/mother/matrisathi/companion">AI Companion</NavLink>
+        <NavLink to="/mother/matrisathi/companion">RUHI · AI Companion</NavLink>
       </nav>
       {!companion ? (
         <Education topic={detail} />

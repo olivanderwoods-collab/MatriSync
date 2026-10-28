@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { OFFLINE_MODEL } from "../src/ai/config";
 async function account(page: Page) {
   await page.goto("/auth/signup?role=mother");
   await page
@@ -11,9 +12,55 @@ async function account(page: Page) {
   await page
     .getByRole("button", { name: "Create account", exact: true })
     .click();
-  await expect(page.locator(".demo-banner").getByText("Signed-in account")).toBeVisible();
+  await expect(
+    page.locator(".demo-banner").getByText("Signed-in account"),
+  ).toBeVisible();
   await page.goto("/mother/matrisathi/companion/settings");
 }
+test("cached RUHI waits for device readiness before its load button can be used", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "gpu", {
+      configurable: true,
+      value: {
+        requestAdapter: () =>
+          new Promise((resolve) => {
+            Object.assign(window, {
+              finishDeviceCheck: () =>
+                resolve({ features: { has: () => true } }),
+            });
+          }),
+      },
+    });
+  });
+  await page.goto("/");
+  await page.evaluate(async (model) => {
+    await (
+      await caches.open(model.cache)
+    ).put(
+      `${location.origin}/offline-ai-installed`,
+      new Response(model.revision),
+    );
+  }, OFFLINE_MODEL);
+  await account(page);
+  await page.getByRole("link", { name: "Back to Chat" }).click();
+  await expect(
+    page.getByRole("button", { name: "Load RUHI", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByText("Checking device compatibility…", { exact: true }),
+  ).toBeVisible();
+  await page.evaluate(() =>
+    (
+      window as unknown as { finishDeviceCheck: () => void }
+    ).finishDeviceCheck(),
+  );
+  await expect(
+    page.getByRole("button", { name: "Load RUHI", exact: true }),
+  ).toBeEnabled();
+});
+
 test("signed-in unsupported devices retain normal navigation", async ({
   page,
 }) => {
@@ -25,7 +72,7 @@ test("signed-in unsupported devices retain normal navigation", async ({
   );
   await account(page);
   await expect(
-    page.getByRole("button", { name: "Install Offline AI" }),
+    page.getByRole("button", { name: "Install RUHI" }),
   ).toBeDisabled();
   await expect(page.locator("main")).toContainText(
     "Device compatibility could not be checked",
@@ -46,7 +93,7 @@ test("failed and cancelled model downloads never break the companion or trigger 
     route.abort("internetdisconnected"),
   );
   await account(page);
-  await page.getByRole("button", { name: "Install Offline AI" }).click();
+  await page.getByRole("button", { name: "Install RUHI" }).click();
   await page.getByRole("button", { name: "Confirm download" }).click();
   await expect(page.locator(".ai-workspace")).toHaveAttribute(
     "data-model-status",
@@ -54,7 +101,7 @@ test("failed and cancelled model downloads never break the companion or trigger 
     { timeout: 20000 },
   );
   await expect(page.locator("main")).toContainText("could not start");
-  await page.getByRole("button", { name: "Install Offline AI" }).click();
+  await page.getByRole("button", { name: "Install RUHI" }).click();
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Confirm download" }),

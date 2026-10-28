@@ -155,7 +155,7 @@ test("v2 role boundaries and Home action inventories", async ({ page }) => {
   await page.goto("/mother/matrisathi/companion");
   await expect(
     page.getByRole("navigation", { name: "Section tabs" }).getByRole("link"),
-  ).toHaveText(["Information & Education", "AI Companion"]);
+  ).toHaveText(["Information & Education", "RUHI · AI Companion"]);
   await expect(
     page
       .getByRole("navigation", { name: "Companion options" })

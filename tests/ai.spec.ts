@@ -27,7 +27,7 @@ test("AI safety, unavailable services and unsupported devices preserve Guest pri
   await expect(page.getByRole("log")).not.toContainText("bleeding");
   await page.getByRole("link", { name: "AI settings", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "Install Offline AI" }),
+    page.getByRole("button", { name: "Install RUHI" }),
   ).toBeDisabled();
   await expect(page.locator("main")).toContainText("Sign in to install");
   await page.getByRole("link", { name: "AI usage", exact: true }).click();

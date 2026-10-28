@@ -67,7 +67,7 @@ test("encrypted mother profile feeds only approved local fields to a mocked work
     "Synthetic Mira",
   );
   await page.goto("/mother/matrisathi/companion/settings");
-  await page.getByRole("button", { name: "Install Offline AI" }).click();
+  await page.getByRole("button", { name: "Install RUHI" }).click();
   await page.getByRole("button", { name: "Confirm download" }).click();
   await expect(page.locator(".ai-workspace")).toHaveAttribute(
     "data-model-status",
@@ -129,4 +129,20 @@ test("encrypted mother profile feeds only approved local fields to a mocked work
           .at(-1)?.profile,
     ),
   ).toBeUndefined();
+  await page.reload();
+  await page.getByRole("link", { name: "AI settings", exact: true }).click();
+  await expect(
+    page.getByLabel("Use saved name and recorded pregnancy stage"),
+  ).not.toBeChecked();
+  await page.getByRole("link", { name: "Back to Chat" }).click();
+  await page
+    .getByLabel("Your message", { exact: true })
+    .fill("What is my name?");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.locator(".chat-bubble.assistant").last()).toContainText(
+    "don't have saved profile details",
+  );
+  await expect(page.locator(".chat-bubble.assistant").last()).not.toContainText(
+    "Synthetic Mira",
+  );
 });
