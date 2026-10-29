@@ -170,6 +170,12 @@ The receiver records its checked workspace as local inbox metadata. All readers 
 
 The expanded four-account profile browser scenario passed: exact original bytes, two preserved versions despite repeated delivery, separate authorized Organization receipt, wrong-workspace/outsider denial, no unshared child exposure and navigation into retained copies while offline after revocation. The other document and assignment scenarios also passed. Unit checks cover strict scope filtering, unsigned kind metadata, tampering and competing legacy annotations. Normal distribution builds still exclude this pilot; full syncing and referral completion are not claimed.
 
+## Received-profile referral drafts — 29 October 2026
+
+Professional received profiles now include local referral preparation against the explicitly selected signed profile version. Saving reopens the verified inbox and stores immutable versions in the existing encrypted account vault; it never merges the Mother into the local patient directory. Source identity, revision, receipt and byte-bound original references are preserved. Unreceived originals stay reference-only. Organization receipts cannot seed a professional draft. Saved drafts remain editable offline after revocation without enabling any new sharing or approval.
+
+The four-account browser scenario verifies version separation, original downloads, selected-version exports, reload, workspace denial and offline retained-copy editing. Unit tests independently cover wrong-patient matching and vault preservation. See `VERIFICATION-2026-10-29.md`. The normal distribution still excludes this pilot. Generic professional enrollment is not verified doctor authority: clinical approval, facility initiation and referral transmission remain unimplemented.
+
 ## Next implementation milestones
 
 1. Bind the implemented source-scoped identities and preserved versions to authoritative patient identities and profile loading/claim; integrate approved assignments and authorized records into patient workspaces and prevent revoked-code regrant.

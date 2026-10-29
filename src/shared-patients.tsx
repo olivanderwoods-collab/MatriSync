@@ -10,6 +10,7 @@ import { readSharedInbox, type OpenedSharedRecords } from "./sharing-inbox";
 import { groupProfileVersions } from "./sharing-profile";
 import { SharedProfileView } from "./sharing-profile-view";
 import { decodeFile, type SharedDocument } from "./sharing-crypto";
+import { SharedReferralDrafts } from "./shared-referral-drafts";
 
 export function SharedPatients({
   uid,
@@ -127,7 +128,12 @@ export function SharedPatients({
   if (
     !group ||
     extra ||
-    !["overview", "prescriptions", "reports"].includes(tab)
+    ![
+      "overview",
+      "prescriptions",
+      "reports",
+      ...(role === "professional" ? ["referrals"] : []),
+    ].includes(tab)
   )
     return (
       <section className="panel">
@@ -145,7 +151,12 @@ export function SharedPatients({
       </h1>
       <p>Saved shared profile · Read-only</p>
       <nav className="tabs" aria-label="Patient sections">
-        {(["overview", "prescriptions", "reports"] as const).map((t) => (
+        {[
+          "overview",
+          "prescriptions",
+          "reports",
+          ...(role === "professional" ? ["referrals"] : []),
+        ].map((t) => (
           <NavLink
             key={t}
             to={`/${role}/patients/${id}/${t}${revision ? `?version=${encodeURIComponent(revision)}` : ""}`}
@@ -181,7 +192,7 @@ export function SharedPatients({
             preserved.
           </p>
         )}
-        {selected && (
+        {selected && tab !== "referrals" && (
           <SharedProfileView
             selected={selected}
             documents={data.documents}
@@ -190,6 +201,13 @@ export function SharedPatients({
           />
         )}
       </section>
+      {selected && tab === "referrals" && role === "professional" && (
+        <SharedReferralDrafts
+          uid={uid}
+          selected={selected}
+          documents={data.documents}
+        />
+      )}
     </>
   );
 }

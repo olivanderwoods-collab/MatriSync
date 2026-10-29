@@ -10,6 +10,7 @@ import {
   validateReferralDrafts,
   type ReferralFields,
 } from "./referral-draft";
+import { sharingPilotEnabled } from "./sharing-config";
 import {
   commitVault,
   readFile,
@@ -92,7 +93,9 @@ export class RecordVault {
       referralDrafts:
         this.workspace === "professional"
           ? this.records.referralDrafts?.filter(
-              (d) => ids.has(d.patientId) && d.authorUid === this.uid,
+              (d) =>
+                (ids.has(d.patientId) || !!d.receivedOrigin) &&
+                d.authorUid === this.uid,
             )
           : undefined,
       inventoryLedger:
@@ -277,6 +280,7 @@ export class RecordVault {
       ? drafts.find(
           (d) =>
             d.id === draftId &&
+            !d.receivedOrigin &&
             d.patientId === patientId &&
             d.authorUid === this.uid,
         )
@@ -320,6 +324,101 @@ export class RecordVault {
             name: patient.name,
             birthDate: patient.birthDate,
             updatedAt: patient.updatedAt,
+          },
+          documents,
+        },
+      ],
+    };
+    const next = [...drafts.filter((d) => d.id !== item.id), item];
+    validateReferralDrafts(next);
+    await this.persist({ ...records, referralDrafts: next });
+    return item.id;
+  }
+  async saveReceivedReferralDraft(
+    profileId: string,
+    profileRevision: string,
+    fields: ReferralFields,
+    documentIds: string[],
+    draftId?: string,
+    expectedVersion?: string,
+  ) {
+    if (!sharingPilotEnabled)
+      throw Error("Received-profile drafting is not enabled in this build.");
+    await this.authorize();
+    if (this.workspace !== "professional" || !this.records)
+      throw Error("Open the professional records workspace first.");
+    const epoch = this.epoch;
+    const { receivedReferralSource } = await import("./shared-referral-source");
+    const { selected } = await receivedReferralSource(
+      this.uid,
+      profileId,
+      profileRevision,
+    );
+    await this.authorize();
+    if (epoch !== this.epoch || !this.records)
+      throw Error("The record session changed. Nothing was saved.");
+    const records = this.records,
+      snapshot = selected.snapshot;
+    const drafts = records.referralDrafts || [];
+    const previous = draftId
+      ? drafts.find(
+          (d) =>
+            d.id === draftId &&
+            d.authorUid === this.uid &&
+            d.receivedOrigin?.profileId === profileId &&
+            d.receivedOrigin.profileRevision === profileRevision &&
+            d.receivedOrigin.sourceUid === snapshot.sourceUid &&
+            d.receivedOrigin.sourcePatientId === snapshot.sourcePatientId,
+        )
+      : undefined;
+    if (
+      (draftId && !previous) ||
+      previous?.versions.at(-1)?.id !== expectedVersion
+    )
+      throw Error(
+        "The draft or its source version changed. Reopen the matching saved version before editing.",
+      );
+    if (
+      documentIds.length > 50 ||
+      new Set(documentIds).size !== documentIds.length
+    )
+      throw Error("Choose up to 50 distinct original documents.");
+    const documents = documentIds.map((id) => {
+      const d = snapshot.documents.find((document) => document.id === id);
+      if (!d)
+        throw Error("The document is outside this received patient version.");
+      return {
+        id: d.id,
+        name: d.name,
+        source: d.source,
+        reportDate: d.reportDate,
+        sha256: d.sha256,
+        type: d.type,
+        size: d.size,
+      };
+    });
+    const item = {
+      id: previous?.id || crypto.randomUUID(),
+      patientId: `shared-${profileId}`,
+      authorUid: this.uid,
+      receivedOrigin: previous?.receivedOrigin || {
+        profileId,
+        profileRevision,
+        sourceUid: snapshot.sourceUid,
+        sourcePatientId: snapshot.sourcePatientId,
+        transferId: selected.transferId,
+        receivedAt: selected.savedAt,
+      },
+      versions: [
+        ...(previous?.versions || []),
+        {
+          id: crypto.randomUUID(),
+          savedAt: new Date().toISOString(),
+          fields: referralInput(fields),
+          patient: {
+            name: snapshot.patient.name,
+            birthDate: snapshot.patient.birthDate,
+            updatedAt: snapshot.sourceUpdatedAt,
           },
           documents,
         },

@@ -5,10 +5,19 @@ export const referralFields = [
   "instructions",
 ] as const;
 export type ReferralFields = Record<(typeof referralFields)[number], string>;
+export type ReceivedReferralOrigin = {
+  profileId: string;
+  sourceUid: string;
+  sourcePatientId: string;
+  profileRevision: string;
+  transferId: string;
+  receivedAt: string;
+};
 export type ReferralDraft = {
   id: string;
   patientId: string;
   authorUid: string;
+  receivedOrigin?: ReceivedReferralOrigin;
   versions: {
     id: string;
     savedAt: string;
@@ -19,6 +28,9 @@ export type ReferralDraft = {
       name: string;
       source: string;
       reportDate: string;
+      sha256?: string;
+      type?: string;
+      size?: number;
     }[];
   }[];
 };
@@ -74,6 +86,21 @@ export function validateReferralDrafts(
     )
       throw Error("Invalid referral draft identity.");
     ids.add(draft.id);
+    const origin = draft.receivedOrigin;
+    const digest = (v: unknown) =>
+      typeof v === "string" && /^[a-f0-9]{64}$/.test(v);
+    if (
+      origin !== undefined &&
+      (!origin ||
+        !digest(origin.profileId) ||
+        !digest(origin.profileRevision) ||
+        !string(origin.sourceUid, 128) ||
+        !string(origin.sourcePatientId, 200) ||
+        !string(origin.transferId, 200) ||
+        !instant(origin.receivedAt) ||
+        draft.patientId !== `shared-${origin.profileId}`)
+    )
+      throw Error("Invalid received referral source.");
     const revisions = new Set<string>();
     for (const version of draft.versions) {
       if (
@@ -104,6 +131,20 @@ export function validateReferralDrafts(
         )
           throw Error("Invalid referral document reference.");
         documents.add(document.id);
+        if (
+          origin &&
+          (!digest(document.sha256) ||
+            ![
+              "application/pdf",
+              "image/png",
+              "image/jpeg",
+              "image/webp",
+            ].includes(document.type) ||
+            !Number.isInteger(document.size) ||
+            document.size < 1 ||
+            document.size > 10 * 1024 * 1024)
+        )
+          throw Error("Invalid received original reference.");
       }
     }
   }

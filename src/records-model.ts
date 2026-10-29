@@ -184,6 +184,10 @@ export function parseRecords(bytes: Uint8Array): RecordData {
   if (value.referralDrafts !== undefined) {
     validateReferralDrafts(value.referralDrafts);
     for (const draft of value.referralDrafts) {
+      // Received drafts reference the immutable signed inbox, not a duplicate
+      // local patient/file. Their shape is checked above; opening an original
+      // independently rechecks the signed source and byte digest.
+      if (draft.receivedOrigin) continue;
       if (
         !ids.has(draft.patientId) ||
         draft.versions.some((version) =>

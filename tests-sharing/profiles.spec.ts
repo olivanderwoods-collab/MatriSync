@@ -74,7 +74,7 @@ async function fetchRecords(page: Page) {
 test("profile versions retain identity, match original bytes, exclude unshared children and survive revocation", async ({
   browser,
 }, testInfo) => {
-  test.setTimeout(90000);
+  test.setTimeout(120000);
   const contexts = await Promise.all(
     [1, 2, 3, 4].map(() =>
       browser.newContext({ baseURL: "http://127.0.0.1:4175" }),
@@ -263,6 +263,79 @@ test("profile versions retain identity, match original bytes, exclude unshared c
       view.getByText("No document references in this version."),
     ).toBeVisible();
     await expect(view.getByRole("button")).toHaveCount(0);
+    await doctor
+      .getByRole("navigation", { name: "Patient sections" })
+      .getByRole("link", { name: "Referrals", exact: true })
+      .click();
+    await doctor
+      .getByRole("button", { name: "New referral draft", exact: true })
+      .click();
+    await doctor
+      .getByRole("textbox", { name: "Reason for referral", exact: true })
+      .fill("Recorded referral reason for shared Mother");
+    await doctor
+      .getByRole("checkbox", { name: /profile-original.pdf/ })
+      .check();
+    await doctor
+      .getByRole("button", { name: "Save draft version", exact: true })
+      .click();
+    const referralView = doctor.getByRole("article", {
+      name: "Referral draft preview",
+      exact: true,
+    });
+    await expect(referralView).toContainText("Asha Profile Test");
+    await expect(referralView).toContainText("Not approved · Not sent");
+    const referralOriginal = doctor.waitForEvent("download");
+    await referralView
+      .getByRole("button", {
+        name: "Download original profile-original.pdf",
+        exact: true,
+      })
+      .click();
+    expect(await readFile((await (await referralOriginal).path())!)).toEqual(
+      bytes,
+    );
+    const referralExport = doctor.waitForEvent("download");
+    await doctor
+      .getByRole("button", { name: "Download draft copy", exact: true })
+      .click();
+    const exported = await readFile(
+      (await (await referralExport).path())!,
+      "utf8",
+    );
+    expect(exported).toContain(firstVersion!);
+    expect(exported).toContain(m.uid);
+    expect(exported).toContain("Shared profile ID");
+    const printPage = await contexts[1].newPage();
+    await printPage.route("**/shared-referral-print-check", (route) =>
+      route.fulfill({ contentType: "text/html", body: exported }),
+    );
+    await printPage.goto("/shared-referral-print-check");
+    await expect(printPage.locator("body")).toContainText(firstVersion!);
+    await printPage.pdf({
+      path: testInfo.outputPath("shared-referral-draft.pdf"),
+      preferCSSPageSize: true,
+    });
+    await printPage.close();
+    await versionSelect.selectOption({ index: 2 });
+    await expect(
+      doctor.getByRole("combobox", {
+        name: "Saved referral draft",
+        exact: true,
+      }),
+    ).toHaveCount(0);
+    await versionSelect.selectOption({ index: 1 });
+    await doctor.reload();
+    await doctor
+      .getByRole("combobox", { name: "Saved referral draft", exact: true })
+      .selectOption({ index: 1 });
+    await expect(referralView).toContainText(
+      "Recorded referral reason for shared Mother",
+    );
+    await doctor.screenshot({
+      path: testInfo.outputPath("shared-profile-referral.png"),
+      fullPage: true,
+    });
     await doctor.getByRole("link", { name: "Back to Patients" }).click();
     await expect(doctor).toHaveURL(/\/professional\/patients$/);
     // The same authenticated account selecting another workspace is not a grant.
@@ -295,6 +368,19 @@ test("profile versions retain identity, match original bytes, exclude unshared c
     await expect(facility.getByTestId("shared-profile-view")).toContainText(
       "21 · Recorded 2026-10-20",
     );
+    await expect(
+      facility
+        .getByRole("navigation", { name: "Patient sections" })
+        .getByRole("link", { name: "Referrals", exact: true }),
+    ).toHaveCount(0);
+    await facility.goto(
+      sharedPath
+        .replace("professional", "organization")
+        .replace("/overview", "/referrals"),
+    );
+    await expect(
+      facility.getByRole("heading", { name: "Shared profile unavailable" }),
+    ).toBeVisible();
     await doctor.goto("/professional/more/sharing");
     await connection(doctor, id, m.fingerprint);
     await revokeChannel(id);
@@ -310,6 +396,37 @@ test("profile versions retain identity, match original bytes, exclude unshared c
     await directory.getByRole("link").click();
     await versionSelect.selectOption({ index: 2 });
     await expect(view).toContainText("21 · Recorded 2026-10-20");
+    await doctor
+      .getByRole("navigation", { name: "Patient sections" })
+      .getByRole("link", { name: "Referrals", exact: true })
+      .click();
+    await versionSelect.selectOption({ index: 1 });
+    await doctor
+      .getByRole("combobox", { name: "Saved referral draft", exact: true })
+      .selectOption({ index: 1 });
+    await doctor
+      .getByRole("button", { name: "Edit latest draft", exact: true })
+      .click();
+    await doctor
+      .getByRole("textbox", {
+        name: "Recorded instructions (optional)",
+        exact: true,
+      })
+      .fill("Local retained-copy draft note");
+    await doctor
+      .getByRole("button", { name: "Save draft version", exact: true })
+      .click();
+    await expect(referralView).toContainText("Local retained-copy draft note");
+    await expect(
+      doctor
+        .getByRole("combobox", { name: "Referral version", exact: true })
+        .locator("option"),
+    ).toHaveCount(2);
+    await doctor
+      .getByRole("navigation", { name: "Patient sections" })
+      .getByRole("link", { name: "Overview", exact: true })
+      .click();
+    await versionSelect.selectOption({ index: 2 });
     await doctor.setViewportSize({ width: 551, height: 850 });
     await doctor.screenshot({
       path: testInfo.outputPath("saved-shared-profile.png"),

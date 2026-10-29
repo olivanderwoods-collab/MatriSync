@@ -61,6 +61,8 @@ The user has reaffirmed that the assistant owns all developer checks and should 
 
 29 October continuation: the professional patient's Referrals tab now supports encrypted manual drafts, immutable saved versions, original-document references/downloads, an organized preview and draft-marked HTML/print/PDF copies. Offline editing, stale-tab protection, selected-version exports, original-byte preservation and multi-page output are checked. This is local drafting only: verified approval, shared-patient drafting, AI documentation assistance, facility initiation and BLE handoff remain open. See `VERIFICATION-2026-10-29.md` for the exact evidence and boundaries.
 
+29 October shared-profile continuation: a professional can now draft against an exact received Mother profile version in the controlled sharing build. The draft retains signed-source identity, revision and original-file hashes without creating a duplicate local patient or changing the Mother's records. Separate profile versions have separate drafts; retained copies remain editable offline after sharing revocation. Organization receipts and unrelated accounts cannot be used as professional draft access. Print output and both local/shared draft workflows were checked. This is preparation only: there is no verified doctor approval, automatic transmission or facility initiation yet. A generic professional route or pilot membership must not be treated as doctor authority.
+
 ## Implementation order and target dates
 
 These are planning targets, not completion promises. Reassess against working evidence daily and reduce secondary scope before cutting the three core flows.

@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useRecords } from "./records";
 import type { Patient } from "./records-model";
 import {
   emptyReferralFields,
   referralFields,
   type ReferralDraft,
+  type ReferralFields,
 } from "./referral-draft";
 import {
   referralLabels as labels,
@@ -19,6 +20,56 @@ export function ReferralDrafts({ patient }: { patient: Patient }) {
     [];
   const originals =
     vault?.data?.documents.filter((d) => d.patientId === patient.id) || [];
+  return (
+    <ReferralDraftEditor
+      drafts={drafts}
+      originals={originals}
+      save={async (fields, documents, id, version) => {
+        if (!vault) throw Error("Open your records first.");
+        const saved = await vault.saveReferralDraft(
+          patient.id,
+          fields,
+          documents,
+          id,
+          version,
+        );
+        refresh();
+        return vault.data!.referralDrafts!.find((d) => d.id === saved)!;
+      }}
+      getOriginal={async (reference) => {
+        if (!vault) throw Error("Open your records first.");
+        const { bytes, doc } = await vault.document(reference.id);
+        if (doc.patientId !== patient.id)
+          throw Error("This original is not available for this patient.");
+        return { bytes, name: doc.name };
+      }}
+    />
+  );
+}
+export type ReferralReference =
+  ReferralDraft["versions"][number]["documents"][number];
+export function ReferralDraftEditor({
+  drafts,
+  originals,
+  save,
+  getOriginal,
+  available,
+  sourceNotice,
+}: {
+  drafts: ReferralDraft[];
+  originals: ReferralReference[];
+  save: (
+    fields: ReferralFields,
+    documents: string[],
+    id?: string,
+    version?: string,
+  ) => Promise<ReferralDraft>;
+  getOriginal: (
+    reference: ReferralReference,
+  ) => Promise<{ bytes: Uint8Array<ArrayBuffer>; name: string }>;
+  available?: (reference: ReferralReference) => boolean;
+  sourceNotice?: ReactNode;
+}) {
   const [draftId, setDraftId] = useState("");
   const [versionId, setVersionId] = useState("");
   const [fields, setFields] = useState(emptyReferralFields);
@@ -50,20 +101,19 @@ export function ReferralDrafts({ patient }: { patient: Patient }) {
     }
   }
   async function downloadOriginal(id: string) {
-    if (!vault || busy || !version?.documents.some((d) => d.id === id)) return;
+    const reference = version?.documents.find((d) => d.id === id);
+    if (busy || !reference) return;
     setBusy(true);
     setError("");
     setNotice("");
     try {
-      const { bytes, doc } = await vault.document(id);
-      if (doc.patientId !== patient.id)
-        throw Error("This original is not available for this patient.");
+      const { bytes, name } = await getOriginal(reference);
       const url = URL.createObjectURL(
         new Blob([bytes], { type: "application/octet-stream" }),
       );
       const link = document.createElement("a");
       link.href = url;
-      link.download = doc.name;
+      link.download = name;
       link.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
       setNotice(
@@ -94,6 +144,7 @@ export function ReferralDrafts({ patient }: { patient: Patient }) {
         Prepare the recorded facts for clinical review. Drafts stay on this
         device; approval and facility transfer are not connected yet.
       </p>
+      {sourceNotice}
       {!editing && (
         <button
           className="button secondary"
@@ -131,24 +182,18 @@ export function ReferralDrafts({ patient }: { patient: Patient }) {
           className="record-form"
           onSubmit={async (e) => {
             e.preventDefault();
-            if (!vault || busy) return;
+            if (busy) return;
             setBusy(true);
             setError("");
             try {
-              const id = await vault.saveReferralDraft(
-                patient.id,
+              const saved = await save(
                 fields,
                 documentIds,
                 draftId || undefined,
                 versionId || undefined,
               );
-              refresh();
-              setDraftId(id);
-              setVersionId(
-                vault.data?.referralDrafts
-                  ?.find((d) => d.id === id)
-                  ?.versions.at(-1)?.id || "",
-              );
+              setDraftId(saved.id);
+              setVersionId(saved.versions.at(-1)?.id || "");
               setEditing(false);
               setNotice(
                 "Draft version saved encrypted on this device. Not approved or sent.",
@@ -200,6 +245,9 @@ export function ReferralDrafts({ patient }: { patient: Patient }) {
                   }
                 />
                 {d.name} · {d.source || "Source not recorded"}
+                {available &&
+                  !available(d) &&
+                  " · Original not received; reference only"}
               </label>
             ))}
           </fieldset>
@@ -260,10 +308,33 @@ export function ReferralDrafts({ patient }: { patient: Patient }) {
               </p>
               <details className="record-id">
                 <summary>Document identifiers</summary>
-                <p>Local patient ID: {draft.patientId}</p>
+                <p>
+                  {draft.receivedOrigin
+                    ? "Shared profile ID"
+                    : "Local patient ID"}
+                  : {draft.patientId}
+                </p>
                 <p>Referral ID: {draft.id}</p>
                 <p>Version ID: {version.id}</p>
                 <p>Prepared by account: {draft.authorUid}</p>
+                {draft.receivedOrigin && (
+                  <>
+                    <p>
+                      Received profile version:{" "}
+                      {draft.receivedOrigin.profileRevision}
+                    </p>
+                    <p>Source account: {draft.receivedOrigin.sourceUid}</p>
+                    <p>
+                      Source patient ID: {draft.receivedOrigin.sourcePatientId}
+                    </p>
+                    <p>
+                      Received on:{" "}
+                      {new Date(
+                        draft.receivedOrigin.receivedAt,
+                      ).toLocaleString()}
+                    </p>
+                  </>
+                )}
               </details>
               {referralFields.map((key) => (
                 <div key={key}>
@@ -281,14 +352,18 @@ export function ReferralDrafts({ patient }: { patient: Patient }) {
                     {d.name} · {d.source || "Source not recorded"} ·{" "}
                     {d.reportDate || "Date not recorded"}
                   </p>
-                  <button
-                    className="button secondary"
-                    disabled={busy}
-                    onClick={() => void downloadOriginal(d.id)}
-                    aria-label={`Download original ${d.name}`}
-                  >
-                    Download original
-                  </button>
+                  {available && !available(d) ? (
+                    <p>Original not received; reference only.</p>
+                  ) : (
+                    <button
+                      className="button secondary"
+                      disabled={busy}
+                      onClick={() => void downloadOriginal(d.id)}
+                      aria-label={`Download original ${d.name}`}
+                    >
+                      Download original
+                    </button>
+                  )}
                 </div>
               ))}
               <p className="small">
