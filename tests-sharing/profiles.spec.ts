@@ -474,7 +474,7 @@ test("profile versions retain identity, match original bytes, exclude unshared c
     await facility
       .getByLabel("Incoming referral connection")
       .selectOption(referralChannel);
-    await facility.getByLabel("Doctor device fingerprint").fill(d.fingerprint);
+    await facility.getByLabel("Sender device fingerprint").fill(d.fingerprint);
     await facility
       .getByRole("button", { name: "Receive approved referrals", exact: true })
       .click();
@@ -568,7 +568,7 @@ test("profile versions retain identity, match original bytes, exclude unshared c
       "Organization initiation recorded",
     );
     await expect(received).toContainText(
-      "Destination delivery, acceptance, arrival and handoff are not confirmed",
+      "Destination delivery and receiving events are recorded separately below",
     );
     const initiation = await operatorRead(
       `channels/${referralChannel}/referralInitiations/${fullId}`,
@@ -596,6 +596,254 @@ test("profile versions retain identity, match original bytes, exclude unshared c
       path: testInfo.outputPath("organization-referral-initiated.png"),
       fullPage: true,
     });
+    // Destination stays empty until explicitly sent and received.
+    await destination.goto("/organization/referrals");
+    await destination
+      .getByRole("button", { name: "Open saved referrals", exact: true })
+      .click();
+    await expect(
+      destination.getByRole("button", { name: /Open approved referral ·/ }),
+    ).toHaveCount(0);
+    const outgoing = facility.getByRole("region", {
+      name: "Destination delivery and receiving events",
+      exact: true,
+    });
+    await outgoing
+      .getByRole("button", { name: "Check receiving events" })
+      .click();
+    await expect(outgoing).toContainText("No receiving events recorded");
+    await outgoing
+      .getByLabel("Selected destination device fingerprint")
+      .fill(destinationAccount.fingerprint);
+    await contexts[3].setOffline(true);
+    await outgoing
+      .getByRole("button", {
+        name: "Send to selected destination",
+        exact: true,
+      })
+      .click();
+    await expect(outgoing.getByRole("alert")).toContainText(
+      "No delivery or receiving event was confirmed offline",
+    );
+    await contexts[3].setOffline(false);
+    for (let retry = 0; retry < 2; retry++) {
+      await outgoing
+        .getByRole("button", {
+          name: "Send to selected destination",
+          exact: true,
+        })
+        .click();
+      await expect(outgoing.getByRole("status")).toContainText(
+        "Stored encrypted for the selected destination",
+      );
+    }
+    const forwarded = await operatorRead(
+      `channels/${destinationChannel}/forwardedReferrals/${fullId}`,
+    );
+    for (const privateValue of [
+      "Asha Profile Test",
+      "Recorded referral reason",
+      "profile-original.pdf",
+      profileId.replace("Shared profile ID: ", ""),
+    ])
+      expect(JSON.stringify(forwarded)).not.toContain(privateValue);
+    expect(
+      await operatorRead(
+        `channels/${destinationChannel}/forwardedReferrals/${fullId}/events/received`,
+      ),
+    ).toBeUndefined();
+    await destination
+      .getByRole("button", { name: "Refresh referral connections" })
+      .click();
+    await destination
+      .getByLabel("Incoming referral connection")
+      .selectOption(destinationChannel);
+    await destination
+      .getByLabel("Sender device fingerprint")
+      .fill("0".repeat(64));
+    await destination
+      .getByRole("button", {
+        name: "Receive from initiating Organization",
+        exact: true,
+      })
+      .click();
+    await expect(destination.getByRole("alert")).toBeVisible();
+    await expect(
+      destination.getByRole("button", { name: /Open approved referral ·/ }),
+    ).toHaveCount(0);
+    await destination
+      .getByLabel("Sender device fingerprint")
+      .fill(o.fingerprint);
+    for (let retry = 0; retry < 2; retry++) {
+      await destination
+        .getByRole("button", {
+          name: "Receive from initiating Organization",
+          exact: true,
+        })
+        .click();
+      await expect(destination.getByRole("status")).toContainText(
+        "1 destination referral(s)",
+      );
+      await expect(
+        destination.getByRole("button", { name: /Open approved referral ·/ }),
+      ).toHaveCount(1);
+    }
+    await destination.reload();
+    await destination
+      .getByRole("button", { name: "Open saved referrals", exact: true })
+      .click();
+    await destination
+      .getByRole("button", { name: /Open approved referral ·/ })
+      .click();
+    const destinationReceived = destination.getByRole("region", {
+      name: "Received approved referral",
+      exact: true,
+    });
+    await expect(destinationReceived).toContainText(
+      "Recorded referral reason for shared Mother",
+    );
+    await expect(
+      destinationReceived.getByRole("button", {
+        name: "Initiate approved referral",
+        exact: true,
+      }),
+    ).toHaveCount(0);
+    const destinationDownload = destination.waitForEvent("download");
+    await destinationReceived
+      .getByRole("button", { name: "Download received approved copy" })
+      .click();
+    expect(
+      await readFile((await (await destinationDownload).path())!, "utf8"),
+    ).toBe(approvedHtml);
+    // A referral reference never grants full profile access.
+    await destinationReceived
+      .getByRole("link", { name: "Find separately shared patient profile" })
+      .click();
+    await expect(
+      destination.getByRole("heading", { name: "Shared profile unavailable" }),
+    ).toBeVisible();
+    // Source-controlled independent sharing resolves the same patient, without forwarding another source's profile.
+    const destinationProfileChannel = `destination-profile-${Date.now()}`;
+    await approveChannel(
+      destinationProfileChannel,
+      m.uid,
+      destinationAccount.uid,
+    );
+    await mother.goto("/mother/more/sharing");
+    await connection(
+      mother,
+      destinationProfileChannel,
+      destinationAccount.fingerprint,
+    );
+    await sendProfile(mother);
+    await mother
+      .getByRole("combobox", { name: "Saved local document", exact: true })
+      .selectOption({ label: "profile-original.pdf" });
+    await mother
+      .getByRole("button", { name: "Encrypt and send document" })
+      .click();
+    await expect(
+      mother
+        .getByRole("status")
+        .filter({ hasText: "Encrypted document stored" }),
+    ).toBeVisible();
+    await destination.goto("/organization/more/sharing");
+    await connection(destination, destinationProfileChannel, m.fingerprint);
+    await fetchRecords(destination);
+    await destination.goto("/organization/referrals");
+    await destination
+      .getByRole("button", { name: "Open saved referrals", exact: true })
+      .click();
+    await destination
+      .getByRole("button", { name: /Open approved referral ·/ })
+      .click();
+    await destinationReceived
+      .getByRole("link", { name: "Find separately shared patient profile" })
+      .click();
+    await expect(destination.locator("main")).toContainText(
+      "The referenced profile version is not saved",
+    );
+    await expect(destination.getByTestId("shared-profile-view")).toHaveCount(0);
+    await destination
+      .getByRole("combobox", { name: "Saved profile version", exact: true })
+      .selectOption({ index: 1 });
+    await expect(destination.getByTestId("shared-profile-view")).toContainText(
+      "21 · Recorded 2026-10-20",
+    );
+    const destinationOriginal = destination.waitForEvent("download");
+    await destination
+      .getByRole("button", { name: "Download matched original" })
+      .click();
+    expect(await readFile((await (await destinationOriginal).path())!)).toEqual(
+      bytes,
+    );
+    await expect(destination.locator("main")).not.toContainText(
+      "Unshared Child Test",
+    );
+    await destination.goto("/organization/referrals");
+    await destination
+      .getByRole("button", { name: "Open saved referrals", exact: true })
+      .click();
+    await destination
+      .getByRole("button", { name: /Open approved referral ·/ })
+      .click();
+    const receiving = destination.getByRole("region", {
+      name: "Destination delivery and receiving events",
+      exact: true,
+    });
+    await receiving
+      .getByRole("button", { name: "Check receiving events" })
+      .click();
+    await expect(receiving.getByRole("listitem")).toHaveCount(1);
+    await expect(receiving.getByRole("listitem")).toContainText(
+      "Received and verified",
+    );
+    for (const [index, label] of [
+      "Accepted",
+      "Arrival verified",
+      "Handoff acknowledged",
+      "Closed",
+    ].entries()) {
+      const action = receiving.getByRole("button", {
+        name: `Record: ${label}`,
+        exact: true,
+      });
+      await expect(action).toBeDisabled();
+      await receiving.getByRole("checkbox").check();
+      if (index === 0) {
+        await contexts[4].setOffline(true);
+        await action.click();
+        await expect(receiving.getByRole("alert")).toContainText(
+          "No delivery or receiving event was confirmed offline",
+        );
+        await expect(receiving.getByRole("listitem")).toHaveCount(1);
+        await contexts[4].setOffline(false);
+      }
+      await action.click();
+      await expect(receiving.getByRole("listitem")).toHaveCount(index + 2);
+      await expect(receiving.getByRole("status")).toContainText(
+        `${label} recorded`,
+      );
+    }
+    await outgoing
+      .getByRole("button", { name: "Check receiving events" })
+      .click();
+    await expect(outgoing.getByRole("listitem")).toHaveCount(5);
+    await destination.setViewportSize({ width: 551, height: 850 });
+    await expect(destination.locator("body")).toHaveJSProperty(
+      "scrollWidth",
+      551,
+    );
+    await destination
+      .getByRole("heading", { name: "Referrals", exact: true })
+      .click();
+    await destination.screenshot({
+      path: testInfo.outputPath("destination-receiving-mobile.png"),
+      fullPage: true,
+    });
+    // Full-profile grant is independent; revocation does not delete received originals.
+    await revokeChannel(destinationProfileChannel);
+    await mother.goto("/mother/more/sharing");
     await revokeChannel(referralChannel);
     await facility
       .getByRole("button", { name: "Refresh referral connections" })
@@ -616,16 +864,40 @@ test("profile versions retain identity, match original bytes, exclude unshared c
     ).toBe(approvedHtml);
     await contexts[3].setOffline(false);
     await facility.goto("/organization/more/sharing");
-    await destination.goto("/organization/referrals");
+    await destination
+      .getByRole("button", { name: "Refresh referral connections" })
+      .click();
+    await destination
+      .getByLabel("Incoming referral connection")
+      .selectOption(destinationChannel);
+    await destination
+      .getByLabel("Sender device fingerprint")
+      .fill(o.fingerprint);
+    await destination
+      .getByRole("button", {
+        name: "Receive from initiating Organization",
+        exact: true,
+      })
+      .click();
+    await expect(destination.getByRole("alert")).toBeVisible();
+    await contexts[4].setOffline(true);
     await destination
       .getByRole("button", { name: "Open saved referrals", exact: true })
       .click();
-    await expect(
-      destination.getByRole("button", { name: /Open approved referral ·/ }),
-    ).toHaveCount(0);
-    await expect(destination.locator("main")).not.toContainText(
-      "Asha Profile Test",
-    );
+    await destination
+      .getByRole("button", { name: /Open approved referral ·/ })
+      .click();
+    const offlineDestinationDownload = destination.waitForEvent("download");
+    await destinationReceived
+      .getByRole("button", { name: "Download received approved copy" })
+      .click();
+    expect(
+      await readFile(
+        (await (await offlineDestinationDownload).path())!,
+        "utf8",
+      ),
+    ).toBe(approvedHtml);
+    await contexts[4].setOffline(false);
     await doctor.reload();
     await doctor
       .getByRole("combobox", { name: "Saved referral draft", exact: true })

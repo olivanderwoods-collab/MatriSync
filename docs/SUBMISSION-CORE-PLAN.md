@@ -85,3 +85,8 @@ Authorization, encryption and source preservation are foundations during impleme
 Further Inventory/distributor/refund expansion; broad analytics and administration; public credential onboarding; advanced drug/reference modules; automatic clinical interpretation; broad OCR/voice/translation enhancements; extra cosmetic changes; full standalone digital-prescribing workflow beyond clinician-entered documentation needed for the referral. Preserve existing features, but do not spend core-submission time expanding them.
 
 After every milestone, report working behavior, actual verification, remaining limitations, the user's check list and next steps. Do not substitute more synthetic screens for real multi-client evidence.
+
+
+## Destination continuation — 31 October 2026
+
+The selected receiving Organization now receives the exact original doctor-signed approved referral inside an initiating-Organization signed/encrypted envelope. Receipt, acceptance, arrival confirmation, handoff acknowledgement and closure are distinct immutable receiving-account events. Independently authorized source-to-destination profile/original sharing resolves the patient without granting profile access from referral metadata. An unavailable referenced revision opens no substitute. This supersedes earlier destination/event-missing status in this document. See [protocol](DESTINATION-REFERRAL-PROTOCOL.md) and [verified checkpoint](VERIFICATION-2026-10-31-DESTINATION.md) for trust boundaries, tests and remaining work. The full submission core, BLE transport and final distribution integration remain incomplete.

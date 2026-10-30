@@ -11,6 +11,9 @@ for (const file of assets.filter((name) => name.endsWith(".js"))) {
     text.includes("staffAssignments") ||
     text.includes("clinicalCredentials") ||
     text.includes("referralInitiations") ||
+    text.includes("forwardedReferrals") ||
+    text.includes("forwardedReferralIndex") ||
+    text.includes("matrisync-referral-forward+jws") ||
     text.includes("Receive doctor-approved referrals") ||
     // The local vault retains referralApprovals for lossless record parsing.
     // These markers identify the pilot approval client and UI, not that schema.

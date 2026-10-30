@@ -158,6 +158,23 @@ export async function decryptReferralPackage(
   recipient: SharingDevice,
   sender: PublicDevice,
 ) {
+  const signed = await originalReferralSignature(
+    ciphertext,
+    context,
+    recipient,
+    sender,
+  );
+  return verifyOriginalReferral(signed, context, sender);
+}
+
+// Keep the doctor's original JWS intact when forwarding. Its original receiving
+// facility/context is verified, never rewritten to the destination.
+export async function originalReferralSignature(
+  ciphertext: string,
+  context: TransferContext,
+  recipient: SharingDevice,
+  sender: PublicDevice,
+) {
   if (
     typeof ciphertext !== "string" ||
     ciphertext.length > 700000 ||
@@ -175,8 +192,24 @@ export async function decryptReferralPackage(
     opened.protectedHeader.kid !== recipient.keyId
   )
     throw Error("Invalid referral envelope.");
+  const original = new TextDecoder().decode(opened.plaintext);
+  await verifyOriginalReferral(original, context, sender);
+  return original;
+}
+export async function verifyOriginalReferral(
+  original: string,
+  context: TransferContext,
+  sender: PublicDevice,
+) {
+  await checkPublicDevice(sender);
+  if (
+    context.senderKeyId !== sender.keyId ||
+    typeof original !== "string" ||
+    original.length > 700000
+  )
+    throw Error("Invalid original referral signer.");
   const signed = await compactVerify(
-    new TextDecoder().decode(opened.plaintext),
+    original,
     await importJWK(sender.signing, "ES256"),
     { algorithms: ["ES256"] },
   );

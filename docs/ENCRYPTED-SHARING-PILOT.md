@@ -213,3 +213,8 @@ The local sharing server now restricts image/connect destinations to the app and
 4. Compact handoff protocol plus actual MatriSync hardware or honestly labelled BLE simulator; genuine offline-model acceptance on intended presentation devices. RUHI branding and actual offline inference on the Windows/Edge development machine are already checked.
 
 References: [JOSE CompactEncrypt](https://github.com/panva/jose/blob/main/docs/jwe/compact/encrypt/classes/CompactEncrypt.md), [Firebase Firestore emulator](https://firebase.google.com/docs/emulator-suite/connect_firestore), [Firebase Auth emulator](https://firebase.google.com/docs/emulator-suite/connect_auth). This implements the authorized controlled-account scope in `SUBMISSION-CORE-PLAN.md`; public verification remains deferred.
+
+
+## Destination continuation — 31 October 2026
+
+The selected receiving Organization now receives the exact original doctor-signed approved referral inside an initiating-Organization signed/encrypted envelope. Receipt, acceptance, arrival confirmation, handoff acknowledgement and closure are distinct immutable receiving-account events. Independently authorized source-to-destination profile/original sharing resolves the patient without granting profile access from referral metadata. An unavailable referenced revision opens no substitute. This supersedes earlier destination/event-missing status in this document. See [protocol](DESTINATION-REFERRAL-PROTOCOL.md) and [verified checkpoint](VERIFICATION-2026-10-31-DESTINATION.md) for trust boundaries, tests and remaining work. The full submission core, BLE transport and final distribution integration remain incomplete.

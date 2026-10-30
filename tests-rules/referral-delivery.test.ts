@@ -19,6 +19,7 @@ import {
   deleteDoc,
   serverTimestamp,
   Timestamp,
+  writeBatch,
   type DocumentData,
 } from "firebase/firestore";
 let env: RulesTestEnvironment;
@@ -305,4 +306,423 @@ it("denies future delivery and initiation after credential, facility, key or con
   }
   await admin("clinicalCredentials/doctor", { status: "suspended" });
   await assertFails(getDoc(delivery("facility")));
+});
+
+const forwarded = (uid: string, channel = "outgoing", approvalId = id) =>
+  doc(db(uid), "channels", channel, "forwardedReferrals", approvalId);
+const receiving = (uid: string, kind: string, approvalId = id) =>
+  doc(
+    db(uid),
+    "channels",
+    "outgoing",
+    "forwardedReferrals",
+    approvalId,
+    "events",
+    kind,
+  );
+const eventData = (kind: string) => ({
+  kind,
+  actorUid: "destination",
+  contentHash: hash,
+  createdAt: serverTimestamp(),
+});
+async function forwardData() {
+  await setDoc(delivery("doctor"), data());
+  await setDoc(initiation("facility"), initiated());
+  const a = (
+    await getDoc(
+      doc(db("facility"), "referralApprovals", "doctor", "versions", id),
+    )
+  ).data();
+  const i = (await getDoc(initiation("facility"))).data();
+  return {
+    ...data(),
+    senderUid: "facility",
+    recipientUid: "destination",
+    senderKeyId: "b".repeat(64),
+    recipientKeyId: "c".repeat(64),
+    sourceChannelId: "incoming",
+    doctor: { keyId: "a".repeat(64) },
+    approval: a,
+    initiation: i,
+  };
+}
+it("forwards only the initiated version and discovers IDs without listing ciphertext", async () => {
+  const d = await forwardData();
+  expect((await assertSucceeds(getDoc(forwarded("facility")))).exists()).toBe(
+    false,
+  );
+  await assertSucceeds(setDoc(forwarded("facility"), d));
+  await assertSucceeds(getDoc(forwarded("destination")));
+  const index = doc(
+    db("facility"),
+    "channels",
+    "outgoing",
+    "forwardedReferralIndex",
+    id,
+  );
+  const stored = (await getDoc(forwarded("facility"))).data()!;
+  await assertSucceeds(
+    setDoc(index, { approvalId: id, createdAt: stored.createdAt }),
+  );
+  expect(
+    (
+      await assertSucceeds(
+        getDocs(
+          query(
+            collection(
+              db("destination"),
+              "channels",
+              "outgoing",
+              "forwardedReferralIndex",
+            ),
+            orderBy("createdAt", "desc"),
+            limit(20),
+          ),
+        ),
+      )
+    ).size,
+  ).toBe(1);
+  await assertFails(
+    getDocs(
+      query(
+        collection(
+          db("destination"),
+          "channels",
+          "outgoing",
+          "forwardedReferrals",
+        ),
+        limit(1),
+      ),
+    ),
+  );
+  await assertFails(updateDoc(index, { approvalId: "wrong" }));
+  await assertFails(
+    getDocs(
+      query(
+        collection(
+          db("destination"),
+          "channels",
+          "outgoing",
+          "forwardedReferrals",
+        ),
+        limit(2),
+      ),
+    ),
+  );
+  await assertFails(getDoc(forwarded("outsider")));
+  await assertFails(getDoc(forwarded("doctor")));
+  await assertFails(
+    getDoc(
+      doc(
+        env.unauthenticatedContext().firestore(),
+        "channels",
+        "outgoing",
+        "forwardedReferrals",
+        id,
+      ),
+    ),
+  );
+  await assertFails(setDoc(forwarded("destination"), d));
+  await assertFails(
+    updateDoc(forwarded("facility"), { ciphertext: "a".repeat(700001) }),
+  );
+  await assertFails(
+    updateDoc(forwarded("facility"), { recipientUid: "outsider" }),
+  );
+  await assertFails(deleteDoc(forwarded("facility")));
+});
+it("rejects forward schema pollution, missing fields, wrong source, keys, approval, initiation and destination", async () => {
+  const d = await forwardData();
+  for (const key of Object.keys(d)) {
+    const missing: DocumentData = { ...d };
+    delete missing[key];
+    await assertFails(setDoc(forwarded("facility"), missing));
+  }
+  for (const change of [
+    { extra: "plaintext" },
+    { version: 2 },
+    { approvalId: "wrong" },
+    { sourceChannelId: "../incoming" },
+    { sourceChannelId: "x".repeat(201) },
+    { sourceChannelId: "missing" },
+    { contentHash: "0".repeat(64) },
+    { senderUid: "outsider" },
+    { recipientUid: "doctor" },
+    { senderKeyId: "d".repeat(64) },
+    { recipientKeyId: "d".repeat(64) },
+    { doctor: { keyId: "d".repeat(64) } },
+    { approval: { ...d.approval, contentHash: "0".repeat(64) } },
+    { approval: { ...d.approval, createdAt: Timestamp.fromMillis(2) } },
+    { initiation: { ...d.initiation, destinationUid: "outsider" } },
+    { ciphertext: 4 },
+    { ciphertext: "a".repeat(700001) },
+    { createdAt: Timestamp.fromMillis(1) },
+  ])
+    await assertFails(setDoc(forwarded("facility"), { ...d, ...change }));
+  await assertFails(setDoc(forwarded("outsider"), d));
+  await assertFails(setDoc(forwarded("facility", "wrong"), d));
+  await assertFails(
+    setDoc(forwarded("facility", "outgoing", id.replace(/^1/, "2")), d),
+  );
+});
+it("denies forwarding and fresh fetch after original authority or either connection changes", async () => {
+  const d = await forwardData();
+  for (const [path, change, restore] of [
+    [
+      "clinicalCredentials/doctor",
+      { status: "suspended" },
+      { status: "approved" },
+    ],
+    [
+      "clinicalCredentials/doctor",
+      { lastEventId: crypto.randomUUID() },
+      { lastEventId: event },
+    ],
+    [
+      "credentialScopes/doctor",
+      { category: "caregiver" },
+      { category: "doctor" },
+    ],
+    ["credentialScopes/doctor", { enabled: false }, { enabled: true }],
+    ["facilityApprovers/facility", { enabled: false }, { enabled: true }],
+    ["members/doctor", { keyId: "d".repeat(64) }, { keyId: "a".repeat(64) }],
+    ["members/destination", { role: "professional" }, { role: "organization" }],
+    ["members/destination", { enabled: false }, { enabled: true }],
+    ["members/facility", { keyId: "d".repeat(64) }, { keyId: "b".repeat(64) }],
+    ["channels/incoming", { enabled: false }, { enabled: true }],
+    ["channels/outgoing", { enabled: false }, { enabled: true }],
+  ] as [string, DocumentData, DocumentData][]) {
+    await admin(path, change);
+    await assertFails(setDoc(forwarded("facility"), d));
+    await admin(path, restore);
+  }
+  await setDoc(forwarded("facility"), d);
+  await admin("channels/incoming", { enabled: false });
+  await assertFails(getDoc(forwarded("destination")));
+  await assertFails(
+    getDocs(
+      query(
+        collection(
+          db("destination"),
+          "channels",
+          "outgoing",
+          "forwardedReferrals",
+        ),
+        limit(1),
+      ),
+    ),
+  );
+});
+it("requires distinct receiver-attributed immutable events in order, rejecting replay and batch shortcuts", async () => {
+  const d = await forwardData();
+  await setDoc(forwarded("facility"), d);
+  await assertFails(
+    setDoc(receiving("destination", "closed"), eventData("closed")),
+  );
+  const batchDb = db("destination"),
+    batch = writeBatch(batchDb);
+  batch.set(
+    doc(
+      batchDb,
+      "channels",
+      "outgoing",
+      "forwardedReferrals",
+      id,
+      "events",
+      "received",
+    ),
+    eventData("received"),
+  );
+  batch.set(
+    doc(
+      batchDb,
+      "channels",
+      "outgoing",
+      "forwardedReferrals",
+      id,
+      "events",
+      "accepted",
+    ),
+    eventData("accepted"),
+  );
+  await assertFails(batch.commit());
+  for (const kind of [
+    "received",
+    "accepted",
+    "arrived",
+    "acknowledged",
+    "closed",
+  ]) {
+    await assertFails(
+      setDoc(receiving("facility", kind), {
+        ...eventData(kind),
+        actorUid: "facility",
+      }),
+    );
+    await assertFails(setDoc(receiving("outsider", kind), eventData(kind)));
+    const raced = await Promise.allSettled([
+      setDoc(receiving("destination", kind), eventData(kind)),
+      setDoc(receiving("destination", kind), eventData(kind)),
+    ]);
+    expect(raced.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    await assertFails(
+      updateDoc(receiving("destination", kind), { actorUid: "facility" }),
+    );
+    await assertFails(deleteDoc(receiving("destination", kind)));
+  }
+  const history = await assertSucceeds(
+    getDocs(
+      query(
+        collection(
+          db("facility"),
+          "channels",
+          "outgoing",
+          "forwardedReferrals",
+          id,
+          "events",
+        ),
+        orderBy("createdAt", "asc"),
+        limit(5),
+      ),
+    ),
+  );
+  expect(history.docs.map((s) => s.data().kind)).toEqual([
+    "received",
+    "accepted",
+    "arrived",
+    "acknowledged",
+    "closed",
+  ]);
+  await admin("channels/outgoing", { enabled: false });
+  await assertFails(getDoc(receiving("destination", "closed")));
+});
+it("rejects invalid receiving fields, false attribution, orphan history and unbounded/public event queries", async () => {
+  const d = await forwardData();
+  await setDoc(forwarded("facility"), d);
+  for (const key of Object.keys(eventData("received"))) {
+    const e: DocumentData = eventData("received");
+    delete e[key];
+    await assertFails(setDoc(receiving("destination", "received"), e));
+  }
+  for (const change of [
+    { extra: "x" },
+    { kind: "closed" },
+    { actorUid: "facility" },
+    { contentHash: "0".repeat(64) },
+    { createdAt: Timestamp.fromMillis(1) },
+    { kind: 1 },
+    { actorUid: "x".repeat(10000) },
+  ])
+    await assertFails(
+      setDoc(receiving("destination", "received"), {
+        ...eventData("received"),
+        ...change,
+      }),
+    );
+  await assertFails(
+    setDoc(
+      receiving("destination", "received", id.replace(/^1/, "2")),
+      eventData("received"),
+    ),
+  );
+  await assertFails(
+    getDocs(
+      collection(
+        db("destination"),
+        "channels",
+        "outgoing",
+        "forwardedReferrals",
+        id,
+        "events",
+      ),
+    ),
+  );
+  await assertFails(
+    getDocs(
+      query(
+        collection(
+          env.unauthenticatedContext().firestore(),
+          "channels",
+          "outgoing",
+          "forwardedReferrals",
+          id,
+          "events",
+        ),
+        limit(5),
+      ),
+    ),
+  );
+});
+
+it("binds discovery entries to immutable payloads and denies public, unbounded and forged index access", async () => {
+  const ref = (uid: string) =>
+    doc(db(uid), "channels", "outgoing", "forwardedReferralIndex", id);
+  await assertFails(
+    setDoc(ref("facility"), { approvalId: id, createdAt: serverTimestamp() }),
+  );
+  const d = await forwardData();
+  const batchDb = db("facility"),
+    batch = writeBatch(batchDb);
+  batch.set(doc(batchDb, "channels", "outgoing", "forwardedReferrals", id), d);
+  batch.set(
+    doc(batchDb, "channels", "outgoing", "forwardedReferralIndex", id),
+    { approvalId: id, createdAt: serverTimestamp() },
+  );
+  await assertSucceeds(batch.commit());
+  await assertFails(
+    updateDoc(ref("facility"), { createdAt: Timestamp.fromMillis(1) }),
+  );
+  await assertFails(deleteDoc(ref("facility")));
+  await assertFails(
+    getDocs(
+      collection(
+        db("destination"),
+        "channels",
+        "outgoing",
+        "forwardedReferralIndex",
+      ),
+    ),
+  );
+  await assertFails(
+    getDocs(
+      query(
+        collection(
+          db("outsider"),
+          "channels",
+          "outgoing",
+          "forwardedReferralIndex",
+        ),
+        limit(20),
+      ),
+    ),
+  );
+  await assertFails(
+    getDocs(
+      query(
+        collection(
+          env.unauthenticatedContext().firestore(),
+          "channels",
+          "outgoing",
+          "forwardedReferralIndex",
+        ),
+        limit(20),
+      ),
+    ),
+  );
+  const otherId = id.replace(/^1/, "2");
+  await assertFails(
+    setDoc(
+      doc(
+        db("facility"),
+        "channels",
+        "outgoing",
+        "forwardedReferralIndex",
+        otherId,
+      ),
+      { approvalId: otherId, createdAt: serverTimestamp() },
+    ),
+  );
+  await admin("channels/outgoing", { enabled: false });
+  await assertFails(getDoc(ref("destination")));
 });

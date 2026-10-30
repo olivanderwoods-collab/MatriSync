@@ -23,6 +23,8 @@ import {
   referralLabels,
 } from "./referral-document";
 import { referralFields } from "./referral-draft";
+import { receiveForwardedReferrals } from "./referral-forwarding";
+import { ReferralReceivingPanel } from "./referral-receiving-panel";
 
 function useAction() {
   const [busy, setBusy] = useState(false),
@@ -209,9 +211,8 @@ export function OrganizationReferrals({ uid }: { uid: string }) {
       <section className="panel">
         <h2>Receive doctor-approved referrals</h2>
         <p>
-          Receive and verify the doctor's exact approved version before
-          recording initiation. Arrival, acceptance and handoff are separate
-          events.
+          Review the doctor's exact approved version. Sending, receipt,
+          acceptance, arrival and handoff are recorded separately.
         </p>
         <button
           className="button secondary"
@@ -240,7 +241,7 @@ export function OrganizationReferrals({ uid }: { uid: string }) {
           onChange={setIncoming}
         />
         <label>
-          Doctor device fingerprint
+          Sender device fingerprint
           <input
             value={peer}
             onChange={(e) => setPeer(e.target.value)}
@@ -266,6 +267,25 @@ export function OrganizationReferrals({ uid }: { uid: string }) {
             }
           >
             Receive approved referrals
+          </button>
+          <button
+            className="button secondary"
+            disabled={a.busy || !incoming}
+            onClick={() =>
+              void a.act(async () => {
+                const count = await receiveForwardedReferrals(
+                  uid,
+                  incoming,
+                  peer,
+                );
+                await reloadSaved();
+                a.setNotice(
+                  `${count} destination referral(s) verified and saved encrypted. Receipt recorded; acceptance is separate.`,
+                );
+              })
+            }
+          >
+            Receive from initiating Organization
           </button>
           <button
             className="button secondary"
@@ -332,7 +352,7 @@ export function OrganizationReferrals({ uid }: { uid: string }) {
           {selected.value.draft.receivedOrigin && (
             <Link
               className="button secondary"
-              to={`/organization/patients/shared-${selected.value.draft.receivedOrigin.profileId}/overview`}
+              to={`/organization/patients/shared-${selected.value.draft.receivedOrigin.profileId}/overview?version=${encodeURIComponent(selected.value.draft.receivedOrigin.profileRevision)}`}
             >
               Find separately shared patient profile
             </Link>
@@ -353,84 +373,100 @@ export function OrganizationReferrals({ uid }: { uid: string }) {
               Print received approved copy
             </button>
           </div>
-          <h3>Organization initiation</h3>
-          <p>
-            {initiation
-              ? `Initiated on ${new Date(initiation.createdAt).toLocaleString()} for account ${initiation.destinationUid}. Destination delivery, acceptance, arrival and handoff are not confirmed.`
-              : checked
-                ? "No initiation recorded for this version at the last check."
-                : "Initiation status has not been checked online. A saved copy does not show current progress."}
-          </p>
-          <button
-            className="button secondary"
-            disabled={a.busy}
-            onClick={() =>
-              void a.act(async () => {
-                setInitiation(await readReferralInitiation(uid, selected.item));
-                setChecked(true);
-              })
-            }
-          >
-            Check initiation status
-          </button>
-          {!initiation && (
+          {!selected.item.forwarded && (
             <>
-              <ConnectionSelect
-                label="Referral destination connection"
-                channels={channels.filter(
-                  (c) =>
-                    c.enabled && !c.assignmentRouteId && c.senderUid === uid,
-                )}
-                value={destination}
-                onChange={(value) => {
-                  setDestination(value);
-                  setDestinationPin("");
-                  setReviewed(false);
-                }}
-              />
-              <label>
-                Destination device fingerprint
-                <input
-                  value={destinationPin}
-                  onChange={(e) => {
-                    setDestinationPin(e.target.value);
-                    setReviewed(false);
-                  }}
-                  autoComplete="off"
-                />
-              </label>
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={reviewed}
-                  onChange={(e) => setReviewed(e.target.checked)}
-                />
-                I have reviewed this approved version and the selected
-                destination.
-              </label>
+              <h3>Organization initiation</h3>
+              <p>
+                {initiation
+                  ? `Initiated on ${new Date(initiation.createdAt).toLocaleString()} for account ${initiation.destinationUid}. Destination delivery and receiving events are recorded separately below.`
+                  : checked
+                    ? "No initiation recorded for this version at the last check."
+                    : "Initiation status has not been checked online. A saved copy does not show current progress."}
+              </p>
               <button
                 className="button secondary"
-                disabled={a.busy || !reviewed || !destination}
+                disabled={a.busy}
                 onClick={() =>
                   void a.act(async () => {
                     setInitiation(
-                      await initiateReferral(
-                        uid,
-                        selected.item,
-                        destination,
-                        destinationPin,
-                      ),
+                      await readReferralInitiation(uid, selected.item),
                     );
                     setChecked(true);
-                    a.setNotice(
-                      "Organization initiation recorded. Destination delivery and handoff have not occurred.",
-                    );
                   })
                 }
               >
-                Initiate approved referral
+                Check initiation status
               </button>
+              {!initiation && (
+                <>
+                  <ConnectionSelect
+                    label="Referral destination connection"
+                    channels={channels.filter(
+                      (c) =>
+                        c.enabled &&
+                        !c.assignmentRouteId &&
+                        c.senderUid === uid,
+                    )}
+                    value={destination}
+                    onChange={(value) => {
+                      setDestination(value);
+                      setDestinationPin("");
+                      setReviewed(false);
+                    }}
+                  />
+                  <label>
+                    Destination device fingerprint
+                    <input
+                      value={destinationPin}
+                      onChange={(e) => {
+                        setDestinationPin(e.target.value);
+                        setReviewed(false);
+                      }}
+                      autoComplete="off"
+                    />
+                  </label>
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={reviewed}
+                      onChange={(e) => setReviewed(e.target.checked)}
+                    />
+                    I have reviewed this approved version and the selected
+                    destination.
+                  </label>
+                  <button
+                    className="button secondary"
+                    disabled={a.busy || !reviewed || !destination}
+                    onClick={() =>
+                      void a.act(async () => {
+                        setInitiation(
+                          await initiateReferral(
+                            uid,
+                            selected.item,
+                            destination,
+                            destinationPin,
+                          ),
+                        );
+                        setChecked(true);
+                        a.setNotice(
+                          "Organization initiation recorded. Destination delivery and handoff have not occurred.",
+                        );
+                      })
+                    }
+                  >
+                    Initiate approved referral
+                  </button>
+                </>
+              )}
             </>
+          )}
+          {(selected.item.forwarded || initiation) && (
+            <ReferralReceivingPanel
+              key={`${selected.item.channelId}/${selected.item.id}`}
+              uid={uid}
+              item={selected.item}
+              initiation={initiation}
+            />
           )}
         </section>
       )}

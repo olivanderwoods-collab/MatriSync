@@ -1,7 +1,9 @@
 import type { SavedTransfer } from "./sharing-storage";
+import type { ForwardAuthority } from "./referral-forward-package";
 export type SavedReferralDelivery = SavedTransfer & {
   recipientRole: "organization";
   verifiedApprovalHash: string;
+  forwarded?: ForwardAuthority;
 };
 async function open() {
   return new Promise<IDBDatabase>((resolve, reject) => {
@@ -34,7 +36,8 @@ export async function saveReferralDelivery(
       else if (
         old.ciphertext !== item.ciphertext ||
         old.verifiedApprovalHash !== item.verifiedApprovalHash ||
-        old.recipientRole !== item.recipientRole
+        old.recipientRole !== item.recipientRole ||
+        JSON.stringify(old.forwarded) !== JSON.stringify(item.forwarded)
       )
         tx.abort();
     };

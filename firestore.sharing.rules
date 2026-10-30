@@ -30,6 +30,12 @@ rules_version = '2';
 // channels/{id}/referralInitiations/{approvalId}: immutable {approvalId,contentHash,
 // initiatedBy,destinationChannelId,destinationUid,destinationKeyId,createdAt:timestamp}.
 // Initiation selects an approved outgoing Organization channel; it does not send to it.
+// forwardedReferrals/{approvalId}: immutable version,approvalId,sourceChannelId<=200,
+// contentHash,senderUid,recipientUid,senderKeyId,recipientKeyId,doctor:authoritative PublicDevice,
+// approval:exact original receipt,initiation:exact destination receipt,ciphertext<=700000,createdAt.
+// events/{received|accepted|arrived|acknowledged|closed}: immutable kind,actorUid,contentHash,createdAt.
+// forwardedReferralIndex/{approvalId}: immutable approvalId,createdAt matching its payload.
+// The index reveals no ciphertext, doctor or patient data; payloads require individual authority checks.
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null && request.auth.token.firebase.sign_in_provider != 'anonymous'; }
@@ -165,12 +171,15 @@ service cloud.firestore {
         && activeCredentialScope(request.auth.uid) && s.category == 'doctor' && c.status == 'approved';
     }
     function referralChannel(c) {
+      return signedIn() && request.auth.uid in c.members && currentDoctorChannel(c);
+    }
+    function currentDoctorChannel(c) {
       let staff = member(c.senderUid);
       let facility = member(c.recipientUid);
       let scope = credentialScope(c.senderUid);
       let approver = get(/databases/$(database)/documents/facilityApprovers/$(c.recipientUid)).data;
       let credential = get(/databases/$(database)/documents/clinicalCredentials/$(c.senderUid)).data;
-      return signedIn() && request.auth.uid in c.members && c.enabled == true && !('assignmentRouteId' in c)
+      return c.enabled == true && !('assignmentRouteId' in c)
         && c.senderUid != c.recipientUid && c.members == [c.senderUid,c.recipientUid]
         && staff.enabled == true && staff.role == 'professional' && staff.keyId == c.sender.keyId
         && facility.enabled == true && facility.role == 'organization' && facility.keyId == c.recipient.keyId
@@ -215,6 +224,59 @@ service cloud.firestore {
         && receiver.enabled == true && receiver.role == 'organization' && receiver.keyId == destination.recipient.keyId
         && d.createdAt is timestamp && d.createdAt == request.time
         && currentReferralApproval(c,id,d.contentHash);
+    }
+    function organizationChannel(c) {
+      let sender = member(c.senderUid);
+      let recipient = member(c.recipientUid);
+      return signedIn() && request.auth.uid in c.members && c.enabled == true
+        && !('assignmentRouteId' in c) && c.senderUid != c.recipientUid
+        && c.members == [c.senderUid,c.recipientUid]
+        && sender.enabled == true && sender.role == 'organization' && sender.keyId == c.sender.keyId
+        && recipient.enabled == true && recipient.role == 'organization' && recipient.keyId == c.recipient.keyId;
+    }
+    // Exact immutable authority copies, not a client-issued approval certificate.
+    function forwardAuthority(d, c, id, channelId) {
+      let source = channel(d.sourceChannelId);
+      let a = get(/databases/$(database)/documents/referralApprovals/$(source.senderUid)/versions/$(id)).data;
+      let i = get(/databases/$(database)/documents/channels/$(d.sourceChannelId)/referralInitiations/$(id)).data;
+      return currentDoctorChannel(source) && source.recipientUid == c.senderUid
+        && source.recipient.keyId == c.sender.keyId && d.doctor == source.sender
+        && d.approval == a && d.initiation == i && d.contentHash == a.contentHash
+        && a.doctorUid == source.senderUid && a.doctorKeyId == source.sender.keyId && a.facilityUid == source.recipientUid
+        && a.credentialEventId == get(/databases/$(database)/documents/clinicalCredentials/$(source.senderUid)).data.lastEventId
+        && i.approvalId == id && i.contentHash == a.contentHash && i.initiatedBy == c.senderUid
+        && i.destinationChannelId == channelId && i.destinationUid == c.recipientUid && i.destinationKeyId == c.recipient.keyId;
+    }
+    function validForward(d, c, id, channelId) {
+      return d.keys().hasAll(['version','approvalId','sourceChannelId','contentHash','senderUid','recipientUid','senderKeyId','recipientKeyId','doctor','approval','initiation','ciphertext','createdAt'])
+        && d.keys().hasOnly(['version','approvalId','sourceChannelId','contentHash','senderUid','recipientUid','senderKeyId','recipientKeyId','doctor','approval','initiation','ciphertext','createdAt'])
+        && id.size() == 73 && id.matches('[a-f0-9-]{36}_[a-f0-9-]{36}') && d.approvalId == id && d.version == 1
+        && d.sourceChannelId is string && d.sourceChannelId.size() > 0 && d.sourceChannelId.size() <= 200 && d.sourceChannelId.matches('[A-Za-z0-9_-]+')
+        && d.senderUid == c.senderUid && d.recipientUid == c.recipientUid
+        && d.senderKeyId == c.sender.keyId && d.recipientKeyId == c.recipient.keyId
+        && d.ciphertext is string && d.ciphertext.size() >= 200 && d.ciphertext.size() <= 700000 && d.ciphertext.matches('[A-Za-z0-9_.-]+')
+        && d.createdAt is timestamp && d.createdAt == request.time && forwardAuthority(d,c,id,channelId);
+    }
+    function receivingParent(channelId, id) {
+      return get(/databases/$(database)/documents/channels/$(channelId)/forwardedReferrals/$(id)).data;
+    }
+    function validForwardIndex(d, channelId, id) {
+      let parent = getAfter(/databases/$(database)/documents/channels/$(channelId)/forwardedReferrals/$(id)).data;
+      return d.keys().hasAll(['approvalId','createdAt']) && d.keys().hasOnly(['approvalId','createdAt'])
+        && id.size() == 73 && id.matches('[a-f0-9-]{36}_[a-f0-9-]{36}') && d.approvalId == id
+        && parent.approvalId == id && d.createdAt is timestamp && d.createdAt == parent.createdAt;
+    }
+    function predecessor(kind) {
+      return kind == 'accepted' ? 'received' : kind == 'arrived' ? 'accepted' : kind == 'acknowledged' ? 'arrived' : 'acknowledged';
+    }
+    function validReceivingEvent(d, c, channelId, id, kind) {
+      let parent = receivingParent(channelId,id);
+      return d.keys().hasAll(['kind','actorUid','contentHash','createdAt']) && d.keys().hasOnly(['kind','actorUid','contentHash','createdAt'])
+        && kind in ['received','accepted','arrived','acknowledged','closed'] && d.kind == kind
+        && d.actorUid == request.auth.uid && d.actorUid == c.recipientUid && d.contentHash == parent.contentHash
+        && d.createdAt is timestamp && d.createdAt == request.time
+        && (kind == 'received'
+          || get(/databases/$(database)/documents/channels/$(channelId)/forwardedReferrals/$(id)/events/$(predecessor(kind))).data.createdAt <= request.time);
     }
     match /deviceRequests/{uid} {
       allow get: if own(uid);
@@ -272,6 +334,20 @@ service cloud.firestore {
       // members so the UI can explain revocation. Clinical transfers remain blocked.
       allow get: if signedIn() && request.auth.uid in resource.data.members && approved(request.auth.uid);
       allow list: if signedIn() && request.auth.uid in resource.data.members && approved(request.auth.uid) && request.query.limit <= 20;
+      match /forwardedReferrals/{approvalId} {
+        allow get: if organizationChannel(channel(id)) && (resource == null || forwardAuthority(resource.data,channel(id),approvalId,id));
+        allow create: if own(channel(id).senderUid) && organizationChannel(channel(id)) && validForward(request.resource.data,channel(id),approvalId,id);
+        match /events/{kind} {
+          allow get: if organizationChannel(channel(id)) && receivingParent(id,approvalId).recipientUid == channel(id).recipientUid;
+          allow list: if request.query.limit <= 5 && organizationChannel(channel(id)) && receivingParent(id,approvalId).recipientUid == channel(id).recipientUid;
+          allow create: if own(channel(id).recipientUid) && organizationChannel(channel(id)) && validReceivingEvent(request.resource.data,channel(id),id,approvalId,kind);
+        }
+      }
+      match /forwardedReferralIndex/{approvalId} {
+        allow get: if organizationChannel(channel(id));
+        allow list: if request.query.limit <= 20 && organizationChannel(channel(id));
+        allow create: if own(channel(id).senderUid) && organizationChannel(channel(id)) && validForwardIndex(request.resource.data,id,approvalId);
+      }
       match /referrals/{approvalId} {
         allow get: if referralChannel(channel(id));
         allow list: if referralChannel(channel(id)) && request.query.limit <= 20;

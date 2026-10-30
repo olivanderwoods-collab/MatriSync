@@ -34,3 +34,8 @@ Next: encrypted forwarding to the selected receiving Organization, distinct acce
 The relay validates an authenticated approval receipt, not a portable independently verifiable approval certificate. Independent security review is still required before broader release. Permanent-code identity/claims remain synthetic; automatic multi-device synchronization, recovery, pagination and larger-attachment handling remain incomplete. No production cloud deployment, public verification or physical NFC success is claimed.
 
 The assistant owns developer checks. The user is not asked to operate the pilot or perform technical acceptance; final usability review follows completion of the core journey.
+
+
+## Destination continuation — 31 October 2026
+
+The selected receiving Organization now receives the exact original doctor-signed approved referral inside an initiating-Organization signed/encrypted envelope. Receipt, acceptance, arrival confirmation, handoff acknowledgement and closure are distinct immutable receiving-account events. Independently authorized source-to-destination profile/original sharing resolves the patient without granting profile access from referral metadata. An unavailable referenced revision opens no substitute. This supersedes earlier destination/event-missing status in this document. See [protocol](DESTINATION-REFERRAL-PROTOCOL.md) and [verified checkpoint](VERIFICATION-2026-10-31-DESTINATION.md) for trust boundaries, tests and remaining work. The full submission core, BLE transport and final distribution integration remain incomplete.

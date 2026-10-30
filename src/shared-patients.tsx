@@ -188,6 +188,8 @@ export function SharedPatients({
         </label>
         {!selected && (
           <p>
+            {revision &&
+              "The referenced profile version is not saved in this workspace. No substitute version was opened. "}
             Select a saved version. Earlier versions and original files are
             preserved.
           </p>

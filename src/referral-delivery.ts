@@ -25,6 +25,7 @@ import {
 } from "./referral-delivery-storage";
 import type { ReferralDraft } from "./referral-draft";
 import type { ReferralApproval } from "./referral-approval";
+import { decryptForwardedReferral } from "./referral-forward-package";
 
 function online() {
   if (!navigator.onLine)
@@ -195,12 +196,20 @@ export async function openReferralDelivery(
   await sharingAccount(uid);
   if (item.recipientUid !== uid || item.recipientRole !== "organization")
     throw Error("Wrong receiving account or workspace.");
-  const value = await decryptReferralPackage(
-    item.ciphertext,
-    item,
-    await localSharingDevice(uid),
-    item.sender,
-  );
+  const value = item.forwarded
+    ? await decryptForwardedReferral(
+        item.ciphertext,
+        item,
+        item.forwarded,
+        await localSharingDevice(uid),
+        item.sender,
+      )
+    : await decryptReferralPackage(
+        item.ciphertext,
+        item,
+        await localSharingDevice(uid),
+        item.sender,
+      );
   if (value.approval.contentHash !== item.verifiedApprovalHash)
     throw Error("The saved approval digest changed.");
   await sharingAccount(uid);
@@ -245,6 +254,8 @@ export async function initiateReferral(
   fingerprint: string,
 ) {
   online();
+  if (item.forwarded)
+    throw Error("This referral is already at its selected destination.");
   await openReferralDelivery(uid, item);
   const device = await localSharingDevice(uid),
     { db, channel, scope } = await checkedChannel(
