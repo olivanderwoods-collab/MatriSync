@@ -6,10 +6,14 @@ import {
   revokeChannel,
   approveTestFacility,
   approveCredentialScope,
+  operatorRead,
 } from "../scripts/sharing-operator.mjs";
 
 async function account(page: Page, role: string) {
-  await page.goto(`/auth/signup?role=${role}`);
+  const response = await page.goto(`/auth/signup?role=${role}`);
+  expect(response?.headers()["content-security-policy"]).toContain(
+    "img-src 'self' data: blob:; connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*",
+  );
   await page
     .getByLabel("Email address", { exact: true })
     .fill(`profile-sharing-${role}-${Date.now()}@example.test`);
@@ -78,19 +82,38 @@ test("profile versions retain identity, match original bytes, exclude unshared c
 }, testInfo) => {
   test.setTimeout(180000);
   const contexts = await Promise.all(
-    [1, 2, 3, 4].map(() =>
+    [1, 2, 3, 4, 5].map(() =>
       browser.newContext({ baseURL: "http://127.0.0.1:4175" }),
     ),
   );
-  const [mother, doctor, outsider, facility] = await Promise.all(
+  const [mother, doctor, outsider, facility, destination] = await Promise.all(
     contexts.map((context) => context.newPage()),
   );
   const external: string[] = [];
-  for (const page of [mother, doctor, outsider, facility])
+  const blockedExternal: string[] = [];
+  const externalResponses: string[] = [];
+  for (const page of [mother, doctor, outsider, facility, destination]) {
+    const network = await page.context().newCDPSession(page);
+    const requests = new Map<string, string>();
+    await network.send("Network.enable");
+    network.on("Network.requestWillBeSent", (e) => {
+      requests.set(e.requestId, e.request.url);
+    });
+    network.on("Network.loadingFailed", (e) => {
+      const url = requests.get(e.requestId);
+      if (url && e.blockedReason === "csp") blockedExternal.push(url);
+    });
+    page.on("response", (response) => {
+      if (
+        !["127.0.0.1", "localhost"].includes(new URL(response.url()).hostname)
+      )
+        externalResponses.push(response.url());
+    });
     page.on("request", (r) => {
       if (!["127.0.0.1", "localhost"].includes(new URL(r.url()).hostname))
         external.push(r.url());
     });
+  }
   try {
     const m = await account(mother, "mother"),
       d = await account(doctor, "professional");
@@ -287,7 +310,7 @@ test("profile versions retain identity, match original bytes, exclude unshared c
     });
     await expect(referralView).toContainText("Asha Profile Test");
     await expect(referralView).toContainText(
-      "Approval is recorded separately below · Not sent",
+      "Approval and delivery are recorded separately below",
     );
     const referralOriginal = doctor.waitForEvent("download");
     await referralView
@@ -395,7 +418,7 @@ test("profile versions retain identity, match original bytes, exclude unshared c
       "utf8",
     );
     expect(approvedHtml).toContain("APPROVED VERSION");
-    expect(approvedHtml).toContain("Not initiated or sent");
+    expect(approvedHtml).toContain("Delivery status recorded separately");
     expect(approvedHtml).toContain(firstVersion!);
     const approvedPrint = await contexts[1].newPage();
     await approvedPrint.route("**/approved-referral-print-check", (route) =>
@@ -407,6 +430,202 @@ test("profile versions retain identity, match original bytes, exclude unshared c
       preferCSSPageSize: true,
     });
     await approvedPrint.close();
+    // Real approved-version delivery and a separate Organization initiation.
+    const destinationAccount = await account(destination, "organization");
+    await approveMember(
+      destinationAccount.uid,
+      "organization",
+      destinationAccount.fingerprint,
+    );
+    const referralChannel = `referral-${Date.now()}`,
+      destinationChannel = `destination-${Date.now()}`;
+    await approveChannel(referralChannel, d.uid, o.uid);
+    await approveChannel(destinationChannel, o.uid, destinationAccount.uid);
+    const sendPanel = doctor.getByRole("region", {
+      name: "Send approved referral",
+      exact: true,
+    });
+    await sendPanel
+      .getByRole("button", { name: "Find approved facility connection" })
+      .click();
+    await sendPanel
+      .getByLabel("Referral facility connection")
+      .selectOption(referralChannel);
+    await sendPanel
+      .getByLabel("Facility device fingerprint")
+      .fill(o.fingerprint);
+    await sendPanel
+      .getByRole("button", { name: "Send approved version", exact: true })
+      .click();
+    await expect(sendPanel.getByRole("status")).toContainText(
+      "stored encrypted",
+    );
+    // Retry does not overwrite or create another delivery.
+    await sendPanel
+      .getByRole("button", { name: "Send approved version", exact: true })
+      .click();
+    await expect(sendPanel.getByRole("status")).toContainText(
+      "stored encrypted",
+    );
+    await facility.goto("/organization/referrals");
+    await facility
+      .getByRole("button", { name: "Refresh referral connections" })
+      .click();
+    await facility
+      .getByLabel("Incoming referral connection")
+      .selectOption(referralChannel);
+    await facility.getByLabel("Doctor device fingerprint").fill(d.fingerprint);
+    await facility
+      .getByRole("button", { name: "Receive approved referrals", exact: true })
+      .click();
+    await expect(facility.getByRole("status")).toContainText(
+      "1 approved referral(s)",
+    );
+    await facility
+      .getByRole("button", { name: /Open approved referral ·/ })
+      .click();
+    const received = facility.getByRole("region", {
+      name: "Received approved referral",
+      exact: true,
+    });
+    await expect(received).toContainText(
+      "Recorded referral reason for shared Mother",
+    );
+    const receivedDownload = facility.waitForEvent("download");
+    await received
+      .getByRole("button", { name: "Download received approved copy" })
+      .click();
+    expect(
+      await readFile((await (await receivedDownload).path())!, "utf8"),
+    ).toBe(approvedHtml);
+    const fullId = await facility.evaluate(
+      async () =>
+        new Promise<string>((resolve, reject) => {
+          const r = indexedDB.open("matrisync-referral-deliveries-v1");
+          r.onsuccess = () => {
+            const db = r.result,
+              t = db.transaction("deliveries", "readonly"),
+              g = t.objectStore("deliveries").getAll();
+            t.oncomplete = () => {
+              db.close();
+              resolve(g.result[0].id);
+            };
+          };
+          r.onerror = () => reject(r.error);
+        }),
+    );
+    const stored = await operatorRead(
+      `channels/${referralChannel}/referrals/${fullId}`,
+    );
+    expect(JSON.stringify(stored)).not.toContain("Asha Profile Test");
+    expect(JSON.stringify(stored)).not.toContain("Recorded referral reason");
+    expect(JSON.stringify(stored)).not.toContain("profile-original.pdf");
+    expect(
+      await operatorRead(
+        `channels/${referralChannel}/referralInitiations/${fullId}`,
+      ),
+    ).toBeUndefined();
+    await received
+      .getByRole("button", { name: "Check initiation status" })
+      .click();
+    await expect(received).toContainText("No initiation recorded");
+    await received
+      .getByLabel("Referral destination connection")
+      .selectOption(destinationChannel);
+    await received
+      .getByLabel("Destination device fingerprint")
+      .fill(destinationAccount.fingerprint);
+    await received.getByRole("checkbox").check();
+    await received
+      .getByLabel("Referral destination connection")
+      .selectOption("");
+    await expect(received.getByRole("checkbox")).not.toBeChecked();
+    await received
+      .getByLabel("Referral destination connection")
+      .selectOption(destinationChannel);
+    await expect(
+      received.getByLabel("Destination device fingerprint"),
+    ).toHaveValue("");
+    await expect(
+      received.getByRole("button", { name: "Initiate approved referral" }),
+    ).toBeDisabled();
+    await received
+      .getByLabel("Destination device fingerprint")
+      .fill(destinationAccount.fingerprint);
+    await received.getByRole("checkbox").check();
+    await contexts[3].setOffline(true);
+    await received
+      .getByRole("button", { name: "Initiate approved referral" })
+      .click();
+    await expect(facility.getByRole("alert")).toContainText(
+      "Nothing was sent or initiated offline",
+    );
+    await contexts[3].setOffline(false);
+    await received
+      .getByRole("button", { name: "Initiate approved referral" })
+      .click();
+    await expect(facility.getByRole("status")).toContainText(
+      "Organization initiation recorded",
+    );
+    await expect(received).toContainText(
+      "Destination delivery, acceptance, arrival and handoff are not confirmed",
+    );
+    const initiation = await operatorRead(
+      `channels/${referralChannel}/referralInitiations/${fullId}`,
+    );
+    expect(initiation?.destinationUid).toBe(destinationAccount.uid);
+    await facility.reload();
+    await facility
+      .getByRole("button", { name: "Open saved referrals", exact: true })
+      .click();
+    await facility
+      .getByRole("button", { name: /Open approved referral ·/ })
+      .click();
+    await received
+      .getByRole("button", { name: "Check initiation status" })
+      .click();
+    await expect(received).toContainText(
+      `for account ${destinationAccount.uid}`,
+    );
+    await facility.setViewportSize({ width: 551, height: 850 });
+    await expect(facility.locator("body")).toHaveJSProperty("scrollWidth", 551);
+    await facility
+      .getByRole("heading", { name: "Referrals", exact: true })
+      .click();
+    await facility.screenshot({
+      path: testInfo.outputPath("organization-referral-initiated.png"),
+      fullPage: true,
+    });
+    await revokeChannel(referralChannel);
+    await facility
+      .getByRole("button", { name: "Refresh referral connections" })
+      .click();
+    await contexts[3].setOffline(true);
+    await facility
+      .getByRole("button", { name: "Open saved referrals", exact: true })
+      .click();
+    await facility
+      .getByRole("button", { name: /Open approved referral ·/ })
+      .click();
+    const retainedDownload = facility.waitForEvent("download");
+    await received
+      .getByRole("button", { name: "Download received approved copy" })
+      .click();
+    expect(
+      await readFile((await (await retainedDownload).path())!, "utf8"),
+    ).toBe(approvedHtml);
+    await contexts[3].setOffline(false);
+    await facility.goto("/organization/more/sharing");
+    await destination.goto("/organization/referrals");
+    await destination
+      .getByRole("button", { name: "Open saved referrals", exact: true })
+      .click();
+    await expect(
+      destination.getByRole("button", { name: /Open approved referral ·/ }),
+    ).toHaveCount(0);
+    await expect(destination.locator("main")).not.toContainText(
+      "Asha Profile Test",
+    );
     await doctor.reload();
     await doctor
       .getByRole("combobox", { name: "Saved referral draft", exact: true })
@@ -578,7 +797,16 @@ test("profile versions retain identity, match original bytes, exclude unshared c
     await expect(
       mother.getByText("profile-original.pdf", { exact: true }),
     ).toBeVisible();
-    expect(external).toEqual([]);
+    // Firestore may attempt its Google connectivity image probe after a forced
+    // disconnection. Every attempted external request must be blocked by the
+    // application's CSP in Chromium, and no external response may arrive.
+    expect(externalResponses).toEqual([]);
+    for (const url of external) {
+      expect(new URL(url).origin + new URL(url).pathname).toBe(
+        "https://www.google.com/images/cleardot.gif",
+      );
+      expect(blockedExternal).toContain(url);
+    }
   } finally {
     await Promise.all(contexts.map((context) => context.close()));
   }

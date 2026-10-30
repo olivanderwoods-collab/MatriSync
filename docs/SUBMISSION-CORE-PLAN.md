@@ -69,6 +69,8 @@ The user has reaffirmed that the assistant owns all developer checks and should 
 
 These are planning targets, not completion promises. Reassess against working evidence daily and reduce secondary scope before cutting the three core flows.
 
+31 October continuation: the controlled build now delivers one signed/encrypted exact doctor-approved referral to its credential-review Organization. The receiving account verifies the authoritative approval and saves an encrypted offline copy; its approved export matches the doctor's copy. Organization initiation explicitly binds the reviewed version to one approved destination, survives reload and rejects competing/unauthorized changes. These checks supersede the earlier delivery/initiation-missing status. Destination transmission, acceptance, arrival, acknowledgement/closure, authorized handoff/profile retrieval and clinician documentation assistance remain open. No full referral completion is claimed. See `VERIFICATION-2026-10-31.md`.
+
 1. **25–27 October:** establish the controlled-account permission and encrypted-sharing foundation; prove one document reaches the correct other account on a separate client. Specify the handoff and BLE contract alongside it.
 2. **28–30 October:** complete the manual referral/document/recipient flow, then add source-preserving AI assistance. Integrate physical device or BLE simulator against the same contract.
 3. **31 October–1 November:** finish Mother document organization, RUHI branding and actual offline-model/device checks. Aim for one complete submission journey by 1 November.

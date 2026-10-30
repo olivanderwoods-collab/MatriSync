@@ -90,6 +90,15 @@ export default defineConfig(({ mode }) => ({
   server: {
     port: 5173,
     strictPort: true,
+    // The isolated relay pilot must not make the SDK's external connectivity
+    // image probe when its loopback connection is interrupted.
+    headers:
+      process.env.VITE_SHARING_PILOT === "1"
+        ? {
+            "Content-Security-Policy":
+              "img-src 'self' data: blob:; connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*",
+          }
+        : undefined,
     watch: { ignored: ["**/.local-tools/**"] },
   },
   preview: { port: 4173, strictPort: true },

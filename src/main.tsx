@@ -7,6 +7,13 @@ import React, {
 } from "react";
 import { createRoot } from "react-dom/client";
 import { sharingPilotEnabled } from "./sharing-config";
+const OrganizationReferrals = sharingPilotEnabled
+  ? React.lazy(() =>
+      import("./referral-delivery-panel").then((m) => ({
+        default: m.OrganizationReferrals,
+      })),
+    )
+  : null;
 const SharingPage = sharingPilotEnabled
   ? React.lazy(() =>
       import("./sharing-page").then((module) => ({
@@ -1024,6 +1031,15 @@ function WorkspaceBody() {
                 role={r}
                 path={path}
               />
+            </React.Suspense>
+          ) : !app.demo &&
+            OrganizationReferrals &&
+            r === "organization" &&
+            section === "referrals" ? (
+            <React.Suspense
+              fallback={<p role="status">Opening approved referrals…</p>}
+            >
+              <OrganizationReferrals key={app.user!.uid} uid={app.user!.uid} />
             </React.Suspense>
           ) : !app.demo && r === "mother" && path === "overview" ? (
             <MotherRecordsHome />

@@ -13,6 +13,7 @@ import {
 } from "./referral-document";
 import { sharingAccount } from "./sharing-client";
 import { useRecords } from "./records";
+import { SendApprovedReferral } from "./referral-delivery-panel";
 
 export function ReferralReview({
   uid,
@@ -155,7 +156,7 @@ export function ReferralReview({
         </>
       ) : (
         <>
-          <p>Doctor approval recorded · Not initiated or sent</p>
+          <p>Doctor approval recorded · Delivery status recorded separately</p>
           <p>Approved on {new Date(approval.createdAt).toLocaleString()}</p>
           <p className="record-id">Approved by account: {approval.doctorUid}</p>
           <div className="action-row">
@@ -178,6 +179,12 @@ export function ReferralReview({
             This is a historical approval of these contents. It does not confirm
             current credentials or a current sharing grant.
           </p>
+          <SendApprovedReferral
+            uid={uid}
+            draft={draft}
+            versionId={versionId}
+            facilityUid={approval.facilityUid}
+          />
         </>
       )}
       {error && <p role="alert">{error}</p>}

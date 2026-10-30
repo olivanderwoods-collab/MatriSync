@@ -166,7 +166,7 @@ export function ReferralDraftEditor({
         Prepare the recorded facts for clinical review. Drafts stay on this
         device.{" "}
         {review
-          ? "Doctor review is separate from drafting; facility transfer is not connected yet."
+          ? "Doctor review and sending to the Organization are separate actions."
           : "Approval and facility transfer are not connected yet."}
       </p>
       {sourceNotice}
@@ -319,7 +319,7 @@ export function ReferralDraftEditor({
               <h3>Referral document · {review ? "Saved version" : "DRAFT"}</h3>
               <p>
                 {review
-                  ? "Approval is recorded separately below · Not sent"
+                  ? "Approval and delivery are recorded separately below"
                   : "Not approved · Not sent"}
               </p>
               <p className="small">

@@ -83,7 +83,7 @@ it("binds approval to the selected immutable version and every source field, not
   ).rejects.toThrow();
   const html = await approvedReferralDocumentHtml(d, v.id, approval);
   expect(html).toContain("APPROVED VERSION");
-  expect(html).toContain("Not initiated or sent");
+  expect(html).toContain("Delivery status recorded separately");
   expect(html).not.toContain("New draft");
   expect(html).toContain(approval.contentHash);
 });

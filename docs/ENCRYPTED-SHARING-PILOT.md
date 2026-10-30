@@ -197,9 +197,19 @@ The final local checks cover 28 rules cases, 83 unit tests and all three sharing
 
 ## Remaining implementation milestones
 
+### Approved referral delivery and initiation — 31 October 2026
+
+The Doctor explicitly sends one approved version to the named credential-review Organization over its approved connection. `channels/{channelId}/referrals/{approvalId}` stores immutable ciphertext plus bounded routing/approval metadata. It requires the active doctor category, current facility/credential event and enrolled device keys. The JOSE package uses the existing ES256 inside ECDH-ES/A256GCM primitives with separate referral content types; it binds the six routing fields, selected draft version, source references and exact approval. Recipient verification also compares the authoritative receipt before local caching. No full profile, original bytes or private profile code is included.
+
+The recipient's separate `matrisync-referral-deliveries-v1` IndexedDB cache retains ciphertext and checked approval metadata. Offline reopening remains available after revocation. Receipt does not grant unrelated patient/profile access. The normal workspace may resolve only an independently received authorized profile.
+
+`channels/{channelId}/referralInitiations/{approvalId}` records immutable explicit Organization initiation for one selected approved Organization destination. The current doctor/facility/connection and destination roles/keys are enforced by rules. Changing the selected destination clears UI confirmation; competing requests cannot overwrite one another. Initiation is not destination transmission, acceptance, arrival or handoff acknowledgement. Current status requires an online check; cached copies do not fabricate progress.
+
+The local sharing server now restricts image/connect destinations to the app and loopback. Browser checks require this CSP and verify that any Firestore connectivity-image probe is blocked by Chromium, with no external responses. External model download is consequently unavailable in this isolated pilot; normal RUHI operation is unchanged. Normal distributions still exclude the pilot. See `VERIFICATION-2026-10-31.md` for exact test evidence and remaining limits.
+
 1. Bind the implemented source-scoped identities and preserved versions to authoritative patient identities and profile loading/claim; integrate approved assignments and authorized records into patient workspaces and prevent revoked-code regrant.
 2. Larger encrypted original attachments, durable acknowledged outbox, pagination, restart/retry/conflict handling and a reviewed multi-device/recovery protocol.
-3. Encrypted delivery of the exact doctor-approved document, Organization initiation, receiving acknowledgement and correct authorized profile retrieval; source-preserving clinician documentation assistance.
+3. Forward the exact approved document from the initiating Organization to the selected destination; receiving acceptance/arrival/acknowledgement/closure and correct authorized profile retrieval; source-preserving clinician documentation assistance. Doctor-to-initiating-Organization delivery and initiation are implemented above.
 4. Compact handoff protocol plus actual MatriSync hardware or honestly labelled BLE simulator; genuine offline-model acceptance on intended presentation devices. RUHI branding and actual offline inference on the Windows/Edge development machine are already checked.
 
 References: [JOSE CompactEncrypt](https://github.com/panva/jose/blob/main/docs/jwe/compact/encrypt/classes/CompactEncrypt.md), [Firebase Firestore emulator](https://firebase.google.com/docs/emulator-suite/connect_firestore), [Firebase Auth emulator](https://firebase.google.com/docs/emulator-suite/connect_auth). This implements the authorized controlled-account scope in `SUBMISSION-CORE-PLAN.md`; public verification remains deferred.

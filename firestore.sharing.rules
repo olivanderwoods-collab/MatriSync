@@ -25,6 +25,11 @@ rules_version = '2';
 // referralApprovals/{doctorUid}/versions/{draftUuid_versionUuid}: immutable {doctorUid,doctorKeyId:hex64,
 // facilityUid,credentialEventId:uuid,contentHash:hex64,createdAt:server timestamp}.
 // Approval attests the exact version digest, not delivery, arrival or future authority.
+// channels/{id}/referrals/{approvalId}: immutable {version:1,approvalId:73-char ID,
+// contentHash:hex64,senderUid,recipientUid,senderKeyId,recipientKeyId,ciphertext<=700000,createdAt:timestamp}.
+// channels/{id}/referralInitiations/{approvalId}: immutable {approvalId,contentHash,
+// initiatedBy,destinationChannelId,destinationUid,destinationKeyId,createdAt:timestamp}.
+// Initiation selects an approved outgoing Organization channel; it does not send to it.
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null && request.auth.token.firebase.sign_in_provider != 'anonymous'; }
@@ -159,6 +164,58 @@ service cloud.firestore {
         && fingerprint(d.contentHash) && d.createdAt is timestamp && d.createdAt == request.time
         && activeCredentialScope(request.auth.uid) && s.category == 'doctor' && c.status == 'approved';
     }
+    function referralChannel(c) {
+      let staff = member(c.senderUid);
+      let facility = member(c.recipientUid);
+      let scope = credentialScope(c.senderUid);
+      let approver = get(/databases/$(database)/documents/facilityApprovers/$(c.recipientUid)).data;
+      let credential = get(/databases/$(database)/documents/clinicalCredentials/$(c.senderUid)).data;
+      return signedIn() && request.auth.uid in c.members && c.enabled == true && !('assignmentRouteId' in c)
+        && c.senderUid != c.recipientUid && c.members == [c.senderUid,c.recipientUid]
+        && staff.enabled == true && staff.role == 'professional' && staff.keyId == c.sender.keyId
+        && facility.enabled == true && facility.role == 'organization' && facility.keyId == c.recipient.keyId
+        && scope.enabled == true && scope.staffUid == c.senderUid && scope.category == 'doctor'
+        && scope.facilityUid == c.recipientUid && scope.staffKeyId == staff.keyId && scope.facilityKeyId == facility.keyId
+        && approver.enabled == true && approver.keyId == facility.keyId && credential.status == 'approved';
+    }
+    function currentReferralApproval(c, id, hash) {
+      let a = get(/databases/$(database)/documents/referralApprovals/$(c.senderUid)/versions/$(id)).data;
+      let credential = get(/databases/$(database)/documents/clinicalCredentials/$(c.senderUid)).data;
+      return a.doctorUid == c.senderUid && a.facilityUid == c.recipientUid
+        && a.doctorKeyId == c.sender.keyId && a.contentHash == hash
+        && a.credentialEventId == credential.lastEventId && credential.status == 'approved';
+    }
+    function validReferralDelivery(d, c, id) {
+      return id.matches('[a-f0-9-]{36}_[a-f0-9-]{36}') && id.size() == 73
+        && d.keys().hasAll(['version','approvalId','contentHash','senderUid','recipientUid','senderKeyId','recipientKeyId','ciphertext','createdAt'])
+        && d.keys().hasOnly(['version','approvalId','contentHash','senderUid','recipientUid','senderKeyId','recipientKeyId','ciphertext','createdAt'])
+        && d.version == 1 && d.approvalId == id && fingerprint(d.contentHash)
+        && d.senderUid == c.senderUid && d.recipientUid == c.recipientUid
+        && d.senderKeyId == c.sender.keyId && d.recipientKeyId == c.recipient.keyId
+        && d.ciphertext is string && d.ciphertext.size() >= 200 && d.ciphertext.size() <= 700000
+        && d.ciphertext.matches('[A-Za-z0-9_.-]+') && d.createdAt is timestamp && d.createdAt == request.time
+        && currentReferralApproval(c, id, d.contentHash);
+    }
+    function validReferralInitiation(d, c, id, channelId) {
+      let received = get(/databases/$(database)/documents/channels/$(channelId)/referrals/$(id)).data;
+      let destination = channel(d.destinationChannelId);
+      let receiver = member(destination.recipientUid);
+      return d.keys().hasAll(['approvalId','contentHash','initiatedBy','destinationChannelId','destinationUid','destinationKeyId','createdAt'])
+        && d.keys().hasOnly(['approvalId','contentHash','initiatedBy','destinationChannelId','destinationUid','destinationKeyId','createdAt'])
+        && d.approvalId == id && d.contentHash == received.contentHash && fingerprint(d.contentHash)
+        && d.initiatedBy == request.auth.uid && d.initiatedBy == c.recipientUid
+        && d.destinationChannelId is string && d.destinationChannelId.size() > 0 && d.destinationChannelId.size() <= 200
+        && d.destinationChannelId.matches('[A-Za-z0-9_-]+') && d.destinationChannelId != channelId
+        && d.destinationUid is string && d.destinationUid.size() > 0 && d.destinationUid.size() <= 128
+        && d.destinationUid == destination.recipientUid && d.destinationUid != c.recipientUid
+        && fingerprint(d.destinationKeyId) && d.destinationKeyId == destination.recipient.keyId
+        && !('assignmentRouteId' in destination) && destination.senderUid == c.recipientUid
+        && destination.enabled == true && destination.members == [c.recipientUid,destination.recipientUid]
+        && destination.sender.keyId == c.recipient.keyId
+        && receiver.enabled == true && receiver.role == 'organization' && receiver.keyId == destination.recipient.keyId
+        && d.createdAt is timestamp && d.createdAt == request.time
+        && currentReferralApproval(c,id,d.contentHash);
+    }
     match /deviceRequests/{uid} {
       allow get: if own(uid);
       allow create: if own(uid) && isValidDevice(request.resource.data);
@@ -215,6 +272,17 @@ service cloud.firestore {
       // members so the UI can explain revocation. Clinical transfers remain blocked.
       allow get: if signedIn() && request.auth.uid in resource.data.members && approved(request.auth.uid);
       allow list: if signedIn() && request.auth.uid in resource.data.members && approved(request.auth.uid) && request.query.limit <= 20;
+      match /referrals/{approvalId} {
+        allow get: if referralChannel(channel(id));
+        allow list: if referralChannel(channel(id)) && request.query.limit <= 20;
+        allow create: if own(channel(id).senderUid) && referralChannel(channel(id))
+          && validReferralDelivery(request.resource.data,channel(id),approvalId);
+      }
+      match /referralInitiations/{approvalId} {
+        allow get: if referralChannel(channel(id));
+        allow create: if own(channel(id).recipientUid) && referralChannel(channel(id))
+          && validReferralInitiation(request.resource.data,channel(id),approvalId,id);
+      }
       match /transfers/{transferId} {
         allow get: if active(channel(id));
         allow list: if active(channel(id)) && request.query.limit <= 20;

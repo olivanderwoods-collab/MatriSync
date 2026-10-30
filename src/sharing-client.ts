@@ -119,7 +119,7 @@ export async function sharingChannels(
   await sharingAccount(uid);
   return result.docs.map((d) => ({ ...d.data(), id: d.id }) as SharingChannel);
 }
-async function checkedChannel(
+export async function checkedChannel(
   uid: string,
   channelId: string,
   device: SharingDevice,

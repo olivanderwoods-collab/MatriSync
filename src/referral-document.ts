@@ -37,14 +37,23 @@ export async function approvedReferralDocumentHtml(
   draft: ReferralDraft,
   versionId: string,
   approval: ReferralApproval,
+  versionNumber?: number,
 ) {
   await checkReferralApproval(draft, versionId, approval);
-  return renderReferralDocument(draft, versionId, approval);
+  if (
+    versionNumber !== undefined &&
+    (!Number.isInteger(versionNumber) ||
+      versionNumber < 1 ||
+      versionNumber > 100)
+  )
+    throw Error("Invalid referral version number.");
+  return renderReferralDocument(draft, versionId, approval, versionNumber);
 }
 function renderReferralDocument(
   draft: ReferralDraft,
   versionId: string,
   approval?: ReferralApproval,
+  versionNumber?: number,
 ) {
   validateReferralDrafts([draft]);
   const index = draft.versions.findIndex((version) => version.id === versionId);
@@ -79,7 +88,7 @@ footer { border-top: 1px solid #a9bdb6; margin-top: 24px; padding-top: 12px; bre
   footer { margin-top: 16px; padding-top: 8px; }
 }
 </style></head><body>
-<header><p>MatriSync</p><h1>Referral document · ${approval ? "APPROVED VERSION" : "DRAFT"}</h1><p class="status">${approval ? "Doctor approval recorded · Not initiated or sent" : "Not approved · Not sent"}</p><p>Version ${index + 1} · Saved ${text(version.savedAt)}</p></header>
+<header><p>MatriSync</p><h1>Referral document · ${approval ? "APPROVED VERSION" : "DRAFT"}</h1><p class="status">${approval ? "Doctor approval recorded · Delivery status recorded separately" : "Not approved · Not sent"}</p><p>Version ${versionNumber ?? index + 1} · Saved ${text(version.savedAt)}</p></header>
 <main><h2>${text(version.patient.name)}</h2><p>Date of birth: ${text(version.patient.birthDate)}</p>
 <dl class="identity"><dt>${draft.receivedOrigin ? "Shared profile ID" : "Local patient ID"}</dt><dd>${text(draft.receivedOrigin?.profileId || draft.patientId)}</dd><dt>Referral ID</dt><dd>${text(draft.id)}</dd><dt>Version ID</dt><dd>${text(version.id)}</dd><dt>Prepared by account</dt><dd>${text(draft.authorUid)}</dd><dt>Patient details recorded</dt><dd>${text(version.patient.updatedAt)}</dd>
 ${draft.receivedOrigin ? `<dt>Source account</dt><dd>${text(draft.receivedOrigin.sourceUid)}</dd><dt>Source patient ID</dt><dd>${text(draft.receivedOrigin.sourcePatientId)}</dd><dt>Received profile revision</dt><dd>${text(draft.receivedOrigin.profileRevision)}</dd><dt>Received on device</dt><dd>${text(draft.receivedOrigin.receivedAt)}</dd>` : ""}</dl>
