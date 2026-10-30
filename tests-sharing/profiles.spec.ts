@@ -4,6 +4,8 @@ import {
   approveMember,
   approveChannel,
   revokeChannel,
+  approveTestFacility,
+  approveCredentialScope,
 } from "../scripts/sharing-operator.mjs";
 
 async function account(page: Page, role: string) {
@@ -74,7 +76,7 @@ async function fetchRecords(page: Page) {
 test("profile versions retain identity, match original bytes, exclude unshared children and survive revocation", async ({
   browser,
 }, testInfo) => {
-  test.setTimeout(120000);
+  test.setTimeout(180000);
   const contexts = await Promise.all(
     [1, 2, 3, 4].map(() =>
       browser.newContext({ baseURL: "http://127.0.0.1:4175" }),
@@ -284,7 +286,9 @@ test("profile versions retain identity, match original bytes, exclude unshared c
       exact: true,
     });
     await expect(referralView).toContainText("Asha Profile Test");
-    await expect(referralView).toContainText("Not approved · Not sent");
+    await expect(referralView).toContainText(
+      "Approval is recorded separately below · Not sent",
+    );
     const referralOriginal = doctor.waitForEvent("download");
     await referralView
       .getByRole("button", {
@@ -331,6 +335,87 @@ test("profile versions retain identity, match original bytes, exclude unshared c
       .selectOption({ index: 1 });
     await expect(referralView).toContainText(
       "Recorded referral reason for shared Mother",
+    );
+    const referralUrl = doctor.url();
+    const review = doctor.getByRole("region", {
+      name: "Doctor review",
+      exact: true,
+    });
+    await review.getByRole("checkbox").check();
+    await review
+      .getByRole("button", { name: "Approve this version", exact: true })
+      .click();
+    await expect(review.getByRole("alert")).toContainText(
+      "facility-approved doctor credential is required",
+    );
+    await approveTestFacility(o.uid, o.fingerprint);
+    await approveCredentialScope(d.uid, o.uid, "doctor");
+    await doctor.goto("/professional/more/sharing");
+    const doctorCredentials = doctor.getByRole("region", {
+      name: "Clinical credentials",
+      exact: true,
+    });
+    await doctorCredentials
+      .getByRole("button", { name: "Refresh credentials" })
+      .click();
+    await doctorCredentials
+      .getByRole("button", { name: "Submit for facility review" })
+      .click();
+    await expect(doctorCredentials).toContainText("Recorded status: pending");
+    const facilityCredentials = facility.getByRole("region", {
+      name: "Clinical credentials",
+      exact: true,
+    });
+    await facilityCredentials
+      .getByRole("button", { name: "Refresh credentials" })
+      .click();
+    await facilityCredentials
+      .getByRole("button", { name: "Approve credential", exact: true })
+      .click();
+    await expect(facilityCredentials).toContainText(
+      "Recorded status: approved",
+    );
+    await doctor.goto(referralUrl);
+    await doctor
+      .getByRole("combobox", { name: "Saved referral draft", exact: true })
+      .selectOption({ index: 1 });
+    await review.getByRole("checkbox").check();
+    await review
+      .getByRole("button", { name: "Approve this version", exact: true })
+      .click();
+    await expect(review.getByRole("status")).toContainText(
+      "Doctor approval recorded for this version",
+    );
+    const approvedDownload = doctor.waitForEvent("download");
+    await review
+      .getByRole("button", { name: "Download approved copy", exact: true })
+      .click();
+    const approvedHtml = await readFile(
+      (await (await approvedDownload).path())!,
+      "utf8",
+    );
+    expect(approvedHtml).toContain("APPROVED VERSION");
+    expect(approvedHtml).toContain("Not initiated or sent");
+    expect(approvedHtml).toContain(firstVersion!);
+    const approvedPrint = await contexts[1].newPage();
+    await approvedPrint.route("**/approved-referral-print-check", (route) =>
+      route.fulfill({ contentType: "text/html", body: approvedHtml }),
+    );
+    await approvedPrint.goto("/approved-referral-print-check");
+    await approvedPrint.pdf({
+      path: testInfo.outputPath("approved-shared-referral.pdf"),
+      preferCSSPageSize: true,
+    });
+    await approvedPrint.close();
+    await doctor.reload();
+    await doctor
+      .getByRole("combobox", { name: "Saved referral draft", exact: true })
+      .selectOption({ index: 1 });
+    await review
+      .getByRole("button", { name: "Check saved approval", exact: true })
+      .click();
+    await expect(review.getByRole("status")).toContainText(
+      "approval was confirmed",
     );
     await doctor.screenshot({
       path: testInfo.outputPath("shared-profile-referral.png"),
@@ -404,6 +489,21 @@ test("profile versions retain identity, match original bytes, exclude unshared c
     await doctor
       .getByRole("combobox", { name: "Saved referral draft", exact: true })
       .selectOption({ index: 1 });
+    // Reopened from the encrypted vault with networking disabled; no approval
+    // lookup is needed to retrieve the historical approved copy.
+    await expect(
+      review.getByRole("button", {
+        name: "Download approved copy",
+        exact: true,
+      }),
+    ).toBeVisible();
+    const offlineApprovedDownload = doctor.waitForEvent("download");
+    await review
+      .getByRole("button", { name: "Download approved copy", exact: true })
+      .click();
+    expect(
+      await readFile((await (await offlineApprovedDownload).path())!, "utf8"),
+    ).toBe(approvedHtml);
     await doctor
       .getByRole("button", { name: "Edit latest draft", exact: true })
       .click();
@@ -422,6 +522,48 @@ test("profile versions retain identity, match original bytes, exclude unshared c
         .getByRole("combobox", { name: "Referral version", exact: true })
         .locator("option"),
     ).toHaveCount(2);
+    await expect(
+      review.getByRole("button", {
+        name: "Download approved copy",
+        exact: true,
+      }),
+    ).toHaveCount(0);
+    await review.getByRole("checkbox").check();
+    await review
+      .getByRole("button", { name: "Approve this version", exact: true })
+      .click();
+    await expect(review.getByRole("alert")).toContainText(
+      "Nothing was approved offline",
+    );
+    await contexts[1].setOffline(false);
+    await facility.goto("/organization/more/sharing");
+    await facilityCredentials
+      .getByRole("button", { name: "Refresh credentials" })
+      .click();
+    await facilityCredentials
+      .getByRole("button", { name: "Suspend credential", exact: true })
+      .click();
+    await expect(facilityCredentials).toContainText(
+      "Recorded status: suspended",
+    );
+    await review
+      .getByRole("button", { name: "Approve this version", exact: true })
+      .click();
+    await expect(review.getByRole("alert")).toContainText(
+      "facility-approved doctor credential is required",
+    );
+    await doctor
+      .getByRole("combobox", { name: "Referral version", exact: true })
+      .selectOption({ index: 0 });
+    await review
+      .getByRole("button", { name: "Check saved approval", exact: true })
+      .click();
+    await expect(review.getByRole("status")).toContainText(
+      "approval was confirmed",
+    );
+    await expect(referralView).not.toContainText(
+      "Local retained-copy draft note",
+    );
     await doctor
       .getByRole("navigation", { name: "Patient sections" })
       .getByRole("link", { name: "Overview", exact: true })

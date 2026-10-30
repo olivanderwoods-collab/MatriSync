@@ -65,6 +65,8 @@ The user has reaffirmed that the assistant owns all developer checks and should 
 
 ## Implementation order and target dates
 
+30 October continuation: the controlled test-account build now supports explicit facility credential review with immutable decision history, fixed doctor/caregiver categories and server-enforced approval of an exact saved referral version. The approved copy preserves the content digest, source references and authority event; edits require a separate approval. Confirmed receipts are cached in the encrypted account vault and remain readable/exportable offline after suspension, without allowing new approvals or future sharing. This supersedes the earlier approval-missing status, but does not complete the referral journey. Organization delivery/initiation, receiving events, documentation assistance and compact BLE handoff remain open. Public facility verification is still deferred. See `VERIFICATION-2026-10-30.md`.
+
 These are planning targets, not completion promises. Reassess against working evidence daily and reduce secondary scope before cutting the three core flows.
 
 1. **25–27 October:** establish the controlled-account permission and encrypted-sharing foundation; prove one document reaches the correct other account on a separate client. Specify the handoff and BLE contract alongside it.

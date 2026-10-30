@@ -62,7 +62,7 @@ export async function sharingAccount(uid: string) {
     throw Error("Sign in to this document's account.");
   return auth;
 }
-async function database(uid: string) {
+export async function database(uid: string) {
   if (
     !sharingPilotEnabled ||
     !["127.0.0.1", "localhost"].includes(location.hostname) ||

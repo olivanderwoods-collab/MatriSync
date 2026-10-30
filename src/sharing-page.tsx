@@ -29,6 +29,7 @@ import {
 } from "./sharing-profile";
 import { SharedProfilePanel } from "./sharing-profile-panel";
 import { SharingAssignmentPanel } from "./sharing-assignment-panel";
+import { SharingCredentialPanel } from "./sharing-credential-panel";
 
 export function SharingPage({ uid, role }: { uid: string; role: string }) {
   return (
@@ -143,6 +144,9 @@ function SharingContent({ uid, role }: { uid: string; role: string }) {
           performed outside the app; this button cannot approve an account.
         </p>
       </section>
+      {device && (
+        <SharingCredentialPanel uid={uid} role={role} device={device} />
+      )}
       {device && (
         <SharingAssignmentPanel uid={uid} role={role} device={device} />
       )}

@@ -1,4 +1,10 @@
-import { useState, type ReactNode } from "react";
+import { lazy, Suspense, useState, type ReactNode } from "react";
+import { sharingPilotEnabled } from "./sharing-config";
+const PilotReview = sharingPilotEnabled
+  ? lazy(() =>
+      import("./referral-review").then((m) => ({ default: m.ReferralReview })),
+    )
+  : null;
 import { useRecords } from "./records";
 import type { Patient } from "./records-model";
 import {
@@ -24,6 +30,20 @@ export function ReferralDrafts({ patient }: { patient: Patient }) {
     <ReferralDraftEditor
       drafts={drafts}
       originals={originals}
+      review={
+        PilotReview && vault
+          ? (draft, versionId) => (
+              <Suspense fallback={<p>Opening doctor review…</p>}>
+                <PilotReview
+                  key={`${draft.id}/${versionId}`}
+                  uid={vault.uid}
+                  draft={draft}
+                  versionId={versionId}
+                />
+              </Suspense>
+            )
+          : undefined
+      }
       save={async (fields, documents, id, version) => {
         if (!vault) throw Error("Open your records first.");
         const saved = await vault.saveReferralDraft(
@@ -55,6 +75,7 @@ export function ReferralDraftEditor({
   getOriginal,
   available,
   sourceNotice,
+  review,
 }: {
   drafts: ReferralDraft[];
   originals: ReferralReference[];
@@ -69,6 +90,7 @@ export function ReferralDraftEditor({
   ) => Promise<{ bytes: Uint8Array<ArrayBuffer>; name: string }>;
   available?: (reference: ReferralReference) => boolean;
   sourceNotice?: ReactNode;
+  review?: (draft: ReferralDraft, versionId: string) => ReactNode;
 }) {
   const [draftId, setDraftId] = useState("");
   const [versionId, setVersionId] = useState("");
@@ -142,7 +164,10 @@ export function ReferralDraftEditor({
       <h2>Referral drafts</h2>
       <p>
         Prepare the recorded facts for clinical review. Drafts stay on this
-        device; approval and facility transfer are not connected yet.
+        device.{" "}
+        {review
+          ? "Doctor review is separate from drafting; facility transfer is not connected yet."
+          : "Approval and facility transfer are not connected yet."}
       </p>
       {sourceNotice}
       {!editing && (
@@ -291,8 +316,12 @@ export function ReferralDraftEditor({
               className="referral-document"
               aria-label="Referral draft preview"
             >
-              <h3>Referral document · DRAFT</h3>
-              <p>Not approved · Not sent</p>
+              <h3>Referral document · {review ? "Saved version" : "DRAFT"}</h3>
+              <p>
+                {review
+                  ? "Approval is recorded separately below · Not sent"
+                  : "Not approved · Not sent"}
+              </p>
               <p className="small">
                 Version{" "}
                 {draft.versions.findIndex((v) => v.id === version.id) + 1} ·
@@ -371,6 +400,7 @@ export function ReferralDraftEditor({
                 Download an original to review it separately.
               </p>
             </article>
+            {review?.(draft, version.id)}
             <div className="action-row">
               <button
                 className="button secondary"

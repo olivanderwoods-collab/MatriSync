@@ -5,6 +5,7 @@ import { matchesProfileOriginal } from "./sharing-profile";
 import type { OpenedSharedRecords } from "./sharing-inbox";
 import { decodeFile } from "./sharing-crypto";
 import { receivedReferralOriginal } from "./shared-referral-source";
+import { ReferralReview } from "./referral-review";
 
 export function SharedReferralDrafts({
   uid,
@@ -73,6 +74,14 @@ function ReceivedDraftEditor({
         ) || []
       }
       originals={snapshot.documents}
+      review={(draft, versionId) => (
+        <ReferralReview
+          key={`${draft.id}/${versionId}`}
+          uid={uid}
+          draft={draft}
+          versionId={versionId}
+        />
+      )}
       sourceNotice={
         <p>
           Using the selected received profile version. Each profile version has

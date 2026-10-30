@@ -9,6 +9,11 @@ for (const file of assets.filter((name) => name.endsWith(".js"))) {
     text.includes("deviceRequests") ||
     text.includes("assignmentRoutes") ||
     text.includes("staffAssignments") ||
+    text.includes("clinicalCredentials") ||
+    // The local vault retains referralApprovals for lossless record parsing.
+    // These markers identify the pilot approval client and UI, not that schema.
+    text.includes("Go online to confirm doctor authority") ||
+    text.includes("Doctor review of this version") ||
     text.includes("matrisync-sharing-pilot-v1")
   )
     throw Error("Local sharing pilot leaked into a distributable build");

@@ -176,11 +176,30 @@ Professional received profiles now include local referral preparation against th
 
 The four-account browser scenario verifies version separation, original downloads, selected-version exports, reload, workspace denial and offline retained-copy editing. Unit tests independently cover wrong-patient matching and vault preservation. See `VERIFICATION-2026-10-29.md`. The normal distribution still excludes this pilot. Generic professional enrollment is not verified doctor authority: clinical approval, facility initiation and referral transmission remain unimplemented.
 
-## Next implementation milestones
+## Facility credentials and exact-version approval — 30 October 2026
+
+The local operator first explicitly enrolls the test facility as an approver, then fixes each professional's named facility and doctor/caregiver category. These are separate from ordinary Organization membership. The professional submits a request; only that facility can approve/reject it or suspend an approved credential. Rejected requests can be resubmitted; suspension is terminal in this stage. Every transition atomically records an immutable attributed history event. No public verification or upload of license/evidence documents is enabled.
+
+Operator-only loopback commands (technical setup remains the assistant's responsibility):
+
+```text
+node scripts/sharing-operator.mjs approve-test-facility <facilityUid> <fingerprint>
+node scripts/sharing-operator.mjs approve-credential-scope <staffUid> <facilityUid> <doctor|caregiver>
+```
+
+An actively approved doctor may approve an exact saved referral version. The immutable server record is namespaced by doctor and draft/version identity, and binds the current credential event, enrolled key and SHA-256 content digest. It contains no clinical plaintext. The app rechecks the digest against the saved facts, patient/source version and original-document references before displaying or exporting an approved copy. Approval is separate from facility initiation, sending, recipient acceptance and handoff. A caregiver credential never confers doctor approval authority.
+
+Confirmed approval receipts are cached inside the existing encrypted account vault, excluded from the old cloud-backup projection, and scoped to the author and professional workspace. Retained copies can reopen/export offline after suspension. Creating an approval still requires an online server check. Missing server results do not erase a previously saved receipt; a conflicting receipt is rejected. This receipt is historical evidence checked against the authenticated relay, not a portable independently verifiable certificate or a current delivery grant. Recipient validation and encrypted approved-document delivery remain subsequent work.
+
+When a professional has a credential scope, pending/rejected/suspended credentials or disabled/changed scope, member, facility or device approval block future direct and assignment transfers. Legacy explicitly enrolled test pairs without a credential scope retain their prior record-exchange permission, but cannot approve referrals. This compatibility path must not be described as public verified-clinician access.
+
+The final local checks cover 28 rules cases, 83 unit tests and all three sharing browser scenarios, including approval/export, fresh approval after edits, offline cached copies and suspension. See `VERIFICATION-2026-10-30.md` for regression and visual evidence. These remain prototype access rules requiring independent review before broader release; the user is not assigned developer security checks.
+
+## Remaining implementation milestones
 
 1. Bind the implemented source-scoped identities and preserved versions to authoritative patient identities and profile loading/claim; integrate approved assignments and authorized records into patient workspaces and prevent revoked-code regrant.
 2. Larger encrypted original attachments, durable acknowledged outbox, pagination, restart/retry/conflict handling and a reviewed multi-device/recovery protocol.
-3. Doctor-reviewed referral document, organization initiation, receiving acknowledgment and correct authorized profile retrieval.
-4. Compact handoff protocol plus actual MatriSync hardware or honestly labelled BLE simulator; then RUHI branding and genuine offline-model acceptance on intended devices.
+3. Encrypted delivery of the exact doctor-approved document, Organization initiation, receiving acknowledgement and correct authorized profile retrieval; source-preserving clinician documentation assistance.
+4. Compact handoff protocol plus actual MatriSync hardware or honestly labelled BLE simulator; genuine offline-model acceptance on intended presentation devices. RUHI branding and actual offline inference on the Windows/Edge development machine are already checked.
 
 References: [JOSE CompactEncrypt](https://github.com/panva/jose/blob/main/docs/jwe/compact/encrypt/classes/CompactEncrypt.md), [Firebase Firestore emulator](https://firebase.google.com/docs/emulator-suite/connect_firestore), [Firebase Auth emulator](https://firebase.google.com/docs/emulator-suite/connect_auth). This implements the authorized controlled-account scope in `SUBMISSION-CORE-PLAN.md`; public verification remains deferred.

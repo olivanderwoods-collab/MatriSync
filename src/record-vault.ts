@@ -12,6 +12,10 @@ import {
 } from "./referral-draft";
 import { sharingPilotEnabled } from "./sharing-config";
 import {
+  checkReferralApproval,
+  validateReferralApprovals,
+} from "./referral-approval";
+import {
   commitVault,
   readFile,
   readVault,
@@ -101,6 +105,12 @@ export class RecordVault {
       inventoryLedger:
         this.workspace === "organization"
           ? this.records.inventoryLedger
+          : undefined,
+      referralApprovals:
+        this.workspace === "professional"
+          ? this.records.referralApprovals?.filter(
+              (a) => a.doctorUid === this.uid,
+            )
           : undefined,
       inventoryReturns:
         this.workspace === "organization"
@@ -333,6 +343,39 @@ export class RecordVault {
     validateReferralDrafts(next);
     await this.persist({ ...records, referralDrafts: next });
     return item.id;
+  }
+  async cacheReferralApproval(draftId: string, versionId: string) {
+    if (!sharingPilotEnabled)
+      throw Error("Referral approval is not enabled in this build.");
+    await this.authorize();
+    const draft = this.data?.referralDrafts?.find((d) => d.id === draftId);
+    if (this.workspace !== "professional" || !draft)
+      throw Error("Open the professional referral first.");
+    const epoch = this.epoch;
+    const { readReferralApproval } = await import(
+      "./sharing-referral-approval"
+    );
+    const approval = await readReferralApproval(this.uid, draft, versionId);
+    if (!approval) return undefined;
+    await checkReferralApproval(draft, versionId, approval);
+    await this.authorize();
+    if (epoch !== this.epoch || !this.records)
+      throw Error(
+        "The record session changed. No offline approval copy was saved.",
+      );
+    const previous = this.records.referralApprovals || [];
+    const existing = previous.find((a) => a.id === approval.id);
+    if (existing) {
+      if (JSON.stringify(existing) !== JSON.stringify(approval))
+        throw Error(
+          "The approval receipt changed. The saved copy was preserved.",
+        );
+      return existing;
+    }
+    const next = [...previous, approval];
+    validateReferralApprovals(next, this.records.referralDrafts || []);
+    await this.persist({ ...this.records, referralApprovals: next });
+    return approval;
   }
   async saveReceivedReferralDraft(
     profileId: string,

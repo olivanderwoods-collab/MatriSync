@@ -214,6 +214,57 @@ export async function revokeMember(uid) {
   if (!member) throw Error("Member not found.");
   await operatorWrite(`members/${uid}`, { ...member, enabled: false });
 }
+// Explicit bootstrap for the approved-test-account scope only. This is not
+// public verification and does not make an Organization its own approver.
+export async function approveTestFacility(uid, fingerprint) {
+  await verifiedRequest(uid, fingerprint);
+  const member = await operatorRead(`members/${uid}`);
+  if (
+    !member?.enabled ||
+    member.role !== "organization" ||
+    member.keyId !== fingerprint
+  )
+    throw Error("Approve this Organization and its enrolled device first.");
+  await operatorWrite(
+    `facilityApprovers/${uid}`,
+    { enabled: true, keyId: fingerprint },
+    true,
+  );
+}
+export async function approveCredentialScope(staffUid, facilityUid, category) {
+  segment(staffUid);
+  segment(facilityUid);
+  if (staffUid === facilityUid || !["doctor", "caregiver"].includes(category))
+    throw Error(
+      "Choose a distinct professional and facility and a fixed credential category.",
+    );
+  const staff = await operatorRead(`members/${staffUid}`),
+    facility = await operatorRead(`members/${facilityUid}`),
+    approver = await operatorRead(`facilityApprovers/${facilityUid}`);
+  if (
+    !staff?.enabled ||
+    staff.role !== "professional" ||
+    !facility?.enabled ||
+    facility.role !== "organization" ||
+    !approver?.enabled ||
+    approver.keyId !== facility.keyId
+  )
+    throw Error("Approve the test facility approver and professional first.");
+  await verifiedRequest(staffUid, staff.keyId);
+  await verifiedRequest(facilityUid, facility.keyId);
+  await operatorWrite(
+    `credentialScopes/${staffUid}`,
+    {
+      enabled: true,
+      staffUid,
+      facilityUid,
+      category,
+      staffKeyId: staff.keyId,
+      facilityKeyId: facility.keyId,
+    },
+    true,
+  );
+}
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
@@ -225,6 +276,8 @@ if (
     "approve-assignment-scope": approveAssignmentRoute,
     "revoke-connection": revokeChannel,
     "revoke-account": revokeMember,
+    "approve-test-facility": approveTestFacility,
+    "approve-credential-scope": approveCredentialScope,
   };
   try {
     if (!actions[action])

@@ -4,6 +4,10 @@ import {
   type AccountProfileKind,
 } from "./account-profile-model";
 import { validateReferralDrafts, type ReferralDraft } from "./referral-draft";
+import {
+  validateReferralApprovals,
+  type ReferralApproval,
+} from "./referral-approval";
 import { validateLedger, type LedgerEntry } from "./inventory-ledger-model";
 import {
   validateReturns,
@@ -95,6 +99,7 @@ export type LocalDocument = {
 };
 export type RecordData = {
   referralDrafts?: ReferralDraft[];
+  referralApprovals?: ReferralApproval[];
   version: 1;
   patients: Patient[];
   documents: LocalDocument[];
@@ -204,6 +209,11 @@ export function parseRecords(bytes: Uint8Array): RecordData {
         throw Error("Invalid referral patient or document link.");
     }
   }
+  if (value.referralApprovals !== undefined)
+    validateReferralApprovals(
+      value.referralApprovals,
+      value.referralDrafts || [],
+    );
   if (value.inventoryReturns !== undefined)
     validateReturns(value.inventoryReturns);
   for (const entry of value.inventoryLedger || []) {

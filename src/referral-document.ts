@@ -3,6 +3,10 @@ import {
   validateReferralDrafts,
   type ReferralDraft,
 } from "./referral-draft";
+import {
+  checkReferralApproval,
+  type ReferralApproval,
+} from "./referral-approval";
 
 export const referralLabels = {
   reason: "Reason for referral",
@@ -27,6 +31,21 @@ const escape = (value: string) =>
 // Standalone, inert document: only explicitly selected saved-version fields.
 // No scripts, remote resources, full profile, credentials or attachment bytes.
 export function referralDocumentHtml(draft: ReferralDraft, versionId: string) {
+  return renderReferralDocument(draft, versionId);
+}
+export async function approvedReferralDocumentHtml(
+  draft: ReferralDraft,
+  versionId: string,
+  approval: ReferralApproval,
+) {
+  await checkReferralApproval(draft, versionId, approval);
+  return renderReferralDocument(draft, versionId, approval);
+}
+function renderReferralDocument(
+  draft: ReferralDraft,
+  versionId: string,
+  approval?: ReferralApproval,
+) {
   validateReferralDrafts([draft]);
   const index = draft.versions.findIndex((version) => version.id === versionId);
   if (index < 0) throw Error("Choose a saved referral version first.");
@@ -36,9 +55,9 @@ export function referralDocumentHtml(draft: ReferralDraft, versionId: string) {
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
-<title>MatriSync referral draft</title>
+<title>MatriSync referral ${approval ? "approved version" : "draft"}</title>
 <style>
-@page { size: A4; margin: 18mm; @top-left { content: "MatriSync - Referral DRAFT"; font: 9px Arial, sans-serif; } @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 9px Arial, sans-serif; } }
+@page { size: A4; margin: 18mm; @top-left { content: "MatriSync - Referral ${approval ? "APPROVED VERSION" : "DRAFT"}"; font: 9px Arial, sans-serif; } @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 9px Arial, sans-serif; } }
 * { box-sizing: border-box; }
 body { max-width: 800px; margin: 32px auto; padding: 0 24px; color: #142f29; background: white; font: 14px/1.45 Arial, sans-serif; }
 header { border-bottom: 2px solid #16765e; padding-bottom: 12px; }
@@ -50,6 +69,7 @@ dt { font-weight: bold; } dd { margin: 0 0 6px; }
 li { break-inside: avoid; margin-bottom: 10px; }
 .status { font-weight: bold; color: #803f16; }
 .identity, .sources, footer { font-size: 12px; }
+.approval-record { break-inside: avoid; break-after: avoid; }
 footer { border-top: 1px solid #a9bdb6; margin-top: 24px; padding-top: 12px; break-inside: avoid; }
 @media print {
   body { margin: 0; padding: 0; max-width: none; color: #000; }
@@ -59,7 +79,7 @@ footer { border-top: 1px solid #a9bdb6; margin-top: 24px; padding-top: 12px; bre
   footer { margin-top: 16px; padding-top: 8px; }
 }
 </style></head><body>
-<header><p>MatriSync</p><h1>Referral document · DRAFT</h1><p class="status">Not approved · Not sent</p><p>Version ${index + 1} · Saved ${text(version.savedAt)}</p></header>
+<header><p>MatriSync</p><h1>Referral document · ${approval ? "APPROVED VERSION" : "DRAFT"}</h1><p class="status">${approval ? "Doctor approval recorded · Not initiated or sent" : "Not approved · Not sent"}</p><p>Version ${index + 1} · Saved ${text(version.savedAt)}</p></header>
 <main><h2>${text(version.patient.name)}</h2><p>Date of birth: ${text(version.patient.birthDate)}</p>
 <dl class="identity"><dt>${draft.receivedOrigin ? "Shared profile ID" : "Local patient ID"}</dt><dd>${text(draft.receivedOrigin?.profileId || draft.patientId)}</dd><dt>Referral ID</dt><dd>${text(draft.id)}</dd><dt>Version ID</dt><dd>${text(version.id)}</dd><dt>Prepared by account</dt><dd>${text(draft.authorUid)}</dd><dt>Patient details recorded</dt><dd>${text(version.patient.updatedAt)}</dd>
 ${draft.receivedOrigin ? `<dt>Source account</dt><dd>${text(draft.receivedOrigin.sourceUid)}</dd><dt>Source patient ID</dt><dd>${text(draft.receivedOrigin.sourcePatientId)}</dd><dt>Received profile revision</dt><dd>${text(draft.receivedOrigin.profileRevision)}</dd><dt>Received on device</dt><dd>${text(draft.receivedOrigin.receivedAt)}</dd>` : ""}</dl>
@@ -67,7 +87,8 @@ ${referralFields.map((field) => `<section><h2>${referralLabels[field]}</h2><p>${
 <section class="sources"><h2>Original document references</h2>
 ${version.documents.length ? `<ol>${version.documents.map((document) => `<li>${text(document.name)}\nSource: ${text(document.source)}\nDocument date: ${text(document.reportDate)}\nDocument ID: ${text(document.id)}</li>`).join("\n")}</ol>` : "<p>None selected.</p>"}
 <p>References only. Original files are not embedded or transmitted with this document.</p></section></main>
-<footer>Draft for review. This copy is not clinical approval, facility initiation or proof of handoff. Blank optional fields remain unknown. This exported copy is outside the encrypted MatriSync vault.</footer>
+${approval ? `<section class="sources approval-record"><h2>Doctor approval record</h2><p>Approved by account: ${text(approval.doctorUid)}\nCredential-reviewing facility: ${text(approval.facilityUid)}\nRecorded at: ${text(approval.createdAt)}\nCredential decision: ${text(approval.credentialEventId)}\nApproved content digest: ${text(approval.contentHash)}</p></section>` : ""}
+<footer>${approval ? "Approval applies only to this saved version. This copy is not facility initiation, recipient acceptance or proof of handoff. Future sharing requires current authorization." : "Draft for review. This copy is not clinical approval, facility initiation or proof of handoff."} Blank optional fields remain unknown. This exported copy is outside the encrypted MatriSync vault.</footer>
 </body></html>`;
 }
 
@@ -108,13 +129,15 @@ export function printReferralDocument(html: string): Promise<void> {
   });
 }
 
-export function downloadReferralDocument(html: string) {
+export function downloadReferralDocument(html: string, approved = false) {
   const url = URL.createObjectURL(
     new Blob([html], { type: "text/html;charset=utf-8" }),
   );
   const link = document.createElement("a");
   link.href = url;
-  link.download = "MatriSync-referral-draft.html";
+  link.download = approved
+    ? "MatriSync-referral-approved-version.html"
+    : "MatriSync-referral-draft.html";
   link.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
