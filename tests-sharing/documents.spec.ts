@@ -8,10 +8,11 @@ import {
 } from "../scripts/sharing-operator.mjs";
 
 async function enroll(page: Page, role: string) {
+  const email = `sharing-${role}-${Date.now()}@example.test`;
   await page.goto(`/auth/signup?role=${role}`);
   await page
     .getByLabel("Email address", { exact: true })
-    .fill(`sharing-${role}-${Date.now()}@example.test`);
+    .fill(email);
   await page.getByLabel("Password", { exact: true }).fill("Synthetic-test-42!");
   await page
     .getByLabel("Confirm password", { exact: true })
@@ -34,7 +35,7 @@ async function enroll(page: Page, role: string) {
   await expect(page.getByRole("alert")).toContainText(
     "awaiting explicit pilot approval",
   );
-  return { uid, fingerprint, role };
+  return { uid, fingerprint, role, email };
 }
 async function refresh(page: Page, channel: string) {
   await page
@@ -245,4 +246,123 @@ test("separate accounts exchange original encrypted bytes; revocation preserves 
   } finally {
     await Promise.all(contexts.map((c) => c.close()));
   }
+});
+
+test("encrypted outbox recovers lost acknowledgement without duplicates and blocks revoked queued sends", async ({ browser }, testInfo) => {
+  test.setTimeout(120000);
+  const contexts = await Promise.all([0, 1].map(() => browser.newContext({ baseURL: "http://127.0.0.1:4175", viewport: { width: 390, height: 844 } })));
+  const [mother, clinician] = await Promise.all(contexts.map(c => c.newPage()));
+  const errors: string[] = [];
+  for (const page of [mother, clinician]) page.on("pageerror", e => errors.push(e.message));
+  try {
+    const m = await enroll(mother, "mother"), c = await enroll(clinician, "professional");
+    for (const a of [m, c]) await approveMember(a.uid, a.role, a.fingerprint);
+    const channel = `outbox-${Date.now()}`;
+    await approveChannel(channel, m.uid, c.uid);
+    await refresh(mother, channel);
+    await mother.getByLabel("Other device fingerprint").fill(c.fingerprint);
+    const original = Buffer.from("%PDF-1.7\nOutbox confidential original bytes\n%%EOF");
+    await mother.getByLabel("Original test document").setInputFiles({ name: "private-outbox-original.pdf", mimeType: "application/pdf", buffer: original });
+    // Fault injection: relay commit succeeds, but saving its local acknowledgement fails once.
+    await mother.evaluate(() => {
+      const originalPut = IDBObjectStore.prototype.put;
+      IDBObjectStore.prototype.put = function(value, key) {
+        if (this.transaction.db.name === "matrisync-sharing-outbox-v1" && value.acknowledgedAt) {
+          IDBObjectStore.prototype.put = originalPut;
+          this.transaction.abort();
+          return undefined as unknown as IDBRequest;
+        }
+        return originalPut.call(this, value, key);
+      };
+    });
+    await mother.getByRole("button", { name: "Encrypt and send document" }).click();
+    await expect(mother.getByRole("alert").filter({ hasText: "acknowledgement could not be saved" })).toBeVisible();
+    const outbox = mother.getByRole("region", { name: "Encrypted send outbox", exact: true });
+    await expect(outbox).toContainText("Awaiting relay confirmation");
+    const listRelay = async () => {
+      const response = await fetch(`http://127.0.0.1:8087/v1/projects/demo-matrisync/databases/(default)/documents/channels/${channel}/transfers`, { headers: { Authorization: "Bearer owner" } });
+      expect(response.ok).toBe(true);
+      return (await response.json()).documents || [];
+    };
+    const first = await listRelay();
+    expect(first).toHaveLength(1);
+    const bytes = JSON.stringify(first);
+    expect(bytes).not.toContain(original.toString());
+    expect(bytes).not.toContain("private-outbox-original.pdf");
+    const persisted = await mother.evaluate(async () => {
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        const r = indexedDB.open("matrisync-sharing-outbox-v1"); r.onsuccess = () => resolve(r.result); r.onerror = reject;
+      });
+      const items = await new Promise<unknown[]>((resolve, reject) => {
+        const tx = db.transaction("outbox", "readonly"), r = tx.objectStore("outbox").getAll();
+        tx.oncomplete = () => resolve(r.result); tx.onerror = reject;
+      });
+      db.close(); return JSON.stringify(items);
+    });
+    expect(persisted).not.toContain("private-outbox-original.pdf");
+    expect(persisted).not.toContain(original.toString("base64"));
+    await mother.reload();
+    await expect(outbox.getByRole("button", { name: "Resume / Check delivery" })).toBeVisible();
+    await contexts[0].setOffline(true);
+    await outbox.getByRole("button", { name: "Resume / Check delivery" }).click();
+    await expect(outbox.getByRole("alert")).toContainText("still queued");
+    await contexts[0].setOffline(false);
+    const secondTab = await contexts[0].newPage();
+    secondTab.on("pageerror", e => errors.push(e.message));
+    await secondTab.goto("/mother/more/sharing");
+    await secondTab.getByLabel("Email address", { exact: true }).fill(m.email);
+    await secondTab.getByLabel("Password", { exact: true }).fill("Synthetic-test-42!");
+    await secondTab.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(secondTab.locator(".demo-banner")).toContainText("Signed-in account");
+    await secondTab.goto("/mother/more/sharing");
+    const secondOutbox = secondTab.getByRole("region", { name: "Encrypted send outbox", exact: true });
+    await expect(secondOutbox.getByRole("button", { name: "Resume / Check delivery" })).toBeVisible();
+    await Promise.all([
+      outbox.getByRole("button", { name: "Resume / Check delivery" }).click(),
+      secondOutbox.getByRole("button", { name: "Resume / Check delivery" }).click(),
+    ]);
+    await expect(outbox).toContainText("Relay storage confirmed");
+    await expect(secondOutbox).toContainText("Relay storage confirmed");
+    expect(await listRelay()).toEqual(first);
+    await secondTab.close();
+    await refresh(clinician, channel);
+    await clinician.getByLabel("Other device fingerprint").fill(m.fingerprint);
+    await clinician.getByRole("button", { name: "Fetch approved records" }).click();
+    await expect(clinician.getByRole("button", { name: "Open saved document" })).toHaveCount(1);
+    await clinician.getByRole("button", { name: "Open saved document" }).click();
+    expect(await download(clinician)).toEqual(original);
+    await expect(clinician.getByRole("region", { name: "Encrypted send outbox", exact: true })).toContainText("No prepared deliveries");
+    await refresh(mother, channel);
+    await mother.getByLabel("Original test document").setInputFiles({ name: "pending-original.pdf", mimeType: "application/pdf", buffer: original });
+    // Stop exactly after durable enqueue, before the publication preflight.
+    await mother.evaluate(() => {
+      const originalAdd = IDBObjectStore.prototype.add;
+      IDBObjectStore.prototype.add = function(value, key) {
+        if (this.transaction.db.name === "matrisync-sharing-outbox-v1") {
+          IDBObjectStore.prototype.add = originalAdd;
+          this.transaction.addEventListener("complete", () => {
+            Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false });
+          });
+        }
+        return originalAdd.call(this, value, key);
+      };
+    });
+    await mother.getByRole("button", { name: "Encrypt and send document" }).click();
+    await expect(mother.getByRole("alert").filter({ hasText: "still queued" })).toBeVisible();
+    expect(await listRelay()).toEqual(first);
+    await mother.reload();
+    await expect(outbox).toContainText("Awaiting relay confirmation");
+    await mother.goto("/organization/more/sharing");
+    await expect(mother.getByRole("region", { name: "Encrypted send outbox", exact: true })).toContainText("No prepared deliveries");
+    await mother.goto("/mother/more/sharing");
+    await expect(outbox).toContainText("Awaiting relay confirmation");
+    await revokeChannel(channel);
+    await outbox.getByRole("button", { name: "Resume / Check delivery" }).click();
+    await expect(outbox.getByRole("alert")).toContainText("blocked");
+    await expect(outbox).toContainText("Awaiting relay confirmation");
+    expect(await listRelay()).toEqual(first);
+    await expect(mother.locator("body")).toHaveJSProperty("scrollWidth", 390);
+    await outbox.screenshot({ path: testInfo.outputPath("encrypted-outbox-mobile.png") });
+    expect(errors).toEqual([]);
+  } finally { await Promise.all(contexts.map(c => c.close())); }
 });

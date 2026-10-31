@@ -30,6 +30,7 @@ import {
 import { SharedProfilePanel } from "./sharing-profile-panel";
 import { SharingAssignmentPanel } from "./sharing-assignment-panel";
 import { SharingCredentialPanel } from "./sharing-credential-panel";
+import { SharingOutboxPanel } from "./sharing-outbox-panel";
 
 export function SharingPage({ uid, role }: { uid: string; role: string }) {
   return (
@@ -54,6 +55,7 @@ function SharingContent({ uid, role }: { uid: string; role: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
+  const [outboxRevision, setOutboxRevision] = useState(0);
   useEffect(() => {
     let live = true;
     void (async () => {
@@ -91,6 +93,7 @@ function SharingContent({ uid, role }: { uid: string; role: string }) {
       );
     } finally {
       setBusy(false);
+      setOutboxRevision(n => n + 1);
     }
   }
   const channel = channels.find((c) => c.id === channelId);
@@ -150,6 +153,8 @@ function SharingContent({ uid, role }: { uid: string; role: string }) {
       {device && (
         <SharingAssignmentPanel uid={uid} role={role} device={device} />
       )}
+      {device && <SharingOutboxPanel uid={uid} role={role} device={device} revision={outboxRevision}
+        onConfirmed={id => { if (id === transferId) setTransferId(crypto.randomUUID()); }} />}
       {channels.length > 0 && (
         <section className="panel">
           <h2>Share patient records</h2>
