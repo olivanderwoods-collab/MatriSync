@@ -11,6 +11,7 @@ import { groupProfileVersions } from "./sharing-profile";
 import { SharedProfileView } from "./sharing-profile-view";
 import { decodeFile, type SharedDocument } from "./sharing-crypto";
 import { SharedReferralDrafts } from "./shared-referral-drafts";
+import { AssignmentWorkspace } from "./sharing-assignment-workspace";
 
 export function SharedPatients({
   uid,
@@ -208,6 +209,15 @@ export function SharedPatients({
           uid={uid}
           selected={selected}
           documents={data.documents}
+        />
+      )}
+      {role === "organization" && tab === "overview" && (
+        <AssignmentWorkspace
+          key={`${uid}/${group.profileId}`}
+          uid={uid}
+          role={role}
+          view="facility"
+          profileId={group.profileId}
         />
       )}
     </>

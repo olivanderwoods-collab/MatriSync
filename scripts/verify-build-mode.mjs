@@ -9,6 +9,8 @@ for (const file of assets.filter((name) => name.endsWith(".js"))) {
     text.includes("deviceRequests") ||
     text.includes("assignmentRoutes") ||
     text.includes("staffAssignments") ||
+    text.includes("Opening patient assignments") ||
+    text.includes("Receive assigned records") ||
     text.includes("clinicalCredentials") ||
     text.includes("referralInitiations") ||
     text.includes("forwardedReferrals") ||

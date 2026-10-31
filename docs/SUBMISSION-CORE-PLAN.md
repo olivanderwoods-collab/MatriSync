@@ -90,3 +90,10 @@ After every milestone, report working behavior, actual verification, remaining l
 ## Destination continuation — 31 October 2026
 
 The selected receiving Organization now receives the exact original doctor-signed approved referral inside an initiating-Organization signed/encrypted envelope. Receipt, acceptance, arrival confirmation, handoff acknowledgement and closure are distinct immutable receiving-account events. Independently authorized source-to-destination profile/original sharing resolves the patient without granting profile access from referral metadata. An unavailable referenced revision opens no substitute. This supersedes earlier destination/event-missing status in this document. See [protocol](DESTINATION-REFERRAL-PROTOCOL.md) and [verified checkpoint](VERIFICATION-2026-10-31-DESTINATION.md) for trust boundaries, tests and remaining work. The full submission core, BLE transport and final distribution integration remain incomplete.
+
+
+## Staff workspace continuation — 31 October 2026
+
+Controlled staff assignments are now integrated into professional Home (pending) and Patients (accepted or revoked), Organization Staff Management and the received patient Overview, and Mother permissions (read-only scope visibility). Acceptance is distinct from actual encrypted record receipt. Empty/offline receive attempts do not report success; revoked assignments retain saved offline profile access and preserve independent direct grants. Existing account/device/assignment checks are unchanged. All four sharing journeys, 39 rules tests, 84 unit tests, 26 general and 18 account browser cases passed, along with lint and both builds. See [verified checkpoint](VERIFICATION-2026-10-31-STAFF-WORKSPACES.md).
+
+Authoritative permanent-code loading and atomic first Mother claim remain next work, not implemented by these screens. The [identity implementation boundary](PATIENT-IDENTITY-IMPLEMENTATION-BOUNDARY.md) records the required service, proof, recipient-key and preservation checks. No production activation or public verification is claimed.

@@ -28,6 +28,13 @@ const SharedPatients = sharingPilotEnabled
       })),
     )
   : () => null;
+const AssignmentWorkspace = sharingPilotEnabled
+  ? React.lazy(() =>
+      import("./sharing-assignment-workspace").then((m) => ({
+        default: m.AssignmentWorkspace,
+      })),
+    )
+  : () => null;
 import {
   BrowserRouter,
   Link,
@@ -1020,6 +1027,27 @@ function WorkspaceBody() {
             </React.Suspense>
           ) : !app.demo &&
             sharingPilotEnabled &&
+            ((r === "organization" && path === "more/staff") ||
+              (r === "mother" && path === "more/permissions")) ? (
+            <>
+              <h1>
+                {r === "organization"
+                  ? "Staff Management"
+                  : "Connected Accounts and Permissions"}
+              </h1>
+              <React.Suspense
+                fallback={<p role="status">Opening staff access…</p>}
+              >
+                <AssignmentWorkspace
+                  key={`${app.user!.uid}/${r}`}
+                  uid={app.user!.uid}
+                  role={r}
+                  view={r === "organization" ? "facility" : "source"}
+                />
+              </React.Suspense>
+            </>
+          ) : !app.demo &&
+            sharingPilotEnabled &&
             r !== "mother" &&
             path.startsWith("patients/shared-") ? (
             <React.Suspense
@@ -1120,14 +1148,32 @@ function WorkspaceBody() {
               Encrypted sharing pilot
             </Link>
           )}
-          {r === "professional" && path === "overview" && <TestAssignments />}
+          {!app.demo &&
+            sharingPilotEnabled &&
+            r === "professional" &&
+            ["overview", "patients"].includes(path) && (
+              <React.Suspense
+                fallback={<p role="status">Opening patient assignments…</p>}
+              >
+                <AssignmentWorkspace
+                  key={`${app.user!.uid}/${path}`}
+                  uid={app.user!.uid}
+                  role={r}
+                  view={path === "overview" ? "pending" : "patients"}
+                />
+              </React.Suspense>
+            )}
+          {r === "professional" &&
+            path === "overview" &&
+            (!sharingPilotEnabled || app.demo) && <TestAssignments />}
           {app.demo && r === "professional" && path === "patients" && (
             <TestAssignments accepted />
           )}
-          {r === "mother" && path === "more/permissions" && (
-            <TestLink role={r} />
-          )}
+          {r === "mother" &&
+            path === "more/permissions" &&
+            (!sharingPilotEnabled || app.demo) && <TestLink role={r} />}
           {r !== "mother" &&
+            (!sharingPilotEnabled || app.demo) &&
             (path === "more/verification" || path === "more/staff") && (
               <TestLink role={r} />
             )}
