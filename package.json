@@ -15,7 +15,9 @@
     "test:rules": "vitest run --config vitest.rules.config.ts",
     "test:auth": "playwright test --config playwright.auth.config.ts",
     "dev:sharing": "node scripts/start-sharing-pilot.mjs",
-    "test:sharing": "playwright test --config playwright.sharing.config.ts"
+    "test:sharing": "playwright test --config playwright.sharing.config.ts",
+    "test:identity": "vitest run --config vitest.identity.config.ts",
+    "dev:identity": "node scripts/identity/server.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "3.8.1",

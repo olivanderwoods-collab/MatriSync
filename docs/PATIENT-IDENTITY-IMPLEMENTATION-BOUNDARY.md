@@ -1,3 +1,9 @@
+# Latest implementation status — 31 October 2026
+
+The local metadata foundation is now implemented and tested. Read [the review-stage protocol](PATIENT-IDENTITY-REVIEW-STAGE.md) and [verification](VERIFICATION-2026-10-31-IDENTITY.md). No app or clinical integration is activated; independent review, recipient-key delivery and local-record conflict handling remain outstanding. The contract below is preserved as the starting requirements, not the latest backend-existence status.
+
+---
+
 # Patient identity and permanent-code continuation — 31 October 2026
 
 Status: implementation boundary and next-work contract. This is not an implemented ownership service or an independently reviewed cryptographic protocol.

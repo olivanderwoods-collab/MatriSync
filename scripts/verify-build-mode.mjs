@@ -5,6 +5,8 @@ const assets = await readdir("dist/assets");
 for (const file of assets.filter((name) => name.endsWith(".js"))) {
   const text = await readFile(`dist/assets/${file}`, "utf8");
   if (
+    text.includes("matrisync-identity-command-v1") ||
+    text.includes("code-verifier-only") ||
     text.includes("Encrypted sharing pilot") ||
     text.includes("deviceRequests") ||
     text.includes("assignmentRoutes") ||

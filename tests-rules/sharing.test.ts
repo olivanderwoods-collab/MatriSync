@@ -79,6 +79,23 @@ afterAll(async () => {
   await env?.cleanup();
 });
 describe("controlled sharing rules", () => {
+  it("keeps identity verifiers, ownership, grants, receipts and rate limits server-only", async () => {
+    const paths = ["patientIdentities/patient", "patientIdentities/patient/directGrants/sender",
+      "patientIdentities/patient/events/event", "identitySources/source", "identityOwners/sender",
+      "identityRequests/request", "identityRateLimits/sender"];
+    await env.withSecurityRulesDisabled(async ctx => {
+      for (const path of paths) await setDoc(doc(ctx.firestore(), path), { verifier: "server-only", ownerUid: "sender" });
+    });
+    for (const path of paths) {
+      const ref = doc(db("sender"), path);
+      await assertFails(getDoc(ref));
+      await assertFails(getDocs(collection(db("sender"), path.slice(0, path.lastIndexOf("/")))));
+      await assertFails(setDoc(ref, { ownerUid: "sender" }));
+      await assertFails(updateDoc(ref, { ownerUid: "sender" }));
+      await assertFails(deleteDoc(ref));
+    }
+    await assertFails(setDoc(doc(db("sender"), "patientIdentities", "new"), { ownerUid: "sender" }));
+  });
   it("allows only an immutable owner public-device request, never self approval", async () => {
     await assertSucceeds(
       setDoc(doc(db("new"), "deviceRequests", "new"), device()),

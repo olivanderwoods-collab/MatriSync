@@ -225,3 +225,10 @@ The selected receiving Organization now receives the exact original doctor-signe
 Controlled staff assignments are now integrated into professional Home (pending) and Patients (accepted or revoked), Organization Staff Management and the received patient Overview, and Mother permissions (read-only scope visibility). Acceptance is distinct from actual encrypted record receipt. Empty/offline receive attempts do not report success; revoked assignments retain saved offline profile access and preserve independent direct grants. Existing account/device/assignment checks are unchanged. All four sharing journeys, 39 rules tests, 84 unit tests, 26 general and 18 account browser cases passed, along with lint and both builds. See [verified checkpoint](VERIFICATION-2026-10-31-STAFF-WORKSPACES.md).
 
 Authoritative permanent-code loading and atomic first Mother claim remain next work, not implemented by these screens. The [identity implementation boundary](PATIENT-IDENTITY-IMPLEMENTATION-BOUNDARY.md) records the required service, proof, recipient-key and preservation checks. No production activation or public verification is claimed.
+
+
+## Identity metadata foundation — 31 October 2026
+
+A separate local-only service now implements transactional username/source registration, single first Mother ownership, device-bound direct grants, terminal revocation, request receipts and persistent attempt limits. It checks existing approved devices and current scoped clinician/facility authority; the legacy unscoped transport exception cannot authorize identity operations. Competing registrations/claims and retry/restart behavior are tested. See [implementation and review boundary](PATIENT-IDENTITY-REVIEW-STAGE.md) and [verification](VERIFICATION-2026-10-31-IDENTITY.md).
+
+This supersedes the statement that no identity backend exists, but does not implement app code-loading/claim screens or clinical key delivery. The candidate proof has not had independent review. Browser access is deliberately disabled, no clinical channel is created, original local profiles remain untouched, and final core integration remains incomplete.
