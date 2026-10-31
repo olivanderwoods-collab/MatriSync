@@ -17,7 +17,8 @@ export type SharedContent =
   | { kind: "document"; document: SharedDocument }
   | { kind: "profile"; profile: SharedProfileSnapshot };
 
-export const SHARING_FILE_LIMIT = 256 * 1024;
+export const SHARING_FILE_LIMIT = 10 * 1024 * 1024;
+const MAX_ENCRYPTED_FILE = 28000000;
 export type PublicDevice = { encryption: JWK; signing: JWK; keyId: string };
 export type SharingDevice = PublicDevice & {
   decryptKey: CryptoKey;
@@ -86,15 +87,16 @@ export async function newSharingDevice(): Promise<SharingDevice> {
 }
 export function encodeFile(bytes: Uint8Array) {
   if (!bytes.length || bytes.length > SHARING_FILE_LIMIT)
-    throw Error("The sharing pilot accepts nonempty files up to 256 KiB.");
-  let text = "";
-  for (const byte of bytes) text += String.fromCharCode(byte);
-  return btoa(text);
+    throw Error("The sharing pilot accepts nonempty files up to 10 MiB.");
+  const parts: string[] = [];
+  for (let i = 0; i < bytes.length; i += 32768)
+    parts.push(String.fromCharCode(...bytes.subarray(i, i + 32768)));
+  return btoa(parts.join(""));
 }
 export function decodeFile(base64: string) {
   if (
     typeof base64 !== "string" ||
-    base64.length > 350000 ||
+    base64.length > 4 * Math.ceil(SHARING_FILE_LIMIT / 3) ||
     !/^[A-Za-z0-9+/]+={0,2}$/.test(base64)
   )
     throw Error("Invalid shared file.");
@@ -208,7 +210,7 @@ async function encryptContent(
       kid: recipient.keyId,
     })
     .encrypt(await importJWK(publicPoint(recipient.encryption), "ECDH-ES"));
-  if (encrypted.length > 700000)
+  if (encrypted.length > (content.kind === "document" ? MAX_ENCRYPTED_FILE : 700000))
     throw Error("The encrypted package exceeds the pilot limit.");
   return encrypted;
 }
@@ -236,7 +238,7 @@ export async function decryptSharedTransfer(
 ): Promise<SharedContent> {
   if (
     typeof ciphertext !== "string" ||
-    ciphertext.length > 700000 ||
+    ciphertext.length > MAX_ENCRYPTED_FILE ||
     expected.recipientKeyId !== recipient.keyId ||
     expected.senderKeyId !== sender.keyId
   )

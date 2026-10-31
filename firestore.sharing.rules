@@ -8,6 +8,11 @@ rules_version = '2';
 // channels/{id}/transfers/{uuid}: immutable {version:1,senderUid,recipientUid,
 // senderKeyId,recipientKeyId,ciphertext:JWE string<=700000,createdAt:server timestamp}.
 // No client writes to approvals/channels, no transfer updates/deletes. Deny everything else.
+// Large transfers use version2 metadata: senderUid,recipientUid,senderKeyId,recipientKeyId,
+// chunkCount:int2..70,ciphertextLength:int700001..28000000,ciphertextHash:hex64,createdAt:timestamp.
+// channels/{id}/uploads/{transferId}: same immutable version2 metadata, sender get/create only.
+// uploads/{transferId}/chunks/{index}: immutable {index:int0..69,ciphertext:ASCII<=400000,createdAt:timestamp}.
+// Individual recipient chunk gets require a matching final transfer; no staging/chunk lists or updates/deletes.
 // assignmentRoutes/{id}: OPERATOR ONLY approved test scope {enabled,participants:
 // [sourceUid,facilityUid,staffUid],sourceUid,sourcePatientId,profileId:hex64,
 // facilityUid,staffUid,sourceKeyId,facilityKeyId,staffKeyId}. No names or clinical data.
@@ -111,6 +116,31 @@ service cloud.firestore {
         && d.ciphertext.matches('[A-Za-z0-9_.-]+') && d.createdAt is timestamp && d.createdAt == request.time;
     }
     function credentialScope(uid) { return get(/databases/$(database)/documents/credentialScopes/$(uid)).data; }
+    function chunkScope(d, c) {
+      return d.version == 2 && d.senderUid == c.senderUid && d.recipientUid == c.recipientUid
+        && d.senderKeyId == c.sender.keyId && d.recipientKeyId == c.recipient.keyId;
+    }
+    function isValidChunkManifest(d, c, id) {
+      return d.keys().hasAll(['version','senderUid','recipientUid','senderKeyId','recipientKeyId','chunkCount','ciphertextLength','ciphertextHash','createdAt'])
+        && d.keys().hasOnly(['version','senderUid','recipientUid','senderKeyId','recipientKeyId','chunkCount','ciphertextLength','ciphertextHash','createdAt'])
+        && eventId(id) && chunkScope(d,c) && d.chunkCount is int && d.chunkCount >= 2 && d.chunkCount <= 70
+        && d.ciphertextLength is int && d.ciphertextLength > 700000 && d.ciphertextLength <= 28000000
+        && d.ciphertextLength > (d.chunkCount - 1) * 400000 && d.ciphertextLength <= d.chunkCount * 400000
+        && fingerprint(d.ciphertextHash) && d.createdAt is timestamp && d.createdAt == request.time;
+    }
+    function upload(channelId, id) { return get(/databases/$(database)/documents/channels/$(channelId)/uploads/$(id)).data; }
+    function sameChunkManifest(d, u) {
+      return d.version == u.version && d.senderUid == u.senderUid && d.recipientUid == u.recipientUid
+        && d.senderKeyId == u.senderKeyId && d.recipientKeyId == u.recipientKeyId
+        && d.chunkCount == u.chunkCount && d.ciphertextLength == u.ciphertextLength && d.ciphertextHash == u.ciphertextHash;
+    }
+    function isValidCiphertextChunk(d, u, index) {
+      return d.keys().hasAll(['index','ciphertext','createdAt']) && d.keys().hasOnly(['index','ciphertext','createdAt'])
+        && d.index is int && d.index >= 0 && d.index < u.chunkCount && index == string(d.index)
+        && d.ciphertext is string && d.ciphertext.size() == (d.index == u.chunkCount - 1 ? u.ciphertextLength - d.index * 400000 : 400000)
+        && d.ciphertext.size() <= 400000 && d.ciphertext.matches('[A-Za-z0-9_.-]+')
+        && d.createdAt is timestamp && d.createdAt == request.time;
+    }
     function credentialParticipant(uid) {
       return signedIn() && (own(uid) || own(credentialScope(uid).facilityUid)) && approved(request.auth.uid);
     }
@@ -128,9 +158,11 @@ service cloud.firestore {
     // credential scope; they still have no doctor approval authority. Once a
     // scope exists, pending/rejected/suspended credentials block future sharing.
     function sharingCredentialCurrent(uid, role) {
-      return role != 'professional'
-        || (!exists(/databases/$(database)/documents/credentialScopes/$(uid)))
-        || (activeCredentialScope(uid)
+      return role != 'professional' || sharingProfessionalCredentialCurrent(uid);
+    }
+    function sharingProfessionalCredentialCurrent(uid) {
+      let scope = get(/databases/$(database)/documents/credentialScopes/$(uid));
+      return scope == null || scope.data == null || (activeCredentialScope(uid)
           && get(/databases/$(database)/documents/clinicalCredentials/$(uid)).data.status == 'approved');
     }
     function eventId(id) { return id is string && id.size() == 36 && id.matches('[a-f0-9-]{36}'); }
@@ -362,7 +394,24 @@ service cloud.firestore {
       match /transfers/{transferId} {
         allow get: if active(channel(id));
         allow list: if active(channel(id)) && request.query.limit <= 20;
-        allow create: if active(channel(id)) && own(channel(id).senderUid) && isValidTransfer(request.resource.data, channel(id), transferId);
+        allow create: if active(channel(id)) && own(channel(id).senderUid)
+          && (isValidTransfer(request.resource.data, channel(id), transferId)
+            || (isValidChunkManifest(request.resource.data, channel(id), transferId)
+              && sameChunkManifest(request.resource.data, upload(id,transferId))));
+      }
+      match /uploads/{transferId} {
+        allow get: if active(channel(id)) && own(channel(id).senderUid);
+        allow create: if active(channel(id)) && own(channel(id).senderUid)
+          && isValidChunkManifest(request.resource.data,channel(id),transferId);
+        match /chunks/{index} {
+          // The final immutable manifest already matched the immutable staging
+          // manifest at creation. Avoid rereading both under the 10-read rule cap.
+          allow get: if active(channel(id))
+            && ((own(channel(id).senderUid) && chunkScope(upload(id,transferId),channel(id)))
+              || (own(channel(id).recipientUid) && chunkScope(get(/databases/$(database)/documents/channels/$(id)/transfers/$(transferId)).data,channel(id))));
+          allow create: if active(channel(id)) && own(channel(id).senderUid) && chunkScope(upload(id,transferId),channel(id))
+            && isValidCiphertextChunk(request.resource.data,upload(id,transferId),index);
+        }
       }
     }
     match /{document=**} { allow read, write: if false; }

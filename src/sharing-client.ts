@@ -16,6 +16,7 @@ import {
   serverTimestamp,
   runTransaction,
   type Firestore,
+  type DocumentReference,
 } from "firebase/firestore";
 import {
   checkPublicDevice,
@@ -34,6 +35,8 @@ import {
   type SavedTransfer,
 } from "./sharing-storage";
 import type { SharedProfileSnapshot } from "./sharing-profile";
+import { INLINE_CIPHERTEXT_LIMIT, CIPHERTEXT_CHUNK_SIZE, chunkManifest, checkChunkManifest,
+  checkCiphertextChunk, assembleCiphertext, type ChunkManifest } from "./sharing-chunks";
 import { queuedTransfers, prepareQueuedTransfer, openQueuedTransfer, saveQueuedTransfer,
   acknowledgeQueuedTransfer, type QueuedTransfer } from "./sharing-outbox";
 import {
@@ -375,23 +378,36 @@ export async function publishQueuedTransfer(uid: string, role: string, device: S
   await verifyPeerPin(uid, c.recipientUid, c.recipientKeyId, "");
   if (scope) await assertAssignmentContent(scope, prepared.content, uid);
   const ref = doc(db, "channels", item.channelId, "transfers", item.id);
-  const exact = (value: Record<string, unknown>) => {
-    if (value.version !== 1 || value.senderUid !== uid || value.recipientUid !== c.recipientUid ||
-        value.senderKeyId !== c.senderKeyId || value.recipientKeyId !== c.recipientKeyId || value.ciphertext !== prepared.ciphertext)
+  const base = { senderUid: uid, recipientUid: c.recipientUid, senderKeyId: c.senderKeyId, recipientKeyId: c.recipientKeyId };
+  const manifest = prepared.ciphertext.length > INLINE_CIPHERTEXT_LIMIT ? await chunkManifest(prepared.ciphertext) : undefined;
+  const envelope = manifest ? { version: 2, ...base, ...manifest } : { version: 1, ...base, ciphertext: prepared.ciphertext };
+  const exact = (value: Record<string, unknown>, expected: Record<string, unknown>) => {
+    if (Object.entries(expected).some(([key, v]) => value[key] !== v))
       throw Error("This transfer ID contains a different envelope. No delivery was replaced or acknowledged.");
   };
-  await runTransaction(db, async tx => {
-    await sharingAccount(uid);
-    const previous = await tx.get(ref);
-    await sharingAccount(uid);
-    if (previous.exists()) exact(previous.data());
-    else tx.set(ref, { version: 1, senderUid: uid, recipientUid: c.recipientUid,
-      senderKeyId: c.senderKeyId, recipientKeyId: c.recipientKeyId,
-      ciphertext: prepared.ciphertext, createdAt: serverTimestamp() });
-  });
+  const storeExact = async (target: DocumentReference, value: Record<string, unknown>) => {
+    if (!navigator.onLine) throw Error("Offline. The encrypted upload remains queued and can resume.");
+    await runTransaction(db, async tx => {
+      await sharingAccount(uid);
+      const previous = await tx.get(target);
+      await sharingAccount(uid);
+      if (previous.exists()) exact(previous.data(), value);
+      else tx.set(target, { ...value, createdAt: serverTimestamp() });
+    });
+  };
+  if (manifest) {
+    const upload = doc(db, "channels", item.channelId, "uploads", item.id);
+    await storeExact(upload, envelope);
+    for (let index = 0; index < manifest.chunkCount; index++) {
+      const ciphertext = prepared.ciphertext.slice(index * CIPHERTEXT_CHUNK_SIZE, (index + 1) * CIPHERTEXT_CHUNK_SIZE);
+      await storeExact(doc(upload, "chunks", String(index)), { index, ciphertext });
+    }
+  }
+  // The final transfer is discoverable only after every immutable part is stored.
+  await storeExact(ref, envelope);
   const confirmed = await getDocFromServer(ref);
   if (!confirmed.exists()) throw Error("Relay storage was not confirmed. The delivery remains queued.");
-  exact(confirmed.data());
+  exact(confirmed.data(), envelope);
   const at = confirmed.data().createdAt?.toDate()?.toISOString();
   if (!at) throw Error("Relay acknowledgement is missing. The delivery remains queued.");
   await sharingAccount(uid);
@@ -436,7 +452,7 @@ export async function receiveSharedDocuments(
       recipientUid: uid,
       senderKeyId: channel.sender.keyId,
       recipientKeyId: device.keyId,
-      ciphertext: data.ciphertext,
+      ciphertext: "",
       sender: channel.sender,
       savedAt: new Date().toISOString(),
     };
@@ -447,6 +463,18 @@ export async function receiveSharedDocuments(
       data.recipientKeyId !== item.recipientKeyId
     )
       throw Error("Transfer metadata does not match the approved connection.");
+    if (data.version === 2) {
+      const manifest = checkChunkManifest(data as ChunkManifest), chunks: string[] = [];
+      for (let index = 0; index < manifest.chunkCount; index++) {
+        await sharingAccount(uid);
+        const part = await getDocFromServer(doc(db, "channels", channelId, "uploads", snap.id, "chunks", String(index)));
+        if (!part.exists() || part.data().index !== index)
+          throw Error("The encrypted attachment is incomplete. No partial document was saved.");
+        chunks.push(checkCiphertextChunk(manifest, index, part.data().ciphertext));
+      }
+      item.ciphertext = await assembleCiphertext(manifest, chunks);
+    } else if (data.version === 1) item.ciphertext = data.ciphertext;
+    else throw Error("Unsupported encrypted transfer version.");
     const content = await decryptSharedTransfer(
       item.ciphertext,
       item,

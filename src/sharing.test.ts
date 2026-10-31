@@ -183,7 +183,7 @@ describe("signed encrypted sharing envelopes", () => {
   });
   it("enforces file limits and refuses invalid document formats", async () => {
     expect(() => encodeFile(new Uint8Array(0))).toThrow();
-    expect(() => encodeFile(new Uint8Array(256 * 1024 + 1))).toThrow();
+    expect(() => encodeFile(new Uint8Array(10 * 1024 * 1024 + 1))).toThrow();
     expect(() => decodeFile("!")).toThrow();
     const { sender, recipient, context } = await fixture();
     await expect(

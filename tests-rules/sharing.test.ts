@@ -79,6 +79,63 @@ afterAll(async () => {
   await env?.cleanup();
 });
 describe("controlled sharing rules", () => {
+  const manifest = () => ({ version: 2, senderUid: "sender", recipientUid: "recipient", senderKeyId: "a".repeat(64),
+    recipientKeyId: "b".repeat(64), chunkCount: 2, ciphertextLength: 700001, ciphertextHash: "a".repeat(64), createdAt: serverTimestamp() });
+  const upload = (uid: string) => doc(db(uid), "channels", "approved", "uploads", id);
+  const chunk = (uid: string, index = "0") => doc(upload(uid), "chunks", index);
+  const part = (index = 0) => ({ index, ciphertext: "a".repeat(index === 0 ? 400000 : 300001), createdAt: serverTimestamp() });
+  it("keeps staging private, publishes immutable manifests and denies chunk enumeration", async () => {
+    await assertFails(setDoc(chunk("sender"), part()));
+    await assertFails(setDoc(target("sender"), manifest()));
+    await assertFails(setDoc(upload("recipient"), manifest()));
+    await assertSucceeds(setDoc(upload("sender"), manifest()));
+    await assertSucceeds(setDoc(chunk("sender"), part()));
+    await assertFails(getDoc(chunk("recipient")));
+    await assertFails(getDoc(upload("recipient")));
+    await assertFails(getDocs(collection(db("sender"), "channels", "approved", "uploads")));
+    await assertFails(getDocs(collection(upload("sender"), "chunks")));
+    await assertSucceeds(setDoc(chunk("sender", "1"), part(1)));
+    await assertSucceeds(setDoc(target("sender"), manifest()));
+    await assertSucceeds(getDoc(chunk("recipient")));
+    await assertFails(getDoc(chunk("stranger")));
+    await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), "channels", "approved", "uploads", id, "chunks", "0")));
+    await assertFails(updateDoc(chunk("sender"), { ciphertext: "b".repeat(400000) }));
+    await assertFails(deleteDoc(chunk("sender")));
+    await assertFails(updateDoc(upload("sender"), { ciphertextHash: "b".repeat(64) }));
+    await assertFails(updateDoc(target("sender"), { chunkCount: 3 }));
+    await assertFails(deleteDoc(upload("sender")));
+  });
+  it("validates every manifest/chunk field, bound, timestamp and final staging match", async () => {
+    for (const change of [{ patientName: "plaintext" }, { version: 1 }, { senderUid: "recipient" },
+      { recipientKeyId: "c".repeat(64) }, { chunkCount: 71 }, { chunkCount: 1.5 }, { chunkCount: 1 },
+      { ciphertextLength: 28000001 }, { ciphertextLength: 700000 }, { ciphertextHash: "bad" }, { createdAt: new Date(0) }])
+      await assertFails(setDoc(upload("sender"), { ...manifest(), ...change }));
+    for (const key of Object.keys(manifest())) {
+      const value: Record<string, unknown> = { ...manifest() }; delete value[key];
+      await assertFails(setDoc(upload("sender"), value));
+    }
+    await assertSucceeds(setDoc(upload("sender"), manifest()));
+    for (const change of [{ extra: "plaintext" }, { index: 70 }, { index: -1 }, { index: 0.5 },
+      { ciphertext: "a".repeat(400001) }, { ciphertext: "a".repeat(399999) }, { ciphertext: " ".repeat(400000) }, { createdAt: new Date(0) }])
+      await assertFails(setDoc(chunk("sender"), { ...part(), ...change }));
+    for (const key of Object.keys(part())) {
+      const value: Record<string, unknown> = { ...part() }; delete value[key];
+      await assertFails(setDoc(chunk("sender"), value));
+    }
+    await assertFails(setDoc(chunk("sender", "01"), part(1)));
+    await assertFails(setDoc(chunk("recipient"), part()));
+    await assertFails(setDoc(target("sender"), { ...manifest(), ciphertextHash: "b".repeat(64) }));
+  });
+  it("blocks staged continuation and committed chunk reads after revocation or key change", async () => {
+    await assertSucceeds(setDoc(upload("sender"), manifest()));
+    await assertSucceeds(setDoc(chunk("sender"), part()));
+    await assertSucceeds(setDoc(target("sender"), manifest()));
+    for (const change of [{ enabled: false }, { enabled: true, keyId: "c".repeat(64) }]) {
+      await env.withSecurityRulesDisabled(ctx => updateDoc(doc(ctx.firestore(), "members", "recipient"), change));
+      await assertFails(getDoc(chunk("recipient")));
+      await assertFails(setDoc(chunk("sender", "1"), part(1)));
+    }
+  });
   it("keeps identity verifiers, ownership, grants, receipts and rate limits server-only", async () => {
     const paths = ["patientIdentities/patient", "patientIdentities/patient/directGrants/sender",
       "patientIdentities/patient/events/event", "identitySources/source", "identityOwners/sender",

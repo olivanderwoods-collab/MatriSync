@@ -56,6 +56,85 @@ async function download(page: Page) {
   const result = await pending;
   return readFile((await result.path())!);
 }
+
+test("large original resumes immutable encrypted parts after interruption and saves only a verified complete copy", async ({ browser }) => {
+  test.setTimeout(120000);
+  const contexts = await Promise.all([0, 1].map(() => browser.newContext({ baseURL: "http://127.0.0.1:4175" })));
+  const [mother, clinician] = await Promise.all(contexts.map(c => c.newPage()));
+  const errors: string[] = [];
+  for (const page of [mother, clinician]) page.on("pageerror", e => errors.push(e.message));
+  try {
+    const m = await enroll(mother, "mother"), c = await enroll(clinician, "professional");
+    for (const a of [m, c]) await approveMember(a.uid, a.role, a.fingerprint);
+    const channel = `chunks-${Date.now()}`;
+    await approveChannel(channel, m.uid, c.uid);
+    await refresh(mother, channel);
+    await refresh(clinician, channel);
+    await mother.getByLabel("Other device fingerprint").fill(c.fingerprint);
+    await clinician.getByLabel("Other device fingerprint").fill(m.fingerprint);
+    const original = Buffer.alloc(10 * 1024 * 1024, 125);
+    original.write("%PDF-1.7\nSynthetic large original\n");
+    await mother.getByLabel("Original test document").setInputFiles({ name: "private-large-original.pdf", mimeType: "application/pdf", buffer: original });
+    let interrupted = false;
+    // Stop the second chunk's real REST transaction; retain the acknowledged first chunk.
+    await mother.route("**/documents:commit**", async route => {
+      const body = route.request().postDataJSON();
+      if (body.writes?.some((w: { update?: { name?: string } }) => w.update?.name?.includes(`/channels/${channel}/uploads/`) && w.update.name.endsWith("/chunks/1"))) {
+        interrupted = true;
+        await route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ error: { code: 403, status: "PERMISSION_DENIED", message: "Synthetic interrupted upload" } }) });
+      } else await route.continue();
+    });
+    await mother.getByRole("button", { name: "Encrypt and send document" }).click();
+    await expect(mother.getByRole("alert")).toContainText("Synthetic interrupted upload", { timeout: 45000 });
+    expect(interrupted).toBe(true);
+    const relay = async (path: string) => {
+      const response = await fetch(`http://127.0.0.1:8087/v1/projects/demo-matrisync/databases/(default)/documents/channels/${channel}/${path}?pageSize=100`, { headers: { Authorization: "Bearer owner" } });
+      expect(response.ok).toBe(true);
+      return (await response.json()).documents || [];
+    };
+    const staged = await relay("uploads");
+    expect(staged).toHaveLength(1);
+    const id = staged[0].name.split("/").at(-1);
+    const partial = await relay(`uploads/${id}/chunks`);
+    expect(partial).toHaveLength(1);
+    expect(await relay("transfers")).toHaveLength(0);
+    await clinician.getByRole("button", { name: "Fetch approved records" }).click();
+    await expect(clinician.getByRole("status").filter({ hasText: "0 encrypted transfer(s) checked" })).toBeVisible();
+    await expect(clinician.getByRole("button", { name: "Open saved document" })).toHaveCount(0);
+    await mother.unroute("**/documents:commit**");
+    await mother.reload();
+    const outbox = mother.getByRole("region", { name: "Encrypted send outbox", exact: true });
+    await expect(outbox).toContainText("Awaiting relay confirmation");
+    await outbox.getByRole("button", { name: "Resume / Check delivery" }).click();
+    await expect(outbox).toContainText("Relay storage confirmed", { timeout: 45000 });
+    const final = await relay("transfers"), parts = await relay(`uploads/${id}/chunks`);
+    expect(final).toHaveLength(1);
+    expect(final[0].fields.version.integerValue).toBe("2");
+    expect(parts).toHaveLength(Number(final[0].fields.chunkCount.integerValue));
+    expect(parts.find((p: { name: string }) => p.name === partial[0].name)).toEqual(partial[0]);
+    expect(JSON.stringify([staged, final, parts])).not.toContain("private-large-original.pdf");
+    expect(JSON.stringify(parts)).not.toContain(original.toString("base64"));
+    // Simulate a damaged relay package after publication. No partial inbox copy may appear.
+    const missing = parts[parts.length - 1];
+    const missingUrl = `http://127.0.0.1:8087/v1/${missing.name}`;
+    expect((await fetch(missingUrl, { method: "DELETE", headers: { Authorization: "Bearer owner" } })).ok).toBe(true);
+    await clinician.getByRole("button", { name: "Fetch approved records" }).click();
+    await expect(clinician.getByRole("alert")).toContainText("incomplete", { timeout: 30000 });
+    await expect(clinician.getByRole("button", { name: "Open saved document" })).toHaveCount(0);
+    expect((await fetch(missingUrl, { method: "PATCH", headers: { Authorization: "Bearer owner", "Content-Type": "application/json" }, body: JSON.stringify({ fields: missing.fields }) })).ok).toBe(true);
+    await clinician.getByRole("button", { name: "Fetch approved records" }).click();
+    await expect(clinician.getByRole("button", { name: "Open saved document" })).toHaveCount(1, { timeout: 30000 });
+    await clinician.getByRole("button", { name: "Open saved document" }).click();
+    expect((await download(clinician)).equals(original)).toBe(true);
+    await revokeChannel(channel);
+    await clinician.reload();
+    await expect(clinician.getByRole("button", { name: "Open saved document" })).toBeEnabled();
+    await contexts[1].setOffline(true);
+    await clinician.getByRole("button", { name: "Open saved document" }).click();
+    expect((await download(clinician)).equals(original)).toBe(true);
+    expect(errors).toEqual([]);
+  } finally { await Promise.all(contexts.map(c => c.close())); }
+});
 test("separate accounts exchange original encrypted bytes; revocation preserves offline copies", async ({
   browser,
 }, testInfo) => {

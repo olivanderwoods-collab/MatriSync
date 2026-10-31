@@ -237,3 +237,11 @@ This supersedes the statement that no identity backend exists, but does not impl
 ## Durable send outbox — 31 October 2026
 
 The controlled sharing build now persists a signed/self-encrypted prepared profile or document before publication. Explicit retry preserves the same transfer ID, recipient and ciphertext, rechecks current authority and records success only after exact relay acknowledgement. Lost acknowledgements survive reload without duplicate delivery; pending sends are blocked after revocation. Existing local records/design and normal-build exclusion remain unchanged. This supersedes the earlier no-durable-send-outbox statement for profiles/original documents only; automatic syncing, shared edits and referral outbox integration remain open. See [verification and boundaries](VERIFICATION-2026-10-31-OUTBOX.md). Identity protocol review remains a separate gate.
+
+## Resumable original attachments — 1 November 2026
+
+The controlled sharing pilot now supports originals up to 10 MiB through immutable encrypted chunks and durable sender resume. Legacy inline originals remain readable. Interrupted uploads retain their exact transfer and parts; only a complete digest/signature/context-verified package is saved by the recipient. Existing records, keys and design are preserved. This supersedes the older 256 KiB transfer limit and attachment-chunking-missing status.
+
+Verification: 96 unit tests, all 44 rule tests, all six sharing browser journeys, lint, TypeScript and both builds passed. The actual 10 MiB browser journey covers interruption/reload/resume, incomplete-package rejection, exact downloaded bytes and offline retention after revocation. Normal distribution assets remain unchanged and exclude the pilot. See [protocol](ENCRYPTED-ATTACHMENT-PROTOCOL.md) and [verification](VERIFICATION-2026-11-01-ATTACHMENTS.md).
+
+Identity protocol/key review and loading/claim integration remain gated. Shared-edit acknowledgement/conflicts, receive pagination, orphan/history cleanup, documentation assistance, actual BLE transport and final core integration remain unfinished. This is a verified development checkpoint, not the completed submission product. No user developer testing is required.

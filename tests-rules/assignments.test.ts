@@ -133,6 +133,28 @@ afterAll(async () => {
   await env?.cleanup();
 });
 describe("staff assignment authorization", () => {
+  it("supports credentialed assigned chunk delivery within rule read limits and blocks suspension", async () => {
+    await env.withSecurityRulesDisabled(async ctx => {
+      await setDoc(doc(ctx.firestore(), "credentialScopes", "staff"), { enabled: true, staffUid: "staff", facilityUid: "facility",
+        staffKeyId: "b".repeat(64), facilityKeyId: "c".repeat(64), category: "doctor" });
+      await setDoc(doc(ctx.firestore(), "facilityApprovers", "facility"), { enabled: true, keyId: "c".repeat(64) });
+      await setDoc(doc(ctx.firestore(), "clinicalCredentials", "staff"), { status: "approved" });
+    });
+    const id = "11111111-1111-4111-a111-111111111111";
+    const u = (uid: string) => doc(db(uid), "channels", "assigned", "uploads", id);
+    const manifest = () => ({ version: 2, senderUid: "source", recipientUid: "staff", senderKeyId: "a".repeat(64),
+      recipientKeyId: "b".repeat(64), chunkCount: 2, ciphertextLength: 700001, ciphertextHash: "a".repeat(64), createdAt: serverTimestamp() });
+    await assertFails(setDoc(u("source"), manifest()));
+    await accepted();
+    await assertSucceeds(setDoc(u("source"), manifest()));
+    await assertSucceeds(setDoc(doc(u("source"), "chunks", "0"), { index: 0, ciphertext: "a".repeat(400000), createdAt: serverTimestamp() }));
+    await assertFails(getDoc(doc(u("staff"), "chunks", "0")));
+    await assertSucceeds(setDoc(target("source"), manifest()));
+    await assertSucceeds(getDoc(doc(u("staff"), "chunks", "0")));
+    await admin("clinicalCredentials/staff", { status: "suspended" });
+    await assertFails(getDoc(doc(u("staff"), "chunks", "0")));
+    await assertFails(setDoc(doc(u("source"), "chunks", "1"), { index: 1, ciphertext: "a".repeat(300001), createdAt: serverTimestamp() }));
+  });
   it("never lets a simultaneous acceptance resurrect a withdrawn assignment", async () => {
     await assertSucceeds(setDoc(assignment("facility"), pending()));
     const results = await Promise.allSettled([

@@ -159,9 +159,9 @@ function SharingContent({ uid, role }: { uid: string; role: string }) {
         <section className="panel">
           <h2>Share patient records</h2>
           <p>
-            PDF or image · Pilot limit 256 KiB. Metadata and original bytes are
-            encrypted. Larger documents and automatic profile merging are
-            next-stage work.
+            PDF or image · Up to 10 MiB. Metadata and original bytes are encrypted.
+            Larger deliveries resume through the encrypted outbox. Automatic
+            profile merging is not connected.
           </p>
           <p className="small">
             This pilot lists up to 20 connections and fetches the newest 20

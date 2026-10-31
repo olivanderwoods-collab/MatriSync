@@ -8,6 +8,7 @@ for (const file of assets.filter((name) => name.endsWith(".js"))) {
     text.includes("matrisync-identity-command-v1") ||
     text.includes("code-verifier-only") ||
     text.includes("matrisync-sharing-outbox-v1") ||
+    text.includes("Invalid encrypted attachment manifest") ||
     text.includes("Encrypted send outbox") ||
     text.includes("Encrypted sharing pilot") ||
     text.includes("deviceRequests") ||
