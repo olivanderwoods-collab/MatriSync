@@ -12,11 +12,14 @@ import {
   where,
   limit,
   orderBy,
+  startAfter,
   setDoc,
   serverTimestamp,
   runTransaction,
   type Firestore,
   type DocumentReference,
+  type Query,
+  type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import {
   checkPublicDevice,
@@ -105,6 +108,24 @@ export async function sharingChannels(
   role: string,
   device: SharingDevice,
 ) {
+  const db = await checkedSharingMember(uid, role, device);
+  const channels: SharingChannel[] = [];
+  for await (const page of sharingPages(
+    uid,
+    query(collection(db, "channels"), where("members", "array-contains", uid)),
+    () => checkedSharingMember(uid, role, device),
+  )) {
+    channels.push(
+      ...page.map((d) => ({ ...d.data(), id: d.id }) as SharingChannel),
+    );
+  }
+  return channels;
+}
+async function checkedSharingMember(
+  uid: string,
+  role: string,
+  device: SharingDevice,
+) {
   const db = await database(uid);
   const snap = await getDocFromServer(doc(db, "members", uid));
   if (!snap.exists() || !snap.data().enabled)
@@ -114,15 +135,31 @@ export async function sharingChannels(
   const member = snap.data() as SharingMember;
   if (member.role !== role || member.keyId !== device.keyId)
     throw Error("This workspace or device is not approved for this account.");
-  const result = await getDocsFromServer(
-    query(
-      collection(db, "channels"),
-      where("members", "array-contains", uid),
-      limit(20),
-    ),
-  );
   await sharingAccount(uid);
-  return result.docs.map((d) => ({ ...d.data(), id: d.id }) as SharingChannel);
+  return db;
+}
+// Keep each server query within the existing rule limit. A document-snapshot
+// cursor includes the document ID, so equal timestamps cannot skip records.
+async function* sharingPages(
+  uid: string,
+  base: Query,
+  validate: () => Promise<unknown>,
+) {
+  let cursor: QueryDocumentSnapshot | undefined;
+  while (true) {
+    if (!navigator.onLine)
+      throw Error(
+        "Offline. Receiving stopped; previously saved records remain available.",
+      );
+    await validate();
+    const page = await getDocsFromServer(
+      query(base, ...(cursor ? [startAfter(cursor)] : []), limit(20)),
+    );
+    await sharingAccount(uid);
+    yield page.docs;
+    if (page.size < 20) return;
+    cursor = page.docs[page.docs.length - 1];
+  }
 }
 export async function checkedChannel(
   uid: string,
@@ -180,26 +217,27 @@ export async function sharingAssignments(
   device: SharingDevice,
 ) {
   // Validate the live approved account, workspace and enrolled key first.
-  await sharingChannels(uid, role, device);
-  const db = await database(uid);
-  const routes = await getDocsFromServer(
+  const db = await checkedSharingMember(uid, role, device);
+  const result = [];
+  for await (const page of sharingPages(
+    uid,
     query(
       collection(db, "assignmentRoutes"),
       where("participants", "array-contains", uid),
-      limit(20),
     ),
-  );
-  const result = [];
-  for (const route of routes.docs) {
-    const assignment = await getDocFromServer(
-      doc(db, "staffAssignments", route.id),
-    );
-    result.push({
-      route: { ...route.data(), id: route.id } as AssignmentRoute,
-      assignment: assignment.exists()
-        ? (assignment.data() as StaffAssignment)
-        : undefined,
-    });
+    () => checkedSharingMember(uid, role, device),
+  )) {
+    for (const route of page) {
+      const assignment = await getDocFromServer(
+        doc(db, "staffAssignments", route.id),
+      );
+      result.push({
+        route: { ...route.data(), id: route.id } as AssignmentRoute,
+        assignment: assignment.exists()
+          ? (assignment.data() as StaffAssignment)
+          : undefined,
+      });
+    }
   }
   await sharingAccount(uid);
   return result;
@@ -435,57 +473,113 @@ export async function receiveSharedDocuments(
     channel.sender.keyId,
     fingerprint.trim(),
   );
-  const result = await getDocsFromServer(
-    query(
-      collection(db, "channels", channelId, "transfers"),
-      orderBy("createdAt", "desc"),
-      limit(20),
-    ),
-  );
-  for (const snap of result.docs) {
-    const data = snap.data();
-    const item: SavedTransfer = {
-      recipientRole: role,
-      id: snap.id,
-      channelId,
-      senderUid: channel.senderUid,
-      recipientUid: uid,
-      senderKeyId: channel.sender.keyId,
-      recipientKeyId: device.keyId,
-      ciphertext: "",
-      sender: channel.sender,
-      savedAt: new Date().toISOString(),
-    };
-    if (
-      data.senderUid !== item.senderUid ||
-      data.recipientUid !== item.recipientUid ||
-      data.senderKeyId !== item.senderKeyId ||
-      data.recipientKeyId !== item.recipientKeyId
-    )
-      throw Error("Transfer metadata does not match the approved connection.");
-    if (data.version === 2) {
-      const manifest = checkChunkManifest(data as ChunkManifest), chunks: string[] = [];
-      for (let index = 0; index < manifest.chunkCount; index++) {
+  let count = 0;
+  try {
+    for await (const page of sharingPages(
+      uid,
+      query(
+        collection(db, "channels", channelId, "transfers"),
+        orderBy("createdAt", "desc"),
+      ),
+      async () => {
+        const current = await checkedChannel(uid, channelId, device, role);
+        if (
+          current.channel.senderUid !== channel.senderUid ||
+          current.channel.recipientUid !== channel.recipientUid ||
+          current.channel.sender.keyId !== channel.sender.keyId ||
+          current.channel.recipient.keyId !== channel.recipient.keyId ||
+          current.channel.assignmentRouteId !== channel.assignmentRouteId
+        )
+          throw Error("The approved connection changed. Receiving stopped.");
+        if (
+          scope &&
+          (!current.scope ||
+            (
+              [
+                "sourceUid",
+                "sourcePatientId",
+                "profileId",
+                "facilityUid",
+                "staffUid",
+                "sourceKeyId",
+                "facilityKeyId",
+                "staffKeyId",
+              ] as const
+            ).some((key) => scope[key] !== current.scope![key]))
+        )
+          throw Error("The assigned patient scope changed. Receiving stopped.");
+      },
+    )) {
+      for (const snap of page) {
+        const data = snap.data();
+        const item: SavedTransfer = {
+          recipientRole: role,
+          id: snap.id,
+          channelId,
+          senderUid: channel.senderUid,
+          recipientUid: uid,
+          senderKeyId: channel.sender.keyId,
+          recipientKeyId: device.keyId,
+          ciphertext: "",
+          sender: channel.sender,
+          savedAt: new Date().toISOString(),
+        };
+        if (
+          data.senderUid !== item.senderUid ||
+          data.recipientUid !== item.recipientUid ||
+          data.senderKeyId !== item.senderKeyId ||
+          data.recipientKeyId !== item.recipientKeyId
+        )
+          throw Error(
+            "Transfer metadata does not match the approved connection.",
+          );
+        if (data.version === 2) {
+          const manifest = checkChunkManifest(data as ChunkManifest),
+            chunks: string[] = [];
+          for (let index = 0; index < manifest.chunkCount; index++) {
+            await sharingAccount(uid);
+            const part = await getDocFromServer(
+              doc(
+                db,
+                "channels",
+                channelId,
+                "uploads",
+                snap.id,
+                "chunks",
+                String(index),
+              ),
+            );
+            if (!part.exists() || part.data().index !== index)
+              throw Error(
+                "The encrypted attachment is incomplete. No partial document was saved.",
+              );
+            chunks.push(
+              checkCiphertextChunk(manifest, index, part.data().ciphertext),
+            );
+          }
+          item.ciphertext = await assembleCiphertext(manifest, chunks);
+        } else if (data.version === 1) item.ciphertext = data.ciphertext;
+        else throw Error("Unsupported encrypted transfer version.");
+        const content = await decryptSharedTransfer(
+          item.ciphertext,
+          item,
+          device,
+          channel.sender,
+        );
+        if (scope)
+          await assertAssignmentContent(scope, content, channel.senderUid);
+        item.kind = content.kind;
         await sharingAccount(uid);
-        const part = await getDocFromServer(doc(db, "channels", channelId, "uploads", snap.id, "chunks", String(index)));
-        if (!part.exists() || part.data().index !== index)
-          throw Error("The encrypted attachment is incomplete. No partial document was saved.");
-        chunks.push(checkCiphertextChunk(manifest, index, part.data().ciphertext));
+        await saveReceived(uid, item);
+        await sharingAccount(uid);
+        count++;
       }
-      item.ciphertext = await assembleCiphertext(manifest, chunks);
-    } else if (data.version === 1) item.ciphertext = data.ciphertext;
-    else throw Error("Unsupported encrypted transfer version.");
-    const content = await decryptSharedTransfer(
-      item.ciphertext,
-      item,
-      device,
-      channel.sender,
+    }
+  } catch (error) {
+    if (!count) throw error;
+    throw Error(
+      `${count} encrypted transfer(s) checked and saved before receiving stopped. Saved copies remain available. ${error instanceof Error ? error.message : "No further receipt was confirmed."}`,
     );
-    if (scope) await assertAssignmentContent(scope, content, channel.senderUid);
-    item.kind = content.kind;
-    await sharingAccount(uid);
-    await saveReceived(uid, item);
-    await sharingAccount(uid);
   }
-  return result.size;
+  return count;
 }

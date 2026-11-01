@@ -4,6 +4,7 @@ import {
   approveAssignmentRoute,
   approveChannel,
   operatorRead,
+  operatorWrite,
 } from "../scripts/sharing-operator.mjs";
 
 async function enroll(page: Page, role: string) {
@@ -85,6 +86,9 @@ test("facility assignment requires staff acceptance, scopes the patient and pres
       f.uid,
       s.uid,
     );
+    // Keep the active offer beyond the first page of preserved old scopes.
+    const currentRoute = await operatorRead(`assignmentRoutes/${scope}`);
+    for (let i = 0; i < 20; i++) await operatorWrite(`assignmentRoutes/000-${scope}-${String(i).padStart(2, "0")}`, { ...currentRoute, enabled: false }, true);
     await expect(
       approveAssignmentRoute(scope, m.uid, "self", f.uid, s.uid),
     ).rejects.toThrow();

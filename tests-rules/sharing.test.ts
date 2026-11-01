@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, afterAll, describe, it } from "vitest";
+import { beforeAll, beforeEach, afterAll, describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   initializeTestEnvironment,
@@ -18,6 +18,8 @@ import {
   where,
   limit,
   serverTimestamp,
+  orderBy,
+  startAfter,
 } from "firebase/firestore";
 
 let env: RulesTestEnvironment;
@@ -79,6 +81,21 @@ afterAll(async () => {
   await env?.cleanup();
 });
 describe("controlled sharing rules", () => {
+  it("permits bounded cursor pages with tied timestamps but denies later pages after revocation", async () => {
+    await env.withSecurityRulesDisabled(async ctx => {
+      for (let i = 0; i < 21; i++) await setDoc(doc(ctx.firestore(), "channels", "approved", "transfers", `entry-${String(i).padStart(2, "0")}`),
+        { ...transfer(), createdAt: new Date("2026-10-31T00:00:00Z") });
+    });
+    const base = query(collection(db("recipient"), "channels", "approved", "transfers"), orderBy("createdAt", "desc"));
+    const first = await assertSucceeds(getDocs(query(base, limit(20))));
+    expect(first.size).toBe(20);
+    const next = query(base, startAfter(first.docs[first.size - 1]), limit(20));
+    const last = await assertSucceeds(getDocs(next));
+    expect(last.docs.map(d => d.id)).toEqual(["entry-00"]);
+    await assertFails(getDocs(query(base, limit(21))));
+    await env.withSecurityRulesDisabled(ctx => updateDoc(doc(ctx.firestore(), "channels", "approved"), { enabled: false }));
+    await assertFails(getDocs(next));
+  });
   const manifest = () => ({ version: 2, senderUid: "sender", recipientUid: "recipient", senderKeyId: "a".repeat(64),
     recipientKeyId: "b".repeat(64), chunkCount: 2, ciphertextLength: 700001, ciphertextHash: "a".repeat(64), createdAt: serverTimestamp() });
   const upload = (uid: string) => doc(db(uid), "channels", "approved", "uploads", id);

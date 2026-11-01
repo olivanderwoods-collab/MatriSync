@@ -164,8 +164,8 @@ function SharingContent({ uid, role }: { uid: string; role: string }) {
             profile merging is not connected.
           </p>
           <p className="small">
-            This pilot lists up to 20 connections and fetches the newest 20
-            transfers per connection.
+            Fetch checks the available history, including older deliveries.
+            Each verified copy is saved as it arrives; retry if receiving stops.
           </p>
           <label>
             Approved connection
@@ -404,18 +404,23 @@ function SharingContent({ uid, role }: { uid: string; role: string }) {
                         throw Error(
                           "Offline. Open a previously saved copy below.",
                         );
-                      const count = await receiveSharedDocuments(
-                        uid,
-                        role,
-                        device!,
-                        channelId,
-                        fingerprint,
-                      );
-                      const inbox = await savedTransfers(uid);
-                      setSaved(transfersForWorkspace(inbox, uid, role));
-                      setUnscoped(
-                        inbox.filter((item) => !item.recipientRole).length,
-                      );
+                      let count: number;
+                      try {
+                        count = await receiveSharedDocuments(
+                          uid,
+                          role,
+                          device!,
+                          channelId,
+                          fingerprint,
+                        );
+                      } finally {
+                        const inbox = await savedTransfers(uid);
+                        await sharingAccount(uid);
+                        setSaved(transfersForWorkspace(inbox, uid, role));
+                        setUnscoped(
+                          inbox.filter((item) => !item.recipientRole).length,
+                        );
+                      }
                       setStatus(
                         `${count} encrypted transfer(s) checked and saved on this device.`,
                       );

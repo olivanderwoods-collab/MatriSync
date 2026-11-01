@@ -57,6 +57,91 @@ async function download(page: Page) {
   return readFile((await result.path())!);
 }
 
+test("receiving reaches older deliveries, keeps partial progress and retries equal-timestamp pages without duplicates", async ({ browser }) => {
+  test.setTimeout(180000);
+  const contexts = await Promise.all([0, 1].map(() => browser.newContext({ baseURL: "http://127.0.0.1:4175" })));
+  const [mother, clinician] = await Promise.all(contexts.map(c => c.newPage()));
+  const errors: string[] = [];
+  for (const page of [mother, clinician]) page.on("pageerror", e => errors.push(e.message));
+  try {
+    const m = await enroll(mother, "mother"), c = await enroll(clinician, "professional");
+    for (const a of [m, c]) await approveMember(a.uid, a.role, a.fingerprint);
+    const prefix = `history-${Date.now()}`, channel = `${prefix}-99`;
+    for (let i = 0; i < 20; i++) await approveChannel(`${prefix}-${String(i).padStart(2, "0")}`, m.uid, c.uid);
+    await approveChannel(channel, m.uid, c.uid);
+    await mother.goto("/mother/more/profile");
+    await mother.getByLabel("Full name", { exact: true }).fill("Synthetic History Mother");
+    await mother.getByRole("button", { name: "Save mother profile" }).click();
+    await expect(mother.getByRole("status")).toContainText("saved encrypted");
+    await mother.goto("/mother/more/sharing");
+    await refresh(mother, channel);
+    await refresh(clinician, channel);
+    expect(await clinician.getByRole("combobox", { name: "Approved connection", exact: true }).locator("option").count()).toBe(22);
+    await mother.getByLabel("Other device fingerprint").fill(c.fingerprint);
+    await clinician.getByLabel("Other device fingerprint").fill(m.fingerprint);
+    await mother.getByRole("combobox", { name: "Local patient profile" }).selectOption({ label: "Synthetic History Mother" });
+    await mother.getByRole("button", { name: "Encrypt and share profile" }).click();
+    await expect(mother.getByRole("status").filter({ hasText: "Encrypted profile version stored" })).toBeVisible();
+    const root = "http://127.0.0.1:8087/v1/projects/demo-matrisync/databases/(default)/documents";
+    const profileResponse = await fetch(`${root}/channels/${channel}/transfers`, { headers: { Authorization: "Bearer owner" } });
+    expect(profileResponse.ok).toBe(true);
+    const profileTransfer = (await profileResponse.json()).documents[0].name as string;
+    const original = Buffer.from("%PDF-1.7\nSynthetic history original\n%%EOF");
+    for (let i = 0; i < 21; i++) {
+      await mother.getByLabel("Original test document").setInputFiles({ name: `history-${i}.pdf`, mimeType: "application/pdf", buffer: original });
+      await mother.getByRole("button", { name: "Encrypt and send document" }).click();
+      await expect(mother.getByRole("status").filter({ hasText: "Encrypted document stored" })).toBeVisible();
+    }
+    const response = await fetch(`${root}/channels/${channel}/transfers?pageSize=100`, { headers: { Authorization: "Bearer owner" } });
+    expect(response.ok).toBe(true);
+    const transfers = (await response.json()).documents as { name: string }[];
+    expect(transfers).toHaveLength(22);
+    // Tie all timestamps deliberately; snapshot cursors must include the ID.
+    for (const item of transfers) {
+      const patched = await fetch(`http://127.0.0.1:8087/v1/${item.name}?updateMask.fieldPaths=createdAt`, {
+        method: "PATCH", headers: { Authorization: "Bearer owner", "Content-Type": "application/json" },
+        body: JSON.stringify({ fields: { createdAt: { timestampValue: item.name === profileTransfer ? "2026-10-30T00:00:00Z" : "2026-10-31T00:00:00Z" } } }),
+      });
+      expect(patched.ok).toBe(true);
+    }
+    // Go offline while saving item20; the app must await that save before stopping.
+    await clinician.evaluate(() => {
+      const originalAdd = IDBObjectStore.prototype.add;
+      let received = 0;
+      IDBObjectStore.prototype.add = function(value, key) {
+        if (this.transaction.db.name === "matrisync-sharing-pilot-v1" && this.name === "inbox" && ++received === 20) {
+          IDBObjectStore.prototype.add = originalAdd;
+          Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false });
+        }
+        return originalAdd.call(this, value, key);
+      };
+    });
+    await clinician.getByRole("button", { name: "Fetch approved records" }).click();
+    await expect(clinician.getByRole("alert")).toContainText("20 encrypted transfer(s) checked and saved before receiving stopped", { timeout: 20000 });
+    await expect(clinician.getByRole("alert")).toContainText("Offline");
+    await expect(clinician.getByRole("button", { name: "Open saved document" })).toHaveCount(20);
+    const savedBefore = await clinician.locator("article.ledger-record").allTextContents();
+    await clinician.reload();
+    await expect(clinician.getByRole("button", { name: "Open saved document" })).toHaveCount(20);
+    await refresh(clinician, channel);
+    await clinician.getByRole("button", { name: "Fetch approved records" }).click();
+    await expect(clinician.getByRole("status").filter({ hasText: "22 encrypted transfer(s) checked" })).toBeVisible();
+    await expect(clinician.getByRole("button", { name: "Open saved document" })).toHaveCount(21);
+    await clinician.getByRole("button", { name: "Open saved profiles", exact: true }).click();
+    await expect(clinician.getByRole("combobox", { name: "Shared patient", exact: true })).toContainText("Synthetic History Mother");
+    const savedAfter = await clinician.locator("article.ledger-record").allTextContents();
+    for (const text of savedBefore) expect(savedAfter).toContain(text);
+    const oldestId = transfers.filter(t => t.name !== profileTransfer).map(t => t.name.split("/").at(-1)!).sort()[0];
+    await clinician.locator("article.ledger-record").filter({ hasText: `Transfer ${oldestId}` }).getByRole("button", { name: "Open saved document" }).click();
+    expect((await download(clinician)).equals(original)).toBe(true);
+    await revokeChannel(channel);
+    await clinician.getByRole("button", { name: "Fetch approved records" }).click();
+    await expect(clinician.getByRole("alert")).toContainText("blocked");
+    await expect(clinician.getByRole("button", { name: "Open saved document" })).toHaveCount(21);
+    expect(errors).toEqual([]);
+  } finally { await Promise.all(contexts.map(c => c.close())); }
+});
+
 test("large original resumes immutable encrypted parts after interruption and saves only a verified complete copy", async ({ browser }) => {
   test.setTimeout(120000);
   const contexts = await Promise.all([0, 1].map(() => browser.newContext({ baseURL: "http://127.0.0.1:4175" })));
