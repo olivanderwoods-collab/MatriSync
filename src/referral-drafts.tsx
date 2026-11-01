@@ -6,6 +6,7 @@ const PilotReview = sharingPilotEnabled
     )
   : null;
 import { useRecords } from "./records";
+import { ReferralAssistance } from "./referral-assistance-panel";
 import type { Patient } from "./records-model";
 import {
   emptyReferralFields,
@@ -28,6 +29,7 @@ export function ReferralDrafts({ patient }: { patient: Patient }) {
     vault?.data?.documents.filter((d) => d.patientId === patient.id) || [];
   return (
     <ReferralDraftEditor
+      key={patient.id}
       drafts={drafts}
       originals={originals}
       review={
@@ -251,6 +253,7 @@ export function ReferralDraftEditor({
             Only enter facts already recorded by the clinician. Blank optional
             fields remain “Not recorded”.
           </p>
+          <ReferralAssistance fields={fields} onApply={setFields} disabled={busy} />
           <fieldset>
             <legend>Relevant original documents</legend>
             {!originals.length && (

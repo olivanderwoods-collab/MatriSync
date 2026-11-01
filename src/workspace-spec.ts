@@ -347,7 +347,7 @@ export const moreDescriptions: Record<string, string> = {
   affiliation:
     "Dr. Ishani Rao · Lotus Family Clinic · Synthetic affiliation, not verified.",
   documentation:
-    "AI Documentation: planned source-preserving extraction, completeness checks, structured handoff drafts and revisions. Original reports, author, time, units and unknowns remain visible. A clinician must confirm; changed source documents require review and re-approval. No extraction or AI generation is active.",
+    "Documentation assistance is available while editing a patient's referral: organize clinician-supplied text, retain its wording and source labels, and check empty fields before review. Original files are not read by the organizer. AI extraction and generation remain unavailable; clinical approval and sending are separate actions.",
   device:
     "Bluetooth NFC Reader/Writer preview: facility-owned ESP32 with BLE, NFC read/write module, screen and physical controls. Planned size/ready state, physical write confirmation and read-back verification. No phone-native NFC or Bluetooth connection is active. Only clinician-approved, authorized compact encrypted clinical handoffs may be transferred.",
   reports:

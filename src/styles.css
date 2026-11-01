@@ -2638,6 +2638,11 @@ dialog h3 {
 .referral-document > h3 { margin-top: 0; }
 .referral-document .local-document { flex-wrap: wrap; }
 .referral-document summary { cursor: pointer; }
+.referral-assistance { display: block; min-width: 0; }
+.referral-assistance .local-document { display: block; }
+.referral-assistance summary { cursor: pointer; padding-block: 10px; }
+.referral-assistance label { min-width: 0; }
+.referral-assistance .button { white-space: normal; }
 .ledger-record { border-top: 1px solid var(--border); padding-block: 20px; overflow-wrap: anywhere; }
 .ledger-record details { margin-bottom: 16px; }
 .ledger-record summary { cursor: pointer; padding-block: 10px; }

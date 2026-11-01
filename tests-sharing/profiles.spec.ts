@@ -298,6 +298,13 @@ test("profile versions retain identity, match original bytes, exclude unshared c
     await doctor
       .getByRole("textbox", { name: "Reason for referral", exact: true })
       .fill("Recorded referral reason for shared Mother");
+    const assistance = doctor.getByRole("region", { name: "Clinician documentation assistance", exact: true });
+    await assistance.getByText("Organize supplied notes", { exact: true }).click();
+    await assistance.getByLabel("Source label", { exact: true }).fill("Clinician review of received version");
+    await assistance.getByLabel("Clinician-supplied notes").fill("Instructions: Exact clinician wording; unknowns remain unknown.");
+    await assistance.getByRole("button", { name: "Organize text for review" }).click();
+    await assistance.getByRole("checkbox").check();
+    await assistance.getByRole("button", { name: "Add reviewed text to draft" }).click();
     await doctor
       .getByRole("checkbox", { name: /profile-original.pdf/ })
       .check();
@@ -333,6 +340,8 @@ test("profile versions retain identity, match original bytes, exclude unshared c
     expect(exported).toContain(firstVersion!);
     expect(exported).toContain(m.uid);
     expect(exported).toContain("Shared profile ID");
+    expect(exported).toContain("Clinician-supplied source: Clinician review of received version");
+    expect(exported).toContain("Exact clinician wording; unknowns remain unknown.");
     const printPage = await contexts[1].newPage();
     await printPage.route("**/shared-referral-print-check", (route) =>
       route.fulfill({ contentType: "text/html", body: exported }),
