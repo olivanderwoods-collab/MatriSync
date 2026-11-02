@@ -1,3 +1,4 @@
+import { ReferralOutboxPanel } from "./referral-outbox-panel";
 import { useEffect, useState } from "react";
 import { useRecords, VaultGate } from "./records";
 import {
@@ -153,6 +154,7 @@ function SharingContent({ uid, role }: { uid: string; role: string }) {
       {device && (
         <SharingAssignmentPanel uid={uid} role={role} device={device} />
       )}
+      {device && role !== "mother" && <ReferralOutboxPanel uid={uid} role={role} />}
       {device && <SharingOutboxPanel uid={uid} role={role} device={device} revision={outboxRevision}
         onConfirmed={id => { if (id === transferId) setTransferId(crypto.randomUUID()); }} />}
       {channels.length > 0 && (

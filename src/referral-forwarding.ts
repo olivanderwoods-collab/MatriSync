@@ -1,3 +1,9 @@
+import { queuedReferrals } from "./referral-outbox";
+import {
+  queueReferral,
+  publishQueuedReferral,
+  adoptPublishedReferral,
+} from "./referral-outbox-client";
 import {
   collection,
   doc,
@@ -52,8 +58,16 @@ export async function forwardApprovedReferral(
     initiation = await readReferralInitiation(uid, item);
   if (!initiation)
     throw Error("Record the selected destination before sending.");
+  const existingQueue = (await queuedReferrals(uid, "organization")).find(
+    (i) =>
+      i.id === item.id &&
+      i.channelId === initiation.destinationChannelId &&
+      i.kind === "forwarded",
+  );
+  if (existingQueue)
+    return publishQueuedReferral(uid, "organization", existingQueue);
   const device = await localSharingDevice(uid),
-    { db, channel, scope } = await checkedChannel(
+    { channel, scope } = await checkedChannel(
       uid,
       initiation.destinationChannelId,
       device,
@@ -106,57 +120,19 @@ export async function forwardApprovedReferral(
     device,
     channel.recipient,
   );
-  const ref = doc(db, "channels", channel.id, "forwardedReferrals", item.id);
-  const index = doc(
-    db,
-    "channels",
-    channel.id,
-    "forwardedReferralIndex",
-    item.id,
-  );
-  await runTransaction(db, async (tx) => {
-    const old = await tx.get(ref);
-    const indexed = await tx.get(index);
-    if (old.exists()) {
-      if (
-        old.data().sourceChannelId !== item.channelId ||
-        old.data().contentHash !== item.verifiedApprovalHash ||
-        old.data().recipientKeyId !== channel.recipient.keyId
-      )
-        throw Error(
-          "A different forwarded referral already exists. Nothing was replaced.",
-        );
-      if (!indexed.exists())
-        tx.set(index, { approvalId: item.id, createdAt: old.data().createdAt });
-      return;
-    }
-    const receipt = await tx.get(
-      doc(db, "referralApprovals", item.senderUid, "versions", item.id),
-    );
-    const started = await tx.get(
-      doc(db, "channels", item.channelId, "referralInitiations", item.id),
-    );
-    if (!receipt.exists() || !started.exists())
-      throw Error("Approval or initiation is unavailable.");
-    await sharingAccount(uid);
-    tx.set(ref, {
-      version: 1,
-      approvalId: item.id,
-      sourceChannelId: item.channelId,
-      contentHash: item.verifiedApprovalHash,
-      senderUid: uid,
-      recipientUid: context.recipientUid,
-      senderKeyId: device.keyId,
-      recipientKeyId: context.recipientKeyId,
-      doctor: item.sender,
-      approval: receipt.data(),
-      initiation: started.data(),
+  const prepared = await adoptPublishedReferral(
+    {
+      kind: "forwarded",
+      context,
       ciphertext,
-      createdAt: serverTimestamp(),
-    });
-    tx.set(index, { approvalId: item.id, createdAt: serverTimestamp() });
-  });
-  await sharingAccount(uid);
+      approval: value.approval,
+      authority,
+    },
+    "organization",
+    device,
+  );
+  const queued = await queueReferral(prepared, device);
+  await publishQueuedReferral(uid, "organization", queued);
 }
 export async function receiveForwardedReferrals(
   uid: string,

@@ -25,6 +25,13 @@ import {
 } from "./referral-delivery-storage";
 import type { ReferralDraft } from "./referral-draft";
 import type { ReferralApproval } from "./referral-approval";
+import { queuedReferrals } from "./referral-outbox";
+import {
+  queueReferral,
+  publishQueuedReferral,
+  adoptPublishedReferral,
+} from "./referral-outbox-client";
+import { referralApprovalId } from "./referral-approval";
 import { decryptForwardedReferral } from "./referral-forward-package";
 
 function online() {
@@ -41,8 +48,15 @@ export async function sendApprovedReferral(
   fingerprint: string,
 ) {
   online();
+  const queued = (await queuedReferrals(uid, "professional")).find(
+    (i) =>
+      i.id === referralApprovalId(draft, versionId) &&
+      i.channelId === channelId &&
+      i.kind === "approved",
+  );
+  if (queued) return publishQueuedReferral(uid, "professional", queued);
   const device = await localSharingDevice(uid),
-    { db, channel, scope } = await checkedChannel(
+    { channel, scope } = await checkedChannel(
       uid,
       channelId,
       device,
@@ -79,34 +93,13 @@ export async function sendApprovedReferral(
       device,
       channel.recipient,
     );
-  const ref = doc(db, "channels", channelId, "referrals", approval.id);
-  await runTransaction(db, async (tx) => {
-    const existing = await tx.get(ref);
-    if (existing.exists()) {
-      if (
-        existing.data().contentHash !== approval.contentHash ||
-        existing.data().senderKeyId !== device.keyId ||
-        existing.data().recipientKeyId !== channel.recipient.keyId
-      )
-        throw Error(
-          "A different delivery already exists. Nothing was replaced.",
-        );
-      return;
-    }
-    await sharingAccount(uid);
-    tx.set(ref, {
-      version: 1,
-      approvalId: approval.id,
-      contentHash: approval.contentHash,
-      senderUid: uid,
-      recipientUid: channel.recipientUid,
-      senderKeyId: device.keyId,
-      recipientKeyId: channel.recipient.keyId,
-      ciphertext,
-      createdAt: serverTimestamp(),
-    });
-  });
-  await sharingAccount(uid);
+  const prepared = await adoptPublishedReferral(
+    { kind: "approved", context, ciphertext, approval },
+    "professional",
+    device,
+  );
+  const savedQueue = await queueReferral(prepared, device);
+  await publishQueuedReferral(uid, "professional", savedQueue);
 }
 export async function receiveApprovedReferrals(
   uid: string,

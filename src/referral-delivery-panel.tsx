@@ -1,3 +1,4 @@
+import { ReferralOutboxPanel } from "./referral-outbox-panel";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { sharingChannels, type SharingChannel } from "./sharing-client";
@@ -168,6 +169,7 @@ export function SendApprovedReferral({
         Send approved version
       </button>
       {a.messages}
+      <ReferralOutboxPanel uid={uid} role="professional" revision={a.busy} />
     </section>
   );
 }
@@ -208,6 +210,7 @@ export function OrganizationReferrals({ uid }: { uid: string }) {
   return (
     <>
       <h1>Referrals</h1>
+      <ReferralOutboxPanel uid={uid} role="organization" />
       <section className="panel">
         <h2>Receive doctor-approved referrals</h2>
         <p>
