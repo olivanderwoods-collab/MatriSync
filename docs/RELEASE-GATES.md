@@ -1,5 +1,7 @@
 # MatriSync release gates
 
+**5 November current status:** [the final handoff](MATRISYNC_CODEX_HANDOFF_2026-11-05.md) records which controlled test journeys now work and which historical gaps remain. The [latest user requirements](FINAL-REQUIREMENTS-2026-11-05.md) add granular healthcare roles, facility device enrollment/staff PIN sessions and accepted-upload review. These are release blockers, not completed features. Do not infer public readiness from passing local relay tests or firmware compilation.
+
 ## Submission target — latest priority
 
 For 5 November 2026, the user approved real encrypted sharing between explicitly approved test accounts, complete referral/document/handoff and the Mother workspace with RUHI. Public facility verification remains deferred. A labelled BLE software simulator may substitute for the unavailable physical MatriSync device, but physical NFC claims remain gated on hardware tests. See `SUBMISSION-CORE-PLAN.md`. The current implementation has not yet passed this new end-to-end target; existing synthetic tests do not close these gates.

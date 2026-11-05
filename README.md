@@ -1,6 +1,14 @@
 # MatriSync
 MatriSync software developed by Team UNCODED for the Healthathon 2026
 
+## Current checkpoint — 5 November 2026
+
+**Start with [the complete Codex → GitHub → Bolt handoff](docs/MATRISYNC_CODEX_HANDOFF_2026-11-05.md) and [latest approved requirements](docs/FINAL-REQUIREMENTS-2026-11-05.md).** They supersede conflicting historical status below. Continue on `handoff/matrisync-codex-2026-11-05`; preserve Firebase, records and the existing design. This remains a synthetic-data development prototype, not a clinically deployable system.
+
+The controlled local submission build now combines encrypted profile/original sharing, reviewed printable referrals, destination receiving events and Web Bluetooth handoff. Matching ESP32-S3 firmware compiles; physical BLE and NFC are not verified. Use `pnpm build:submission` for that emulator-bound build. Bolt source preview uses `pnpm dev:bolt`; hosted preview cannot substitute for localhost emulator or hardware tests. Granular healthcare roles, facility device enrollment/PIN sessions, upload acceptance review and clinical AI remain documented work for continuation.
+
+See [verification](docs/VERIFICATION-2026-11-05-HANDOFF.md), [ESP32-S3 protocol](docs/ESP32-S3-BLE-HANDOFF.md), and [new-conversation context](docs/NEW-CHATGPT-CONTEXT-2026-11-05.md). The sections below are historical setup/background and are retained for continuity.
+
 ## Phased development · encrypted local records
 
 Responsive React/TypeScript PWA with three role workspaces, separate synthetic Guest sessions and Firebase email/password Authentication. Signed-in professionals can add/edit/search private patient profiles and save encrypted reports and prescription files on the device. Mothers can store their own documents locally. The encrypted Firestore adapter and prototype rules are tested against emulators but not connected to the live app. No deployment has been performed.

@@ -1,5 +1,7 @@
 # MatriSync submission core — 25 October 2026
 
+**5 November superseding priority:** finish the existing phase and transfer a reproducible checkpoint to GitHub/Bolt. Read [the final user requirements](FINAL-REQUIREMENTS-2026-11-05.md) and [current implementation inventory](MATRISYNC_CODEX_HANDOFF_2026-11-05.md). Healthcare operations are primary. ESP32-S3 is confirmed; NFC reader/tag undecided. BLE/print integration is implemented with simulated GATT tests and a compiled hardware sketch; physical operation remains unverified. Full clinical release and all three original core journeys are not declared complete. Do not expand secondary modules before the new permission/device/clinical-review boundaries are resolved.
+
 Submission deadline: **5 November 2026**. This plan prioritizes a complete maternal-care continuity journey over additional modules. Existing records, attachments, UI and secondary features are preserved; further Inventory/distributor/finance expansion is paused.
 
 ## Confirmed by the user
