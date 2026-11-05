@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
+if (process.env.TEST_SUBMISSION === "1") await import("./build-submission.mjs");
 const child = spawn(
   process.execPath,
-  [
+  process.env.TEST_SUBMISSION === "1" ? ["node_modules/vite/bin/vite.js", "preview", "--outDir", ".local-tools/submission-dist", "--host", "127.0.0.1", "--port", process.env.TEST_SHARING_PORT || "4175", "--strictPort"] : [
     "node_modules/vite/bin/vite.js",
     "--host",
     "127.0.0.1",

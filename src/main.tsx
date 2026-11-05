@@ -992,6 +992,13 @@ function WorkspaceBody() {
           </button>
         </div>
         <main id="main" tabIndex={-1} className="workspace-main">
+          {!app.demo && r !== "mother" && (
+            <p className="notice" role="note">
+              Healthcare prototype · Synthetic data only. Facility device
+              enrollment and staff-specific permissions are incomplete. Choosing
+              a workspace does not grant clinical authority.
+            </p>
+          )}
           {path !== "overview" &&
             section !== "health" &&
             path !== "children" &&

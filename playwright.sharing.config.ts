@@ -12,6 +12,8 @@ export default defineConfig({
   },
   webServer: {
     command: "node scripts/start-sharing-pilot.mjs",
+    // Submission mode compiles the production bundle before serving it.
+    timeout: 120000,
     port: 4175,
     reuseExistingServer: false,
   },

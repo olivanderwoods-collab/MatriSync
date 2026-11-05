@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { BleHandoffPanel } from "./ble-handoff-panel";
+import { createHandoff } from "./handoff-client";
 import type { SavedReferralDelivery } from "./referral-delivery-storage";
 import type { ReferralInitiation } from "./referral-delivery";
 import {
@@ -34,6 +36,7 @@ export function ReferralReceivingPanel({
   item: SavedReferralDelivery;
   initiation?: ReferralInitiation;
 }) {
+  const [handoff, setHandoff] = useState<Uint8Array<ArrayBuffer>>();
   const [events, setEvents] = useState<ReceivingEvent[]>(),
     [confirmed, setConfirmed] = useState(false),
     [pin, setPin] = useState(""),
@@ -99,6 +102,24 @@ export function ReferralReceivingPanel({
           >
             Send to selected destination
           </button>
+          <p>
+            After destination storage is confirmed, create a bounded encrypted
+            handoff for the ESP32-S3. The organized approved document is
+            available above for printing.
+          </p>
+          <button
+            className="button secondary"
+            disabled={busy}
+            onClick={() =>
+              void act(async () => {
+                setHandoff(undefined);
+                setHandoff(await createHandoff(uid, item));
+              })
+            }
+          >
+            Create encrypted handoff
+          </button>
+          {handoff && <BleHandoffPanel packet={handoff} />}
         </>
       )}
       <p>

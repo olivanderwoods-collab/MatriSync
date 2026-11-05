@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
+import { installPeripheral, simulatedPeripheral } from "./ble-device";
 import {
   approveMember,
   approveChannel,
@@ -389,10 +390,7 @@ test("profile versions retain identity, match original bytes, exclude unshared c
     expect(exported).toContain("Clinician-supplied source: Clinician review of received version");
     expect(exported).toContain("Exact clinician wording; unknowns remain unknown.");
     const printPage = await contexts[1].newPage();
-    await printPage.route("**/shared-referral-print-check", (route) =>
-      route.fulfill({ contentType: "text/html", body: exported }),
-    );
-    await printPage.goto("/shared-referral-print-check");
+    await printPage.setContent(exported);
     await expect(printPage.locator("body")).toContainText(firstVersion!);
     await printPage.pdf({
       path: testInfo.outputPath("shared-referral-draft.pdf"),
@@ -476,10 +474,7 @@ test("profile versions retain identity, match original bytes, exclude unshared c
     expect(approvedHtml).toContain("Delivery status recorded separately");
     expect(approvedHtml).toContain(firstVersion!);
     const approvedPrint = await contexts[1].newPage();
-    await approvedPrint.route("**/approved-referral-print-check", (route) =>
-      route.fulfill({ contentType: "text/html", body: approvedHtml }),
-    );
-    await approvedPrint.goto("/approved-referral-print-check");
+    await approvedPrint.setContent(approvedHtml);
     await approvedPrint.pdf({
       path: testInfo.outputPath("approved-shared-referral.pdf"),
       preferCSSPageSize: true,
@@ -831,6 +826,34 @@ test("profile versions retain identity, match original bytes, exclude unshared c
     await destination
       .getByLabel("Sender device fingerprint")
       .fill(o.fingerprint);
+    // The same protocol crosses separate clients through an explicit test
+    // peripheral. This verifies application/GATT behavior, not physical radio.
+    const peripheral = simulatedPeripheral();
+    await installPeripheral(facility, peripheral);
+    await installPeripheral(destination, peripheral);
+    await outgoing.getByRole("button", { name: "Create encrypted handoff", exact: true }).click();
+    const bleSend = facility.getByRole("region", { name: "Send handoff over BLE", exact: true });
+    await bleSend.getByRole("button", { name: "Connect ESP32-S3", exact: true }).click();
+    await bleSend.getByRole("button", { name: "Send and verify handoff", exact: true }).click();
+    await expect(bleSend.getByRole("status")).toContainText("exact read-back verified", { timeout: 30000 });
+    expect(new TextDecoder().decode(peripheral.packet())).not.toContain("Asha Profile Test");
+    const bleRead = destination.getByRole("region", { name: "Read handoff over BLE", exact: true });
+    await bleRead.getByRole("button", { name: "Connect ESP32-S3", exact: true }).click();
+    peripheral.corrupt();
+    await bleRead.getByRole("button", { name: "Read and verify handoff", exact: true }).click();
+    await expect(bleRead.getByRole("alert")).toContainText(/differs|malformed/, { timeout: 30000 });
+    await expect(destination.getByRole("button", { name: /Open approved referral ·/ })).toHaveCount(0);
+    peripheral.corrupt();
+    await bleRead.getByRole("button", { name: "Read and verify handoff", exact: true }).click();
+    await expect(bleRead.getByRole("status")).toContainText("verified and opened", { timeout: 30000 });
+    await expect(destination.getByRole("region", { name: "Received approved referral", exact: true })).toContainText("Recorded referral reason for shared Mother");
+    // Capture the send status before leaving the device view.
+    await bleSend.screenshot({ path: testInfo.outputPath("ble-handoff-mobile.png") });
+    // Repeated conventional receipt remains idempotent after BLE retrieval.
+    await destination.reload();
+    await destination.getByRole("button", { name: "Refresh referral connections" }).click();
+    await destination.getByLabel("Incoming referral connection").selectOption(destinationChannel);
+    await destination.getByLabel("Sender device fingerprint").fill(o.fingerprint);
     for (let retry = 0; retry < 2; retry++) {
       await destination
         .getByRole("button", {

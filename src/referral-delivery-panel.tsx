@@ -1,4 +1,6 @@
 import { ReferralOutboxPanel } from "./referral-outbox-panel";
+import { BleHandoffPanel } from "./ble-handoff-panel";
+import { receiveHandoff } from "./handoff-client";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { sharingChannels, type SharingChannel } from "./sharing-client";
@@ -319,6 +321,18 @@ export function OrganizationReferrals({ uid }: { uid: string }) {
           </button>
         ))}
       </section>
+      <BleHandoffPanel
+        onRead={async (bytes) => {
+          const opened = await receiveHandoff(uid, bytes, peer);
+          setSelected(opened);
+          setInitiation(undefined);
+          setChecked(false);
+          setReviewed(false);
+          setDestination("");
+          setDestinationPin("");
+          await reloadSaved();
+        }}
+      />
       {selected && (
         <section className="panel" aria-label="Received approved referral">
           <h2>{selected.value.draft.versions[0].patient.name}</h2>

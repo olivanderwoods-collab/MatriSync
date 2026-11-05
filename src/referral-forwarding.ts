@@ -138,6 +138,7 @@ export async function receiveForwardedReferrals(
   uid: string,
   channelId: string,
   fingerprint: string,
+  expected?: { id: string; ciphertext: string },
 ) {
   online();
   const device = await localSharingDevice(uid),
@@ -155,13 +156,15 @@ export async function receiveForwardedReferrals(
     channel.sender.keyId,
     fingerprint.trim(),
   );
-  const result = await getDocsFromServer(
-    query(
-      collection(db, "channels", channelId, "forwardedReferralIndex"),
-      orderBy("createdAt", "desc"),
-      limit(20),
-    ),
-  );
+  const result = expected
+    ? { docs: [{ id: expected.id }], size: 1 }
+    : await getDocsFromServer(
+        query(
+          collection(db, "channels", channelId, "forwardedReferralIndex"),
+          orderBy("createdAt", "desc"),
+          limit(20),
+        ),
+      );
   // Discover nonclinical IDs only; individually fetch each ciphertext under its
   // full current authority chain within Firestore's ten access-call limit.
   for (const entry of result.docs) {
@@ -170,6 +173,10 @@ export async function receiveForwardedReferrals(
     );
     if (!snap.exists()) throw Error("The indexed referral is unavailable.");
     const d = snap.data();
+    if (expected && d.ciphertext !== expected.ciphertext)
+      throw Error(
+        "The device handoff differs from the authoritative approved delivery.",
+      );
     const approval = { ...dated(d.approval), id: snap.id } as ReferralApproval;
     const authority: ForwardAuthority = {
       source: {

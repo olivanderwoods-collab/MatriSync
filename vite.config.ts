@@ -67,7 +67,7 @@ export default defineConfig(({ mode }) => ({
         find: /^\.\/workflow-tests$/,
         replacement: fileURLToPath(
           new URL(
-            mode === "production"
+            mode === "production" || mode === "submission"
               ? "./src/workflow-tests-disabled.tsx"
               : "./src/workflow-tests.tsx",
             import.meta.url,
@@ -101,5 +101,7 @@ export default defineConfig(({ mode }) => ({
         : undefined,
     watch: { ignored: ["**/.local-tools/**"] },
   },
-  preview: { port: 4173, strictPort: true },
+  preview: { port: 4173, strictPort: true, headers: process.env.VITE_SHARING_PILOT === "1" ? {
+    "Content-Security-Policy": "img-src 'self' data: blob:; connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*",
+  } : undefined },
 }));
