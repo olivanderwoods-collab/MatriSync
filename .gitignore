@@ -20,3 +20,4 @@ firestore-debug.log
 .cache/
 models/
 *.secret
+.firebase/

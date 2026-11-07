@@ -1,4 +1,4 @@
-import { validateReferralDrafts, type ReferralDraft } from "./referral-draft";
+import { handoffDetailFields, validateReferralDrafts, type ReferralDraft } from "./referral-draft";
 
 export type ReferralApproval = {
   id: string;
@@ -100,9 +100,12 @@ export async function referralApprovalHash(
       d.size ?? null,
     ]),
   ];
+  const digestInput = handoffDetailFields.some(key => version.fields[key] !== undefined)
+    ? [...content, ["manual-handoff-v1", ...handoffDetailFields.map(key => [key, version.fields[key] ?? null])]]
+    : content;
   const digest = await crypto.subtle.digest(
     "SHA-256",
-    new TextEncoder().encode(JSON.stringify(content)),
+    new TextEncoder().encode(JSON.stringify(digestInput)),
   );
   return Array.from(new Uint8Array(digest), (b) =>
     b.toString(16).padStart(2, "0"),

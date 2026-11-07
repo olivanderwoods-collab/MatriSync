@@ -841,12 +841,12 @@ test("profile versions retain identity, match original bytes, exclude unshared c
     await installPeripheral(destination, peripheral);
     await outgoing.getByRole("button", { name: "Create encrypted handoff", exact: true }).click();
     const bleSend = facility.getByRole("region", { name: "Send handoff over BLE", exact: true });
-    await bleSend.getByRole("button", { name: "Connect ESP32-S3", exact: true }).click();
+    await bleSend.getByRole("button", { name: "Connect compatible ESP32", exact: true }).click();
     await bleSend.getByRole("button", { name: "Send and verify handoff", exact: true }).click();
     await expect(bleSend.getByRole("status")).toContainText("exact read-back verified", { timeout: 30000 });
     expect(new TextDecoder().decode(peripheral.packet())).not.toContain("Asha Profile Test");
     const bleRead = destination.getByRole("region", { name: "Read handoff over BLE", exact: true });
-    await bleRead.getByRole("button", { name: "Connect ESP32-S3", exact: true }).click();
+    await bleRead.getByRole("button", { name: "Connect compatible ESP32", exact: true }).click();
     peripheral.corrupt();
     await bleRead.getByRole("button", { name: "Read and verify handoff", exact: true }).click();
     await expect(bleRead.getByRole("alert")).toContainText(/differs|malformed/, { timeout: 30000 });

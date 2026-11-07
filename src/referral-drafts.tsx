@@ -10,7 +10,9 @@ import { ReferralAssistance } from "./referral-assistance-panel";
 import type { Patient } from "./records-model";
 import {
   emptyReferralFields,
-  referralFields,
+  allReferralFields as referralFields,
+  missingReferralFields,
+  handoffDetailFields,
   type ReferralDraft,
   type ReferralFields,
 } from "./referral-draft";
@@ -96,7 +98,8 @@ export function ReferralDraftEditor({
 }) {
   const [draftId, setDraftId] = useState("");
   const [versionId, setVersionId] = useState("");
-  const [fields, setFields] = useState(emptyReferralFields);
+  const blankManual = () => ({ ...emptyReferralFields(), ...Object.fromEntries(handoffDetailFields.map(key => [key, ""])) });
+  const [fields, setFields] = useState<ReferralFields>(blankManual);
   const [documentIds, setDocumentIds] = useState<string[]>([]);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -155,7 +158,7 @@ export function ReferralDraftEditor({
     const latest = item?.versions.at(-1);
     setDraftId(item?.id || "");
     setVersionId(latest?.id || "");
-    setFields(latest?.fields || emptyReferralFields());
+    setFields({ ...blankManual(), ...latest?.fields });
     setDocumentIds(latest?.documents.map((d) => d.id) || []);
     setEditing(true);
     setNotice("");
@@ -234,15 +237,19 @@ export function ReferralDraftEditor({
             }
           }}
         >
+          <aside className="notice" aria-label="Missing handoff details" aria-live="polite">
+            {missingReferralFields(fields).length
+              ? <><strong>Details not entered</strong><p>{missingReferralFields(fields).map(key => labels[key]).join("; ")}</p></>
+              : <strong>Every listed field has an entry. This does not verify its clinical accuracy.</strong>}
+            <p>Advisory only. You may save, approve and send with missing details. They remain “Not recorded”; the app will not fill them in.</p>
+          </aside>
           {referralFields.map((key) => (
             <label key={key}>
-              {labels[key]}
-              {key !== "reason" && " (optional)"}
+              {labels[key]}{key === "reason" ? "" : " (optional)"}
               <textarea
-                required={key === "reason"}
                 maxLength={8000}
-                rows={4}
-                value={fields[key]}
+                rows={3}
+                value={fields[key] || ""}
                 onChange={(e) =>
                   setFields({ ...fields, [key]: e.target.value })
                 }
@@ -250,8 +257,7 @@ export function ReferralDraftEditor({
             </label>
           ))}
           <p className="small">
-            Only enter facts already recorded by the clinician. Blank optional
-            fields remain “Not recorded”.
+            Enter recorded facts only, including units and measurement dates where known. All clinical fields are optional. Uploaded documents stay local; this handoff contains manually entered data and references only.
           </p>
           <ReferralAssistance fields={fields} onApply={setFields} disabled={busy} />
           <fieldset>

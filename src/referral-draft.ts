@@ -4,7 +4,12 @@ export const referralFields = [
   "treatment",
   "instructions",
 ] as const;
-export type ReferralFields = Record<(typeof referralFields)[number], string>;
+export const handoffDetailFields = ["patientReference", "contact", "bloodGroup", "pregnancyStage", "allergies", "usg", "bloodSugar", "bloodPressure", "situation", "drugsGiven", "remarks"] as const;
+export const allReferralFields = [...handoffDetailFields, ...referralFields] as const;
+export type ReferralFields = Record<(typeof referralFields)[number], string> & Partial<Record<(typeof handoffDetailFields)[number], string>>;
+export function missingReferralFields(fields: ReferralFields) {
+  return allReferralFields.filter(key => !fields[key]?.trim());
+}
 export type ReceivedReferralOrigin = {
   profileId: string;
   sourceUid: string;
@@ -51,7 +56,13 @@ export function referralInput(value: ReferralFields): ReferralFields {
       );
     result[key] = value[key].trim();
   }
-  if (!result.reason) throw Error("Enter the reason for referral.");
+  // Older signed versions retain their original shape. New manual details are
+  // optional and never inferred; absent clinical information cannot block saving.
+  for (const key of handoffDetailFields) if (value[key] !== undefined) {
+    if (typeof value[key] !== "string" || value[key].length > 8000)
+      throw Error("Each referral field must contain no more than 8,000 characters.");
+    result[key] = value[key].trim();
+  }
   return result;
 }
 export function validateReferralDrafts(

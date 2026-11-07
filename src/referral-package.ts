@@ -11,7 +11,7 @@ import {
   type PublicDevice,
   type TransferContext,
 } from "./sharing-crypto";
-import { validateReferralDrafts, type ReferralDraft } from "./referral-draft";
+import { handoffDetailFields, validateReferralDrafts, type ReferralDraft } from "./referral-draft";
 import {
   checkReferralApproval,
   validateReferralApprovals,
@@ -65,6 +65,7 @@ export async function referralPackage(
           history: v.fields.history,
           treatment: v.fields.treatment,
           instructions: v.fields.instructions,
+          ...Object.fromEntries(handoffDetailFields.filter(key => v.fields[key] !== undefined).map(key => [key, v.fields[key]])),
         },
         documents: v.documents.map((d) => ({
           id: d.id,

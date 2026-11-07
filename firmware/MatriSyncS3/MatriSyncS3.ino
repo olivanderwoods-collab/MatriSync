@@ -6,6 +6,7 @@
 #include <BLEUtils.h>
 #include <mbedtls/sha256.h>
 #include <mbedtls/version.h>
+#include "HandoffFrame.h"
 
 static const char *SERVICE = "d973f2e0-b19e-4a55-a3e6-77c89601a001";
 static const char *CONTROL = "d973f2e0-b19e-4a55-a3e6-77c89601a002";
@@ -39,7 +40,7 @@ class ControlCallbacks : public BLECharacteristicCallbacks {
 #else
       int result = mbedtls_sha256_ret(buffers[1 - active], total, digest, 0);
 #endif
-      if (result || memcmp(digest, expectedHash, 32)) fail();
+      if (result || memcmp(digest, expectedHash, 32) || !completeHandoffFrame(buffers[1 - active], total)) fail();
       else { active = 1 - active; committedSize = total; memcpy(committedToken, token, 8); cursor = 0; phase = 2; }
     } else if (n == 5 && p[0] == 4 && phase == 2 && !errorCode && u32(p + 1) < committedSize) {
       cursor = u32(p + 1);

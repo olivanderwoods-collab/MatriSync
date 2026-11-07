@@ -51,7 +51,17 @@ export function BloodGroupSelect({
 export function useLocalCompanionProfile() {
   const { vault } = useContext(Context);
   return useCallback(
-    async () => profileContext(await vault?.ownCompanionProfile()),
+    async () => {
+      if (import.meta.env.VITE_CARE_ENABLED === "1" && vault) {
+        const { savedCareIds, readCareCopy } = await import("./care-storage");
+        const ids = await savedCareIds(vault.uid);
+        for (const id of ids) {
+          const care = await readCareCopy(vault.uid, id);
+          if (care?.motherUid === vault.uid) return profileContext({ name: care.profile.name, profile: care.profile.details });
+        }
+      }
+      return profileContext(await vault?.ownCompanionProfile());
+    },
     [vault],
   );
 }

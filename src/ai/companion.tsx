@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { careEnabled, careFactQuestion, type CareView } from "../care-model";
+import { careFactAnswer } from "../care-facts";
+import { scriptedCompanion } from "./scripted";
 import { DocumentContextPanel } from "./document-context-panel";
 import { documentQuestion, documentAnswer, type ReviewedDocument } from "./document-context";
 import {
@@ -25,7 +28,7 @@ import {
 } from "./preferences";
 import {
   BEHAVIOR_VERSION,
-  RUHI_ORIGIN,
+  COMPANION_IDENTITY,
   confusesCompanionWithUser,
   addressReply,
   profileQuestion,
@@ -107,7 +110,7 @@ export function Companion({
     clearTimeout(timeout.current);
     setStatus("not-loaded");
     setProgress("");
-    setNotice("Stopped. Load RUHI to continue.");
+    setNotice("Stopped. Load MatriSathi to continue.");
     if (!hasModel)
       void removeModel().catch(() =>
         setNotice(
@@ -177,7 +180,7 @@ export function Companion({
                 (text && addressReply(text, replyProfile.current)) ||
                 "Thank you for sharing that. I couldn't form a reliable reply this time. You can tell me more about what's on your mind; for personal health questions, please speak with your care team.",
               label: text
-                ? "RUHI · Offline AI"
+                ? "MatriSathi · Offline AI"
                 : "Safety fallback · Not AI-generated",
             },
           ].slice(-40),
@@ -197,6 +200,26 @@ export function Companion({
   async function send() {
     const text = input.trim();
     if (!text || busy) return;
+    const scripted = status !== "ready" ? scriptedCompanion(text, !account) : undefined;
+    if (scripted) {
+      setMessages(items => [...items,{role:"user" as const,text},{role:"assistant" as const,text:scripted,label:"MatriSathi · Scripted response · Not generative AI"}].slice(-40));
+      setInput("");setNotice("");return;
+    }
+    if (careEnabled && careFactQuestion(text)) {
+      try {
+        let linked: CareView | undefined;
+        if (profileAccount && useProfile) {
+          const { savedCareIds, readCareCopy } = await import("../care-storage");
+          for (const id of await savedCareIds(profileAccount)) {
+            const copy = await readCareCopy(profileAccount, id);
+            if (copy?.motherUid === profileAccount) { linked = copy; break; }
+          }
+        }
+        setMessages(items => [...items, { role: "user" as const, text }, { role: "assistant" as const, text: careFactAnswer(text, linked)!, label: "Recorded care detail · Exact read-back · Not AI-generated" }].slice(-40));
+        setInput(""); setNotice("");
+      } catch { setNotice("Your saved care details could not be opened. Load your linked profile and try again."); }
+      return;
+    }
     if (documentQuestion(text)) {
       const accepted = reviewedDocument?.uid === profileAccount ? reviewedDocument : undefined;
       setMessages(items => [...items, { role: "user" as const, text }, {
@@ -210,8 +233,8 @@ export function Companion({
     if (!safe && !profileRequest && status !== "ready") {
       setNotice(
         hasModel
-          ? "Load RUHI before chatting."
-          : "Install RUHI in AI settings to chat on a compatible device.",
+          ? "Load MatriSathi before chatting."
+          : "Install MatriSathi in AI settings to chat on a compatible device.",
       );
       return;
     }
@@ -346,8 +369,8 @@ export function Companion({
         <div className="ai-settings-grid">
           {account && profileAccount && <DocumentContextPanel key={profileAccount} uid={profileAccount} onAccept={setReviewedDocument} />}
           <section>
-            <h3>RUHI · Offline companion</h3>
-            <p className="small muted">{RUHI_ORIGIN}</p>
+            <h3>MatriSathi · Offline companion</h3>
+            <p className="small muted">{COMPANION_IDENTITY}</p>
             {offline}
             {!account && (
               <p className="notice">
@@ -366,7 +389,7 @@ export function Companion({
                     }
                     onClick={() => setConfirm(true)}
                   >
-                    Install RUHI
+                    Install MatriSathi
                   </button>
                 ) : (
                   <>
@@ -375,7 +398,7 @@ export function Companion({
                       disabled={status === "ready" || !device?.supported}
                       onClick={() => load(false)}
                     >
-                      Load RUHI
+                      Load MatriSathi
                     </button>
                     <button
                       className="button secondary"
@@ -571,7 +594,7 @@ export function Companion({
             </p>
           </section>
           <section className="ai-meter">
-            <h3>RUHI · Offline</h3>
+            <h3>MatriSathi · Offline</h3>
             {offline}
             <dl className="record-details">
               <div>
@@ -589,8 +612,8 @@ export function Companion({
       ) : (
         <>
           <p className="small muted">
-            RUHI is an AI companion, not a healthcare professional. English ·
-            Offline only.
+            MatriSathi offers labelled scripted help without installation and
+            optional local AI conversation. It is not a healthcare professional.
           </p>
           {hasModel && status !== "ready" && !busy && (
             <>
@@ -599,7 +622,7 @@ export function Companion({
                 disabled={!device?.supported}
                 onClick={() => load(false)}
               >
-                Load RUHI
+                Load MatriSathi
               </button>
               {!device?.supported && (
                 <p className="small" role="status">
@@ -655,7 +678,7 @@ export function Companion({
               rows={3}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Tell RUHI how you're feeling…"
+              placeholder="Tell MatriSathi how you're feeling…"
             />
             <div className="ai-toolbar">
               <button
@@ -686,7 +709,7 @@ export function Companion({
         <div className="ai-operation" role="status">
           <span>
             {status === "generating"
-              ? "RUHI is preparing a reply…"
+              ? "MatriSathi is preparing a reply…"
               : progress || "Loading…"}
           </span>
           <button className="button cancel" onClick={stop}>

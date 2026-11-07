@@ -4,6 +4,8 @@ import { ArrowRight, ChevronRight, FileHeart } from "lucide-react";
 import { children, patients, roleNames } from "./data";
 import { MatriSathi } from "./matrisathi";
 import { CareCards } from "./care";
+import { SubmissionDemoPage } from "./submission-demo-page";
+import { careEnabled } from "./care-model";
 import type { Role } from "./session";
 import {
   childSections,
@@ -699,6 +701,7 @@ export const legacyRoutes: Record<Role, Record<string, string>> = {
 };
 export function WorkspaceScreens(props: Props) {
   const { role, path, soon, notFound } = props;
+  if (!props.account && (path === "overview" || (role === "professional" && path === "more/profile") || (role !== "mother" && (path === "patients" || path.startsWith("patients/MAT-DEMO-001") || path.startsWith("referrals"))) || (role === "mother" && (path === "health" || path.startsWith("health/"))))) return <SubmissionDemoPage role={role} path={path === "health" ? "health/overview" : path} />;
   const parts = path.split("/").filter(Boolean);
   const [section = "overview", second, third, fourth] = parts;
   const redirect = (target: string) => (
@@ -719,7 +722,7 @@ export function WorkspaceScreens(props: Props) {
       notFound
     );
   if (role === "professional" && section === "referrals")
-    return redirect("patients");
+    return careEnabled && props.account ? redirect("care") : redirect("patients");
   if (role === "organization" && section === "more") {
     const moved: Record<string, string> = {
       device: "devices",

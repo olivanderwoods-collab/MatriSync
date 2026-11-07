@@ -25,7 +25,7 @@ import {
   printReferralDocument,
   referralLabels,
 } from "./referral-document";
-import { referralFields } from "./referral-draft";
+import { allReferralFields as referralFields } from "./referral-draft";
 import { receiveForwardedReferrals } from "./referral-forwarding";
 import { ReferralReceivingPanel } from "./referral-receiving-panel";
 

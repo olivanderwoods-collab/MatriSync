@@ -366,7 +366,7 @@ export const educationActions = [
   "Related Topics",
   "View Source",
   "Watch Video",
-  "Ask RUHI",
+  "Ask MatriSathi",
 ];
 export const companionActions = [
   "New Chat",

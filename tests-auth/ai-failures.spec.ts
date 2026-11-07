@@ -17,7 +17,7 @@ async function account(page: Page) {
   ).toBeVisible();
   await page.goto("/mother/matrisathi/companion/settings");
 }
-test("cached RUHI waits for device readiness before its load button can be used", async ({
+test("cached MatriSathi waits for device readiness before its load button can be used", async ({
   page,
 }) => {
   await page.addInitScript(() => {
@@ -46,7 +46,7 @@ test("cached RUHI waits for device readiness before its load button can be used"
   await account(page);
   await page.getByRole("link", { name: "Back to Chat" }).click();
   await expect(
-    page.getByRole("button", { name: "Load RUHI", exact: true }),
+    page.getByRole("button", { name: "Load MatriSathi", exact: true }),
   ).toBeDisabled();
   await expect(
     page.getByText("Checking device compatibility…", { exact: true }),
@@ -57,7 +57,7 @@ test("cached RUHI waits for device readiness before its load button can be used"
     ).finishDeviceCheck(),
   );
   await expect(
-    page.getByRole("button", { name: "Load RUHI", exact: true }),
+    page.getByRole("button", { name: "Load MatriSathi", exact: true }),
   ).toBeEnabled();
 });
 
@@ -72,7 +72,7 @@ test("signed-in unsupported devices retain normal navigation", async ({
   );
   await account(page);
   await expect(
-    page.getByRole("button", { name: "Install RUHI" }),
+    page.getByRole("button", { name: "Install MatriSathi" }),
   ).toBeDisabled();
   await expect(page.locator("main")).toContainText(
     "Device compatibility could not be checked",
@@ -93,7 +93,7 @@ test("failed and cancelled model downloads never break the companion or trigger 
     route.abort("internetdisconnected"),
   );
   await account(page);
-  await page.getByRole("button", { name: "Install RUHI" }).click();
+  await page.getByRole("button", { name: "Install MatriSathi" }).click();
   await page.getByRole("button", { name: "Confirm download" }).click();
   await expect(page.locator(".ai-workspace")).toHaveAttribute(
     "data-model-status",
@@ -101,7 +101,7 @@ test("failed and cancelled model downloads never break the companion or trigger 
     { timeout: 20000 },
   );
   await expect(page.locator("main")).toContainText("could not start");
-  await page.getByRole("button", { name: "Install RUHI" }).click();
+  await page.getByRole("button", { name: "Install MatriSathi" }).click();
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Confirm download" }),

@@ -26,7 +26,9 @@ for (const file of assets.filter((name) => name.endsWith(".js"))) {
     // These markers identify the pilot approval client and UI, not that schema.
     text.includes("Go online to confirm doctor authority") ||
     text.includes("Doctor review of this version") ||
-    text.includes("matrisync-sharing-pilot-v1")
+    // Connected care reuses the existing non-exportable device-key store to
+    // preserve enrolled keys; none of the old relay clients may ship.
+    (text.includes("matrisync-sharing-pilot-v1") && process.env.VITE_CARE_ENABLED !== "1")
   )
     throw Error("Local sharing pilot leaked into a distributable build");
 }

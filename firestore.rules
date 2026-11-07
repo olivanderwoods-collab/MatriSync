@@ -6,6 +6,142 @@ rules_version = '2';
 // No plaintext fields, list queries, roles, shares, attachments or deletes.
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Connected-care prototype: immutable encrypted case identities; append-only
+    // entries with server-authenticated UID, assigned role and request.time.
+    // Device public keys and facility names are directory metadata. No file bytes.
+    // careCases: creatorUid, facilityId, motherUid, motherSalt/motherWrapped,
+    // encrypted, createdAt. careAccess: caseId, uid, facilityId, grantedBy,
+    // viaNfc, wrapped, createdAt. Public signup never grants a staff/facility role.
+    // Facility invitation creation is operator-only. Redemption is atomic/one-use.
+    function careSigned() {
+      return request.auth != null && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+    function facility(id) {
+      return exists(/databases/$(database)/documents/careFacilities/$(id))
+        && get(/databases/$(database)/documents/careFacilities/$(id)).data.enabled == true;
+    }
+    function staff(uid) { return get(/databases/$(database)/documents/careStaff/$(uid)).data; }
+    function activeStaff(uid) {
+      return exists(/databases/$(database)/documents/careStaff/$(uid)) && staff(uid).enabled == true && facility(staff(uid).facilityId);
+    }
+    function careDoctor() { return careSigned() && activeStaff(request.auth.uid) && staff(request.auth.uid).role == 'doctor'; }
+    function accessId(id, uid) { return id + '_' + uid; }
+    function careAssigned(id) {
+      let aid = accessId(id, request.auth.uid);
+      return exists(/databases/$(database)/documents/careAccess/$(aid))
+        && ((facility(request.auth.uid) && get(/databases/$(database)/documents/careAccess/$(aid)).data.facilityId == request.auth.uid)
+          || (activeStaff(request.auth.uid) && get(/databases/$(database)/documents/careAccess/$(aid)).data.facilityId == staff(request.auth.uid).facilityId));
+    }
+    function careReader(id) {
+      return careSigned() && (careAssigned(id) || get(/databases/$(database)/documents/careCases/$(id)).data.motherUid == request.auth.uid);
+    }
+    function boundedString(v, maximum) { return v is string && v.size() > 0 && v.size() <= maximum; }
+    function encryptedString(v) { return boundedString(v, 160000); }
+    function isValidCareProfile(d) {
+      return d.keys().hasAll(['creatorUid','facilityId','motherUid','motherSalt','motherWrapped','encrypted','createdAt'])
+        && d.keys().hasOnly(['creatorUid','facilityId','motherUid','motherSalt','motherWrapped','encrypted','createdAt'])
+        && boundedString(d.creatorUid,128) && boundedString(d.facilityId,128) && boundedString(d.motherUid,128)
+        && d.motherSalt is string && d.motherSalt.size() == 24 && boundedString(d.motherWrapped,4000)
+        && encryptedString(d.encrypted) && d.createdAt == request.time;
+    }
+    function isValidCareEntry(d) {
+      return d.keys().hasAll(['actorUid','actorName','role','kind','encrypted','createdAt'])
+        && d.keys().hasOnly(['actorUid','actorName','role','kind','encrypted','createdAt'])
+        && d.actorUid == request.auth.uid && d.actorName == staff(request.auth.uid).name
+        && d.role == staff(request.auth.uid).role && encryptedString(d.encrypted) && d.createdAt == request.time
+        && ((d.role == 'doctor' && d.kind in ['clinical-note','prescription','referral'])
+          || (d.role == 'nurse' && d.kind in ['observation','administration'])
+          || (d.role == 'lab' && d.kind == 'laboratory'));
+    }
+    function isValidCareAccess(d, id) {
+      return d.keys().hasAll(['caseId','uid','facilityId','grantedBy','viaNfc','wrapped','createdAt'])
+        && d.keys().hasOnly(['caseId','uid','facilityId','grantedBy','viaNfc','wrapped','createdAt'])
+        && d.caseId is string && d.caseId.matches('[a-f0-9-]{36}') && boundedString(d.uid,128)
+        && boundedString(d.facilityId,128) && d.grantedBy == request.auth.uid && d.viaNfc is bool
+        && id == accessId(d.caseId,d.uid) && boundedString(d.wrapped,8000) && d.createdAt == request.time;
+    }
+    function mayGrantCare(d) {
+      let parent = getAfter(/databases/$(database)/documents/careCases/$(d.caseId)).data;
+      return (careDoctor() && parent.creatorUid == request.auth.uid && parent.facilityId == staff(request.auth.uid).facilityId && !d.viaNfc
+          && d.facilityId == staff(request.auth.uid).facilityId && d.uid in [request.auth.uid,staff(request.auth.uid).facilityId])
+        || (careDoctor() && careAssigned(d.caseId) && d.viaNfc && d.uid == d.facilityId && facility(d.uid))
+        || (facility(request.auth.uid) && careAssigned(d.caseId) && !d.viaNfc
+          && d.facilityId == request.auth.uid && activeStaff(d.uid) && staff(d.uid).facilityId == request.auth.uid);
+    }
+    match /careDevices/{uid} {
+      allow get: if careSigned();
+      allow create: if isOwner(uid) && request.resource.data.keys().hasOnly(['encryption','signing','keyId'])
+        && request.resource.data.keys().hasAll(['encryption','signing','keyId'])
+        && request.resource.data.keyId is string && request.resource.data.keyId.matches('[a-f0-9]{64}')
+        && request.resource.data.encryption is map && request.resource.data.signing is map
+        && request.resource.data.encryption.keys().hasOnly(['kty','crv','x','y'])
+        && request.resource.data.signing.keys().hasOnly(['kty','crv','x','y'])
+        && request.resource.data.encryption.kty == 'EC' && request.resource.data.encryption.crv == 'P-256'
+        && request.resource.data.signing.kty == 'EC' && request.resource.data.signing.crv == 'P-256'
+        && request.resource.data.encryption.x.matches('[A-Za-z0-9_-]{43}') && request.resource.data.encryption.y.matches('[A-Za-z0-9_-]{43}')
+        && request.resource.data.signing.x.matches('[A-Za-z0-9_-]{43}') && request.resource.data.signing.y.matches('[A-Za-z0-9_-]{43}');
+    }
+    function isValidFacilityInvite(d) {
+      return d.keys().hasAll(['redeemedBy','redeemedAt','expiresAt']) && d.keys().hasOnly(['redeemedBy','redeemedAt','expiresAt'])
+        && boundedString(d.redeemedBy,128) && d.redeemedAt == request.time && d.expiresAt is timestamp;
+    }
+    match /careFacilityInvites/{inviteId} {
+      allow get: if careSigned();
+      allow update: if careSigned() && isValidFacilityInvite(request.resource.data) && resource.data.redeemedBy == '' && resource.data.expiresAt > request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['redeemedBy','redeemedAt'])
+        && request.resource.data.redeemedBy == request.auth.uid && request.resource.data.redeemedAt == request.time
+        && getAfter(/databases/$(database)/documents/careFacilities/$(request.auth.uid)).data.inviteId == inviteId;
+    }
+    match /careFacilities/{uid} {
+      allow get: if careSigned();
+      allow list: if careSigned() && resource.data.enabled == true && request.query.limit <= 30;
+      allow create: if isOwner(uid) && request.resource.data.keys().hasAll(['name','enabled','inviteId','createdAt'])
+        && request.resource.data.keys().hasOnly(['name','enabled','inviteId','createdAt'])
+        && boundedString(request.resource.data.name,120) && request.resource.data.enabled == true && request.resource.data.createdAt == request.time
+        && request.resource.data.inviteId.matches('[a-f0-9]{64}')
+        && get(/databases/$(database)/documents/careFacilityInvites/$(request.resource.data.inviteId)).data.redeemedBy == ''
+        && getAfter(/databases/$(database)/documents/careFacilityInvites/$(request.resource.data.inviteId)).data.redeemedBy == uid;
+    }
+    function isValidStaff(d) {
+      return d.keys().hasOnly(['facilityId','name','role','enabled','updatedAt'])
+        && d.keys().hasAll(['facilityId','name','role','enabled','updatedAt'])
+        && d.facilityId == request.auth.uid && boundedString(d.name,120)
+        && d.role in ['doctor','nurse','lab'] && d.enabled is bool && d.updatedAt == request.time;
+    }
+    match /careStaff/{uid} {
+      allow get: if careSigned() && (request.auth.uid == uid || (facility(request.auth.uid) && resource.data.facilityId == request.auth.uid));
+      allow create: if careSigned() && facility(request.auth.uid) && uid != request.auth.uid && isValidStaff(request.resource.data);
+      allow update: if careSigned() && facility(request.auth.uid) && uid != request.auth.uid
+        && resource.data.facilityId == request.auth.uid && isValidStaff(request.resource.data);
+    }
+    match /careCases/{id} {
+      allow get: if careReader(id);
+      allow list: if careSigned() && resource.data.motherUid == request.auth.uid && request.query.limit <= 50;
+      allow create: if careDoctor() && id.matches('[a-f0-9-]{36}') && isValidCareProfile(request.resource.data)
+        && request.resource.data.creatorUid == request.auth.uid && request.resource.data.motherUid != request.auth.uid
+        && request.resource.data.facilityId == staff(request.auth.uid).facilityId;
+      match /entries/{entryId} {
+        allow get: if careReader(id);
+        allow list: if careReader(id) && request.query.limit <= 200;
+        allow create: if careSigned() && activeStaff(request.auth.uid) && careAssigned(id)
+          && entryId.matches('[a-f0-9-]{36}') && isValidCareEntry(request.resource.data);
+      }
+    }
+    match /careAccess/{id} {
+      allow get: if careSigned() && (id == accessId(id.split('_')[0],request.auth.uid) || careAssigned(id.split('_')[0]));
+      allow list: if careSigned() && resource.data.uid == request.auth.uid && resource.data.viaNfc == false && request.query.limit <= 50;
+      allow create: if careSigned() && isValidCareAccess(request.resource.data,id) && mayGrantCare(request.resource.data);
+    }
+    match /careHandoffs/{id} {
+      allow get: if careSigned() && request.auth.uid in [resource.data.sourceUid,resource.data.recipientUid];
+      allow create: if careDoctor() && request.resource.data.keys().hasOnly(['caseId','sourceUid','recipientUid','ciphertext','createdAt'])
+        && request.resource.data.keys().hasAll(['caseId','sourceUid','recipientUid','ciphertext','createdAt'])
+        && careAssigned(request.resource.data.caseId) && request.resource.data.sourceUid == request.auth.uid
+        && facility(request.resource.data.recipientUid) && boundedString(request.resource.data.ciphertext,32768)
+        && request.resource.data.createdAt == request.time
+        && getAfter(/databases/$(database)/documents/careCases/$(request.resource.data.caseId)/entries/$(id)).data.kind == 'referral'
+        && getAfter(/databases/$(database)/documents/careCases/$(request.resource.data.caseId)/entries/$(id)).data.actorUid == request.auth.uid;
+    }
     function isOwner(uid) {
       return request.auth != null && request.auth.uid == uid
         && request.auth.token.firebase.sign_in_provider != 'anonymous';

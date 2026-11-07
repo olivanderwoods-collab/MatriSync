@@ -67,7 +67,7 @@ test("encrypted mother profile feeds only approved local fields to a mocked work
     "Synthetic Mira",
   );
   await page.goto("/mother/matrisathi/companion/settings");
-  await page.getByRole("button", { name: "Install RUHI" }).click();
+  await page.getByRole("button", { name: "Install MatriSathi" }).click();
   await page.getByRole("button", { name: "Confirm download" }).click();
   await expect(page.locator(".ai-workspace")).toHaveAttribute(
     "data-model-status",

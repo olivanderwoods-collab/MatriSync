@@ -1,7 +1,7 @@
 import { test, expect, chromium } from "@playwright/test";
 // Explicit opt-in downloads public weights. The ignored profile retains only
 // public model/runtime caches and synthetic emulator test data between runs.
-test("genuine RUHI conversation, clinical refusals, context opt-out and cached restart work offline", async () => {
+test("genuine MatriSathi conversation, clinical refusals, context opt-out and cached restart work offline", async () => {
   test.skip(
     process.env.TEST_OFFLINE_MODEL !== "1",
     "Explicit model download test only",
@@ -43,6 +43,19 @@ test("genuine RUHI conversation, clinical refusals, context opt-out and cached r
     await expect(
       page.locator(".demo-banner").getByText("Signed-in account"),
     ).toBeVisible();
+    // A newly registered user has no Mother profile yet. The bundled behavior
+    // must still support genuine conversation once the local model is loaded.
+    await page.goto("http://127.0.0.1:4174/mother/matrisathi/companion/settings");
+    if (await page.getByRole("button", { name: "Install MatriSathi" }).count()) {
+      await page.getByRole("button", { name: "Install MatriSathi" }).click();
+      await page.getByRole("button", { name: "Confirm download" }).click();
+    } else await page.getByRole("button", { name: "Load MatriSathi" }).click();
+    await expect(page.locator(".ai-workspace")).toHaveAttribute("data-model-status", "ready", { timeout: 900000 });
+    await page.getByRole("link", { name: "Back to Chat" }).click();
+    await page.getByLabel("Your message", { exact: true }).fill("Hello, how are you?");
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+    await expect(page.locator(".chat-bubble.assistant")).toContainText("MatriSathi · Offline AI", { timeout: 120000 });
+    await expect(page.locator(".chat-bubble.assistant")).not.toContainText("Mira");
     await page.goto("http://127.0.0.1:4174/mother/more/profile");
     await page.getByLabel("Full name", { exact: true }).fill("Mira Synthetic");
     await page.getByLabel("Recorded pregnancy week (optional)").fill("22");
@@ -62,10 +75,10 @@ test("genuine RUHI conversation, clinical refusals, context opt-out and cached r
       await page.waitForFunction(() => !!navigator.serviceWorker.controller);
     }
     await expect(page.locator("main")).toContainText("WebGPU detected");
-    if (await page.getByRole("button", { name: "Install RUHI" }).count()) {
-      await page.getByRole("button", { name: "Install RUHI" }).click();
+    if (await page.getByRole("button", { name: "Install MatriSathi" }).count()) {
+      await page.getByRole("button", { name: "Install MatriSathi" }).click();
       await page.getByRole("button", { name: "Confirm download" }).click();
-    } else await page.getByRole("button", { name: "Load RUHI" }).click();
+    } else await page.getByRole("button", { name: "Load MatriSathi" }).click();
     await expect
       .poll(
         async () => {
@@ -131,7 +144,7 @@ test("genuine RUHI conversation, clinical refusals, context opt-out and cached r
       );
       await expect(
         page.locator(".chat-bubble.assistant").last(),
-      ).not.toContainText(/you, RUHI|Dear RUHI|^RUHI,/i);
+      ).not.toContainText(/you, MatriSathi|Dear MatriSathi|^MatriSathi,/i);
     }
     console.log(
       "Synthetic offline conversation:",
@@ -142,7 +155,7 @@ test("genuine RUHI conversation, clinical refusals, context opt-out and cached r
     expect(
       await page
         .getByRole("log")
-        .getByText("RUHI · Offline AI", { exact: true })
+        .getByText("MatriSathi · Offline AI", { exact: true })
         .count(),
     ).toBeGreaterThan(0);
     await expect(page.locator(".chat-bubble.assistant").first()).toContainText(
@@ -190,7 +203,7 @@ test("genuine RUHI conversation, clinical refusals, context opt-out and cached r
       await page.getByRole("button", { name: "Send", exact: true }).click();
       await page.getByRole("button", { name: "Stop", exact: true }).click();
       await page
-        .getByRole("button", { name: "Load RUHI", exact: true })
+        .getByRole("button", { name: "Load MatriSathi", exact: true })
         .click();
       await expect
         .poll(
@@ -229,7 +242,7 @@ test("genuine RUHI conversation, clinical refusals, context opt-out and cached r
         await page.locator(".chat-bubble.assistant").last().innerText(),
       );
       await expect(page.locator(".chat-bubble.assistant").last()).toContainText(
-        "RUHI · Offline AI",
+        "MatriSathi · Offline AI",
       );
       await expect(
         page.locator(".chat-bubble.assistant").last(),
@@ -238,7 +251,7 @@ test("genuine RUHI conversation, clinical refusals, context opt-out and cached r
       // must restore without an external provider or silently enabling context.
       await page.reload();
       await page
-        .getByRole("button", { name: "Load RUHI", exact: true })
+        .getByRole("button", { name: "Load MatriSathi", exact: true })
         .click();
       await expect
         .poll(
@@ -252,7 +265,7 @@ test("genuine RUHI conversation, clinical refusals, context opt-out and cached r
         timeout: 120_000,
       });
       await expect(page.locator(".chat-bubble.assistant")).toContainText(
-        "RUHI · Offline AI",
+        "MatriSathi · Offline AI",
       );
       await expect(page.locator(".chat-bubble.assistant")).not.toContainText(
         "Mira",

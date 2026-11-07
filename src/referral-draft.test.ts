@@ -77,8 +77,8 @@ it("preserves encrypted referral versions, original bytes and patient attributio
     unrelated.saveReferralDraft(patient, fields, []),
   ).rejects.toThrow("not available");
 });
-it("requires a referral reason but leaves optional clinical facts unknown", () => {
-  expect(() => referralInput(emptyReferralFields())).toThrow("reason");
+it("allows missing clinical facts including the reason without inventing entries", () => {
+  expect(referralInput(emptyReferralFields())).toEqual(emptyReferralFields());
   const fields = { ...emptyReferralFields(), reason: "Recorded reason" };
   expect(referralInput(fields)).toEqual(fields);
   expect(() =>

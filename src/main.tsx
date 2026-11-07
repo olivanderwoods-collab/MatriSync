@@ -46,6 +46,8 @@ import {
   useNavigate,
   useParams,
 } from "react-router-dom";
+import { careEnabled } from "./care-model";
+const CarePage = careEnabled ? React.lazy(() => import("./care-page").then(m => ({ default: m.CarePage }))) : () => null;
 import {
   Activity,
   ArrowRight,
@@ -604,6 +606,7 @@ function AuthPage() {
   const role = new URLSearchParams(location.search).get("role") as Role;
   const app = useApp();
   const signup = mode === "signup";
+  const [patientLogin, setPatientLogin] = useState(false);
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -626,13 +629,17 @@ function AuthPage() {
         accountAuth(),
         import("firebase/auth"),
       ]);
+      const patientId = String(data.get("email")).trim();
+      const careLogin = careEnabled && role === "mother" && !signup && patientLogin;
+      const care = careLogin ? await import("./care-client") : undefined;
       const result = await (
         signup
           ? sdk.createUserWithEmailAndPassword
           : sdk.signInWithEmailAndPassword
-      )(auth, String(data.get("email")), password);
+      )(auth, care ? care.motherLoginEmail(patientId) : String(data.get("email")), password);
       app.authenticated(result.user);
-      navigate(`/${role}/overview`, { replace: true });
+      if (care) await care.loadCareProfile(result.user.uid, patientId, password);
+      navigate(`/${role}/${care ? "care" : "overview"}`, { replace: true });
     } catch (err) {
       setError(authError(err));
     } finally {
@@ -691,23 +698,24 @@ function AuthPage() {
               </div>
             </div>
           )}
+          {careEnabled && role === "mother" && !signup && <button className="text-link" onClick={() => setPatientLogin(!patientLogin)}>{patientLogin ? "Use email and password" : "Use patient ID and access code"}</button>}
           <form onSubmit={submit}>
             <label>
-              Email address
+              {patientLogin && !signup ? "Patient ID" : "Email address"}
               <input
                 name="email"
-                type="email"
-                autoComplete="email"
-                placeholder="you@example.com"
+                type={patientLogin && !signup ? "text" : "email"}
+                autoComplete={patientLogin && !signup ? "off" : "email"}
+                placeholder={patientLogin && !signup ? "Patient ID issued by your Doctor" : "you@example.com"}
                 required
                 disabled={busy || !authConfigured}
               />
             </label>
             <label>
-              Password
+              {patientLogin && !signup ? "Patient access code" : "Password"}
               <div className="password-input">
                 <input
-                  aria-label="Password"
+                  aria-label={patientLogin && !signup ? "Patient access code" : "Password"}
                   name="password"
                   type={show ? "text" : "password"}
                   autoComplete={signup ? "new-password" : "current-password"}
@@ -915,10 +923,10 @@ function WorkspaceBody() {
                 ? app.profile.name
                 : r === "professional"
                   ? app.demo
-                    ? "Dr. Ishani Rao"
+                    ? "Dr. Olivander Woods"
                     : "Your account"
                   : app.demo
-                    ? "Lotus Family Clinic"
+                    ? "MatriSync Demo District Hospital"
                     : "Your facility"}
             </strong>
             <span>{app.demo ? "Synthetic profile" : "Signed-in account"}</span>
@@ -984,7 +992,7 @@ function WorkspaceBody() {
                 ? "Fictional profiles."
                 : sharingPilotEnabled
                   ? "Local records · Explicit encrypted sharing pilot"
-                  : "Records stay on this device."}
+                  : careEnabled ? "Uploads stay local · Connected care uses encrypted structured data." : "Records stay on this device."}
             </span>
           </div>
           <button onClick={() => setLogout(true)}>
@@ -994,9 +1002,7 @@ function WorkspaceBody() {
         <main id="main" tabIndex={-1} className="workspace-main">
           {!app.demo && r !== "mother" && (
             <p className="notice" role="note">
-              Healthcare prototype · Synthetic data only. Facility device
-              enrollment and staff-specific permissions are incomplete. Choosing
-              a workspace does not grant clinical authority.
+              {careEnabled ? "Healthcare prototype · Fictional records only. Connected care requires an invited facility and assigned staff permissions. Public clinical accreditation and device recovery remain pending." : "Healthcare prototype · Synthetic data only. Facility device enrollment and staff-specific permissions are incomplete. Choosing a workspace does not grant clinical authority."}
             </p>
           )}
           {path !== "overview" &&
@@ -1026,7 +1032,10 @@ function WorkspaceBody() {
                 content is shown in English.
               </p>
             )}
-          {!app.demo && sharingPilotEnabled && path === "more/sharing" ? (
+          {!app.demo && careEnabled && path !== "care" && <p><Link className="button secondary" to={`/${r}/care`}>{r === "mother" ? "Load my linked care profile" : "Connected care · Patients, staff and handoffs"}</Link></p>}
+          {!app.demo && careEnabled && path === "care" ? (
+            <React.Suspense fallback={<p>Opening connected care…</p>}><CarePage key={`${app.user!.uid}/${r}`} uid={app.user!.uid} role={r} /></React.Suspense>
+          ) : !app.demo && sharingPilotEnabled && path === "more/sharing" ? (
             <React.Suspense
               fallback={<p role="status">Opening encrypted sharing…</p>}
             >

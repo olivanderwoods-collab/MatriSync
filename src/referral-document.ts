@@ -1,5 +1,7 @@
 import {
-  referralFields,
+  allReferralFields as referralFields,
+  referralFields as legacyFields,
+  handoffDetailFields,
   validateReferralDrafts,
   type ReferralDraft,
 } from "./referral-draft";
@@ -9,6 +11,17 @@ import {
 } from "./referral-approval";
 
 export const referralLabels = {
+  patientReference: "Patient ID / reference (not access code)",
+  contact: "Contact details",
+  bloodGroup: "Blood group",
+  pregnancyStage: "Pregnancy stage and recorded date",
+  allergies: "Allergy details",
+  usg: "USG findings as recorded",
+  bloodSugar: "Blood sugar, units and recorded time",
+  bloodPressure: "Blood pressure and recorded time",
+  situation: "Current situation / urgency as recorded",
+  drugsGiven: "Drugs given as recorded",
+  remarks: "Remarks",
   reason: "Reason for referral",
   history: "Relevant history",
   treatment: "Recorded treatment",
@@ -59,7 +72,7 @@ function renderReferralDocument(
   const index = draft.versions.findIndex((version) => version.id === versionId);
   if (index < 0) throw Error("Choose a saved referral version first.");
   const version = draft.versions[index];
-  const text = (value: string) => escape(value || "Not recorded");
+  const text = (value?: string) => escape(value || "Not recorded");
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -92,7 +105,7 @@ footer { border-top: 1px solid #a9bdb6; margin-top: 24px; padding-top: 12px; bre
 <main><h2>${text(version.patient.name)}</h2><p>Date of birth: ${text(version.patient.birthDate)}</p>
 <dl class="identity"><dt>${draft.receivedOrigin ? "Shared profile ID" : "Local patient ID"}</dt><dd>${text(draft.receivedOrigin?.profileId || draft.patientId)}</dd><dt>Referral ID</dt><dd>${text(draft.id)}</dd><dt>Version ID</dt><dd>${text(version.id)}</dd><dt>Prepared by account</dt><dd>${text(draft.authorUid)}</dd><dt>Patient details recorded</dt><dd>${text(version.patient.updatedAt)}</dd>
 ${draft.receivedOrigin ? `<dt>Source account</dt><dd>${text(draft.receivedOrigin.sourceUid)}</dd><dt>Source patient ID</dt><dd>${text(draft.receivedOrigin.sourcePatientId)}</dd><dt>Received profile revision</dt><dd>${text(draft.receivedOrigin.profileRevision)}</dd><dt>Received on device</dt><dd>${text(draft.receivedOrigin.receivedAt)}</dd>` : ""}</dl>
-${referralFields.map((field) => `<section><h2>${referralLabels[field]}</h2><p>${text(version.fields[field])}</p></section>`).join("\n")}
+${(handoffDetailFields.some(key => version.fields[key] !== undefined) ? referralFields : legacyFields).map((field) => `<section><h2>${referralLabels[field]}</h2><p>${text(version.fields[field])}</p></section>`).join("\n")}
 <section class="sources"><h2>Original document references</h2>
 ${version.documents.length ? `<ol>${version.documents.map((document) => `<li>${text(document.name)}\nSource: ${text(document.source)}\nDocument date: ${text(document.reportDate)}\nDocument ID: ${text(document.id)}</li>`).join("\n")}</ol>` : "<p>None selected.</p>"}
 <p>References only. Original files are not embedded or transmitted with this document.</p></section></main>

@@ -1,5 +1,7 @@
 # MatriSync submission MVP — 7 November 2026
 
+> Historical checkpoint, superseded later on 7 November by `EMERGENCY-MVP-REQUIREMENTS-2026-11-07.md` and the root `MATRISYNC_MVP_ACCOUNT2_HANDOFF.md`. The current companion name is MatriSathi. Current connected care transfers encrypted manual structured data; original uploads remain local. Do not treat the older four-account launcher or reference S3 firmware as the latest submission/hardware acceptance.
+
 This is the current checkpoint. The user resumed Codex development after the 5 November Bolt transfer because no further Bolt work was completed. The submission minimum is approved account pairing/profile sharing, basic handoff creation, printable summaries, and RUHI conversation using saved profile facts and reviewed uploaded text. Preserve the older handoff for architecture and unfinished production requirements.
 
 The latest hardware instruction is **software first**. The user reports that the assembled hardware works, but app-to-device pairing and real handoff transfer have not been tested. Do not flash or replace that working firmware yet. NFC hardware selection/integration must be reconciled with the assembled device later; do not assume the existing reference sketch matches it.

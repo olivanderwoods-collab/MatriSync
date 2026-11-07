@@ -2732,3 +2732,9 @@ button.back-link {
 .check-row input { width: auto; }
 
 .test-workspace .text-button { border: 0; background: transparent; color: var(--text); text-decoration: underline; cursor: pointer; padding: 8px 0; }
+/* Connected-care views reuse the existing panels and Medical Green controls. */
+.care-dialog { width: min(760px, calc(100vw - 32px)); max-height: 85vh; overflow: auto; border: 1px solid var(--line, #cfe5dc); border-radius: 18px; padding: 24px; color: var(--text, #173d31); background: var(--surface, #fff); }
+.care-dialog::backdrop { background: #163c3280; }
+.care-fact { margin-bottom: 12px; overflow-wrap: anywhere; }
+.care-fact dt { font-weight: 600; }
+.care-fact dd { margin: 3px 0 0; }

@@ -5,54 +5,9 @@ export const roleNames: Record<Role, string> = {
   professional: "Healthcare Professional",
   organization: "Healthcare Organization",
 };
-export const patients = [
-  {
-    id: "mira",
-    name: "Mira Sen",
-    initials: "MS",
-    stage: "Pregnancy",
-    detail: "Maternal journey · Sample profile",
-    age: "29 years",
-  },
-  {
-    id: "anika",
-    name: "Anika Roy",
-    initials: "AR",
-    stage: "Postpartum",
-    detail: "Postpartum journey · Sample profile",
-    age: "32 years",
-  },
-  {
-    id: "leela",
-    name: "Leela Das",
-    initials: "LD",
-    stage: "Parenting",
-    detail: "Family journey · Sample profile",
-    age: "27 years",
-  },
-];
-export const children = [
-  {
-    id: "tara",
-    name: "Tara Sen",
-    initials: "TS",
-    age: "4 years",
-    description: "A little explorer with a big imagination.",
-    report: "Tara · Routine visit summary",
-    prescription: "Tara · Prescription layout example",
-    medication: "Tara · Medication record preview",
-  },
-  {
-    id: "arun",
-    name: "Arun Sen",
-    initials: "AS",
-    age: "18 months",
-    description: "Discovering the world, one small step at a time.",
-    report: "Arun · Growth visit summary",
-    prescription: "Arun · Prescription layout example",
-    medication: "Arun · Medication record preview",
-  },
-];
+// Only the explicitly disposable Guest fixture list is replaced. Account records are untouched.
+export const patients = [{ id: "MAT-DEMO-001", name: "Ophelia Frost", initials: "OF", stage: "Postpartum", detail: "Critical - Emergency Referral - Demo", age: "Age not recorded" }];
+export const children: { id: string; name: string; initials: string; age: string; description: string; report: string; prescription: string; medication: string }[] = [];
 export const navigation: Record<Role, [string, string, string][]> = {
   mother: [
     ["overview", "Home", "House"],
@@ -64,6 +19,7 @@ export const navigation: Record<Role, [string, string, string][]> = {
   professional: [
     ["overview", "Home", "House"],
     ["patients", "Patients", "Users"],
+    ["referrals", "Referrals", "ArrowRightLeft"],
     ["follow-up", "Follow-ups", "CalendarDays"],
     ["more", "More", "Menu"],
   ],

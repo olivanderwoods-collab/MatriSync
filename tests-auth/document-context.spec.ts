@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-test("Mother creates a printable summary and reviews real PDF text for private RUHI read-back", async ({ page, context }, info) => {
+test("Mother creates a printable summary and reviews real PDF text for private MatriSathi read-back", async ({ page, context }, info) => {
   test.setTimeout(90000);
   const fixture = await context.newPage();
   await fixture.setContent("<h1>Fictional visit record</h1><p>Follow-up date: 2026-11-08.</p><p>Recorded by Synthetic Clinic.</p>");

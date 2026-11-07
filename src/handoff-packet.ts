@@ -1,4 +1,5 @@
 import { HANDOFF_LIMIT } from "./ble-handoff";
+import { frameHandoff, unframeHandoff } from "./handoff-frame";
 export type HandoffPacket = {
   version: 1;
   channelId: string;
@@ -8,8 +9,9 @@ export type HandoffPacket = {
 export function parseHandoff(bytes: Uint8Array): HandoffPacket {
   if (!bytes.length || bytes.length > HANDOFF_LIMIT)
     throw Error("Unsupported handoff size.");
+  const payload = bytes[0] === 77 ? unframeHandoff(bytes) : bytes;
   const p = JSON.parse(
-    new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+    new TextDecoder("utf-8", { fatal: true }).decode(payload),
   ) as HandoffPacket;
   if (
     !p ||
@@ -32,5 +34,5 @@ export function encodeHandoff(packet: HandoffPacket) {
       "This approved referral is too large for the 32 KiB BLE handoff. Use its organized printed copy, or prepare and approve a shorter version. Nothing was truncated.",
     );
   parseHandoff(bytes);
-  return bytes;
+  return frameHandoff(bytes);
 }

@@ -13,20 +13,20 @@ describe("approved profile-only companion context", () => {
   it("rejects calling the user by the companion's name without blocking the companion introduction", () => {
     const profile = { name: "Mira Sen" };
     for (const text of [
-      "I'm here to support you, RUHI.",
-      "RUHI, tell me about your day.",
-      "Dear RUHI, hello.",
+      "I'm here to support you, MatriSathi.",
+      "MatriSathi, tell me about your day.",
+      "Dear MatriSathi, hello.",
     ])
       expect(confusesCompanionWithUser(text, profile)).toBe(true);
     expect(
       confusesCompanionWithUser(
-        "I'm RUHI, your offline AI companion.",
+        "I'm MatriSathi, your offline AI companion.",
         profile,
       ),
     ).toBe(false);
     expect(confusesCompanionWithUser("Hello, Mira!", profile)).toBe(false);
     expect(
-      confusesCompanionWithUser("RUHI, how are you?", { name: "Ruhi Sen" }),
+      confusesCompanionWithUser("MatriSathi, how are you?", { name: "MatriSathi Sen" }),
     ).toBe(false);
   });
   it("addresses the saved first name without inventing one or repeating it", () => {
@@ -79,9 +79,9 @@ describe("approved profile-only companion context", () => {
     expect(profileContext()).toBeUndefined();
     expect(conversationInstructions(context)).toContain("not instructions");
     expect(conversationInstructions(context)).toContain(
-      "Report access is deferred",
+      "exact read-back",
     );
-    expect(BEHAVIOR_VERSION).toBe("2026-11-07-profile-and-reviewed-readback");
+    expect(BEHAVIOR_VERSION).toBe("2026-11-07-connected-care-readback");
   });
   it("refuses medicine recommendations without naming one and defers report answers", () => {
     for (const message of [

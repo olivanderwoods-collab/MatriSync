@@ -1,6 +1,6 @@
 import { useState } from "react";
 export type Profile = { name: string; photo: string };
-export const defaultProfile: Profile = { name: "Mira Sen", photo: "" };
+export const defaultProfile: Profile = { name: "Ophelia Frost", photo: "" };
 
 export function ProfileEditor({
   profile,

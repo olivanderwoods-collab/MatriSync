@@ -64,7 +64,7 @@ export function BleHandoffPanel({
       device.addEventListener("gattserverdisconnected", lost);
       cleanup.current = () =>
         device.removeEventListener("gattserverdisconnected", lost);
-      setName(device.name || "MatriSync ESP32-S3");
+      setName(device.name || "MatriSync compatible ESP32");
     } catch (e) {
       setError(e instanceof Error ? e.message : "BLE connection failed.");
     } finally {
@@ -94,7 +94,7 @@ export function BleHandoffPanel({
           throw Error("BLE was cancelled. Nothing was opened.");
         await onRead(result);
         setNotice(
-          "Device handoff verified and opened for this account. Review the approved document; clinical receiving events remain separate.",
+          "Device packet read and opened for this account. Review the handoff's source-verification status; clinical receiving events remain separate.",
         );
       }
     } catch (e) {
@@ -109,12 +109,13 @@ export function BleHandoffPanel({
       aria-label={packet ? "Send handoff over BLE" : "Read handoff over BLE"}
     >
       <h3>
-        {packet ? "Send handoff to ESP32-S3" : "Read handoff from ESP32-S3"}
+        {packet ? "Send handoff to compatible ESP32" : "Read handoff from compatible ESP32"}
       </h3>
       <p>
-        Encrypted handoff only. The device holds one complete packet in RAM
-        until reset. NFC storage is not connected yet. Full patient history
-        requires separate authorized sharing.
+        Encrypted handoff using the MatriSync reference GATT protocol. This
+        protocol has not yet been integrated with the tested Facility Bridge
+        V2.2. Its PN532 tag has only 48 verified bytes, which cannot hold this
+        packet. BLE RAM read-back does not confirm NFC storage.
       </p>
       {!bluetoothApi() && (
         <p>
@@ -135,7 +136,7 @@ export function BleHandoffPanel({
           disabled={busy || !bluetoothApi()}
           onClick={() => void connect()}
         >
-          Connect ESP32-S3
+          Connect compatible ESP32
         </button>
         <button
           className="button secondary"
