@@ -1,5 +1,5 @@
 import { expect,it } from "vitest";
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { compactDemoHandoff,submissionDemoCase } from "./submission-demo";
 import { demoHandoffLines,demoHandoffPdf } from "./submission-document";
 import { scriptedCompanion } from "./ai/scripted";
@@ -16,12 +16,16 @@ it("builds current-data PDF and compact preview without asserting encryption, NF
  expect(demoHandoffLines(d).join("\n")).toContain("Ophelia Export Check");
  const bytes=demoHandoffPdf(d);expect(new TextDecoder().decode(bytes)).toContain("Ophelia Export Check");
  expect(compactDemoHandoff(d).encrypted).toBe(false);expect(compactDemoHandoff(d).physicalNfcWritten).toBe(false);expect(compactDemoHandoff(d).dictionaryVersion).toBe(0);
+ mkdirSync(".local-tools",{recursive:true});
  writeFileSync(".local-tools/ophelia-handoff-check.pdf",demoHandoffPdf());
 });
 it("provides labelled-script content without generative requirements and routes urgent language to human care",()=>{
  expect(scriptedCompanion("Hello",true)).toContain("MatriSathi");
  expect(scriptedCompanion("Show my prescriptions",true)).toContain("six records");
  expect(scriptedCompanion("Show my reports",true)).toContain("not available");
+ expect(scriptedCompanion("What is my name?",true)).toContain("Ophelia Frost");
+ expect(scriptedCompanion("What is my blood group?",true)).toContain("Not recorded");
+ expect(scriptedCompanion("What is my name?",false)).toBeUndefined();
  expect(scriptedCompanion("I am bleeding heavily",true)).toMatch(/urgent|emergency|immediate/i);
  expect(scriptedCompanion("Recommend a medicine dose",true)).toBeUndefined();
 });

@@ -5,6 +5,17 @@ export function scriptedCompanion(input:string,demo:boolean):string|undefined {
   const text=input.trim().toLowerCase().replace(/[.!?]+$/g,"");
   const safety=safetyCheck(input);
   if (safety && ["self-harm","danger","crisis","maternal","child"].includes(safety.kind)) return safety.text;
+  if (demo) {
+    const d=submissionDemoCase();
+    const facts:Record<string,string>={
+      "what is my name":`The fictional demo patient's name is ${d.patient.name}, ID ${d.patient.id}.`,
+      "who is my doctor":`The recorded demo doctor is ${d.doctor.name}, ${d.doctor.id}. Verification: ${d.doctor.verification}.`,
+      "what is my blood group":`Patient blood group: ${d.patient.bloodGroup}. The blood product request does not establish the patient's blood group.`,
+      "what are my allergies":`Allergies: ${d.patient.allergies}. This does not mean there are no allergies.`,
+      "show my profile":`${d.patient.name}, ${d.patient.id}. Stage: postpartum. Doctor: ${d.doctor.name}. Blood group and allergies are not recorded. Open My Health to see the source case.`,
+    };
+    if (facts[text]) return `DEMO / NOT FOR CLINICAL USE. ${facts[text]}`;
+  }
   if (/^(hi|hello|hey|good morning|good evening)( matrisathi)?$/.test(text)) return "Hello! I'm MatriSathi. I'm here to help you find your records and talk about your day. How are you feeling?";
   if (/^(how are you|how are you doing|hello, how are you)$/.test(text)) return "I'm ready to help. I don't have feelings, but I can listen and help you find information in MatriSync. How has your day been?";
   if (/^(what is matrisync|what can you do|help)$/.test(text)) return "MatriSync organizes maternal records and referral handoffs. Open My Health for prescriptions, reports and referral details. I can help you navigate; I cannot diagnose or choose treatment.";
