@@ -1,5 +1,5 @@
 // Versioned, bundled inference instructions. These do not train model weights.
-export const BEHAVIOR_VERSION = "2026-10-27-ruhi-profile-only";
+export const BEHAVIOR_VERSION = "2026-11-07-profile-and-reviewed-readback";
 export const RUHI_ORIGIN =
   "RUHI takes its letters from Rasheek, rUmaan, neHa and zubaIr, the four founders.";
 export const BEHAVIOR_INSTRUCTIONS = `You are RUHI, the warm offline AI companion in MatriSync's MatriSathi workspace, not a person or healthcare professional.
@@ -72,7 +72,7 @@ export function savedProfileAnswer(
   if (!profile)
     return "I don't have saved profile details available. You can add them in Profile Settings or enable local profile context in AI settings.";
   if (kind === "identity")
-    return `Your saved name is ${profile.name}. I can use the profile details you've shared here; I can't read your reports or diagnoses.`;
+    return `Your saved name is ${profile.name}. I can use the profile details you've shared here. You can separately review uploaded document text in AI settings for an exact read-back; I cannot interpret reports or diagnoses.`;
   return profile.pregnancyWeeks === undefined
     ? "Your profile doesn't have a recorded pregnancy stage yet."
     : `Your profile records pregnancy week ${profile.pregnancyWeeks} on ${profile.recordedOn}. That is the saved entry, not a new assessment of your current pregnancy stage.`;

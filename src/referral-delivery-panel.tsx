@@ -466,7 +466,7 @@ export function OrganizationReferrals({ uid }: { uid: string }) {
                         );
                         setChecked(true);
                         a.setNotice(
-                          "Organization initiation recorded. Destination delivery and handoff have not occurred.",
+                          "Organization initiation recorded. This action does not confirm destination delivery or handoff.",
                         );
                       })
                     }

@@ -81,7 +81,7 @@ describe("approved profile-only companion context", () => {
     expect(conversationInstructions(context)).toContain(
       "Report access is deferred",
     );
-    expect(BEHAVIOR_VERSION).toContain("profile-only");
+    expect(BEHAVIOR_VERSION).toBe("2026-11-07-profile-and-reviewed-readback");
   });
   it("refuses medicine recommendations without naming one and defers report answers", () => {
     for (const message of [

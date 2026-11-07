@@ -204,6 +204,14 @@ test("profile versions retain identity, match original bytes, exclude unshared c
     await mother.goto("/mother/more/sharing");
     await connection(mother, id, d.fingerprint);
     await connection(doctor, id, m.fingerprint);
+    const motherPairingCode = await mother.getByLabel("Your pairing code", { exact: true }).inputValue();
+    await doctor.getByLabel("Other account's pairing code", { exact: true }).fill(motherPairingCode.replace(m.fingerprint, "0".repeat(64)));
+    await doctor.getByRole("button", { name: "Pair approved account", exact: true }).click();
+    await expect(doctor.getByRole("alert")).toContainText("No currently approved connection");
+    await doctor.getByLabel("Other account's pairing code", { exact: true }).fill(motherPairingCode);
+    await doctor.getByRole("button", { name: "Pair approved account", exact: true }).click();
+    await expect(doctor.getByRole("status").filter({ hasText: "Paired with approved account" })).toBeVisible();
+    await expect(doctor.getByLabel("Other device fingerprint")).toHaveValue(m.fingerprint);
     await doctor
       .getByRole("button", { name: "Open saved profiles", exact: true })
       .click();

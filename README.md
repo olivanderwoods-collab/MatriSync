@@ -1,7 +1,11 @@
 # MatriSync
 MatriSync software developed by Team UNCODED for the Healthathon 2026
 
-## Current checkpoint — 5 November 2026
+## Current submission minimum — 7 November 2026
+
+Start with [the current MVP and presentation guide](docs/SUBMISSION-MVP-2026-11-07.md). Development resumed in Codex: approved pairing codes, manual encrypted profile synchronization, personal care-summary print/PDF and reviewed local PDF read-back in RUHI extend the existing referral/BLE implementation. `Start-MatriSync.cmd` prepares fictional presentation workspaces on the configured Windows computer. Hardware is assembled but remains untouched pending software rehearsal and later integration. Older checkpoints below are retained as history.
+
+## Previous checkpoint — 5 November 2026
 
 **Start with [the complete Codex → GitHub → Bolt handoff](docs/MATRISYNC_CODEX_HANDOFF_2026-11-05.md) and [latest approved requirements](docs/FINAL-REQUIREMENTS-2026-11-05.md).** They supersede conflicting historical status below. Continue on `handoff/matrisync-codex-2026-11-05`; preserve Firebase, records and the existing design. This remains a synthetic-data development prototype, not a clinically deployable system.
 

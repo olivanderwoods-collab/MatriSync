@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { DocumentContextPanel } from "./document-context-panel";
+import { documentQuestion, documentAnswer, type ReviewedDocument } from "./document-context";
 import {
   AI_FLAGS,
   GEMINI_MODEL,
@@ -64,6 +66,7 @@ export function Companion({
   );
   const loadProfile = useLocalCompanionProfile();
   const [generated, setGenerated] = useState(0);
+  const [reviewedDocument, setReviewedDocument] = useState<ReviewedDocument>();
   const worker = useRef<Worker | null>(null);
   const replyProfile = useRef<CompanionProfile | undefined>(undefined);
   const operation = useRef(0);
@@ -189,10 +192,19 @@ export function Companion({
     setMessages([]);
     topics.current = [];
     setInput("");
+    setReviewedDocument(undefined);
   }
   async function send() {
     const text = input.trim();
     if (!text || busy) return;
+    if (documentQuestion(text)) {
+      const accepted = reviewedDocument?.uid === profileAccount ? reviewedDocument : undefined;
+      setMessages(items => [...items, { role: "user" as const, text }, {
+        role: "assistant" as const, text: documentAnswer(accepted), label: "Reviewed document · Exact read-back · Not AI-generated",
+      }].slice(-40));
+      setInput(""); setNotice("");
+      return;
+    }
     const profileRequest = profileQuestion(text);
     const safe = profileRequest ? undefined : safetyCheck(text);
     if (!safe && !profileRequest && status !== "ready") {
@@ -332,6 +344,7 @@ export function Companion({
       </div>
       {page === "settings" ? (
         <div className="ai-settings-grid">
+          {account && profileAccount && <DocumentContextPanel key={profileAccount} uid={profileAccount} onAccept={setReviewedDocument} />}
           <section>
             <h3>RUHI · Offline companion</h3>
             <p className="small muted">{RUHI_ORIGIN}</p>
@@ -631,6 +644,10 @@ export function Companion({
               send();
             }}
           >
+            <div className="action-row">
+              <button type="button" className="button secondary" disabled={busy} onClick={() => setInput("What is my name?")}>My saved profile</button>
+              <button type="button" className="button secondary" disabled={busy} onClick={() => setInput("Read my document")}>Read my document</button>
+            </div>
             <label htmlFor="companion-message">Your message</label>
             <textarea
               id="companion-message"

@@ -16,6 +16,7 @@ import { profileContext } from "./ai/behavior";
 import type { MotherProfile } from "./records-model";
 import { CameraCapture } from "./camera-capture";
 import { ReferralDrafts } from "./referral-drafts";
+import { PatientSummaryPanel } from "./patient-summary-panel";
 import { ProfileLinkPreview, TestAssignments } from "./workflow-tests";
 
 type RecordsContext = {
@@ -110,6 +111,7 @@ export function MotherRecordsHome() {
           </>
         )}
       </section>
+      <PatientSummaryPanel />
       <section className="panel">
         <h2>Educational suggestions</h2>
         <p>Explore topics in MatriSathi. Articles are pending review.</p>

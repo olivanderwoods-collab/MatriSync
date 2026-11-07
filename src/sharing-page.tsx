@@ -12,6 +12,7 @@ import {
 } from "./sharing-client";
 import {
   localSharingDevice,
+  verifyPeerPin,
   savedTransfers,
   transfersForWorkspace,
   type SavedTransfer,
@@ -32,6 +33,7 @@ import { SharedProfilePanel } from "./sharing-profile-panel";
 import { SharingAssignmentPanel } from "./sharing-assignment-panel";
 import { SharingCredentialPanel } from "./sharing-credential-panel";
 import { SharingOutboxPanel } from "./sharing-outbox-panel";
+import { pairingCode, matchPairingCode } from "./sharing-pairing";
 
 export function SharingPage({ uid, role }: { uid: string; role: string }) {
   return (
@@ -46,6 +48,7 @@ function SharingContent({ uid, role }: { uid: string; role: string }) {
   const [channels, setChannels] = useState<SharingChannel[]>([]);
   const [channelId, setChannelId] = useState("");
   const [fingerprint, setFingerprint] = useState("");
+  const [pairCode, setPairCode] = useState("");
   const [saved, setSaved] = useState<SavedTransfer[]>([]);
   const [unscoped, setUnscoped] = useState(0);
   const [opened, setOpened] = useState<SharedDocument>();
@@ -148,6 +151,24 @@ function SharingContent({ uid, role }: { uid: string; role: string }) {
           performed outside the app; this button cannot approve an account.
         </p>
       </section>
+      {device && <section className="panel" aria-label="Pair approved accounts">
+        <h2>Pair approved accounts</h2>
+        <p>Exchange these public codes directly with the person you are pairing with. Pairing selects an already-approved connection; it does not share records automatically.</p>
+        <label htmlFor="own-pairing-code">Your pairing code</label>
+        <textarea id="own-pairing-code" readOnly rows={3} value={pairingCode(uid, device.keyId)} />
+        <label htmlFor="peer-pairing-code">Other account's pairing code</label>
+        <textarea id="peer-pairing-code" rows={3} maxLength={250} value={pairCode} onChange={e => setPairCode(e.target.value)} />
+        <button className="button secondary" disabled={busy || !pairCode.trim()} onClick={() => void act(async () => {
+          const current = await sharingChannels(uid, role, device);
+          const match = matchPairingCode(pairCode, uid, current);
+          await verifyPeerPin(uid, match.peerUid, match.fingerprint, match.fingerprint);
+          setChannels(current);
+          setChannelId(match.channels[0].id);
+          setFingerprint(match.fingerprint);
+          setOpened(undefined);
+          setStatus(`Paired with approved account ${match.peerUid}. ${match.channels.length > 1 ? "Multiple approved routes exist; check the selected connection." : "Connection selected."} Choose a profile to share, or fetch approved records. No record was sent.`);
+        })}>Pair approved account</button>
+      </section>}
       {device && (
         <SharingCredentialPanel uid={uid} role={role} device={device} />
       )}
