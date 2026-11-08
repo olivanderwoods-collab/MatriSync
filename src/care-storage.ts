@@ -66,8 +66,29 @@ export async function latestCareHandoff(uid: string, caseId: string): Promise<Sa
 }
 export async function saveCareReceipt(uid: string, value: CareView) {
   await careAccount(uid);
-  const sealed = await wrapCare(value, await localSharingDevice(uid));
-  await careAccount(uid); await storage("readwrite", s => s.put(sealed, [uid, `receipt:${value.id}:${value.handoffId}`]));
+  if (!value.handoffId) throw Error("A received handoff needs its original identity.");
+  const key = [uid, `receipt:${value.id}:${value.handoffId}`];
+  const identity = (v: CareView) => JSON.stringify([v.id, v.handoffId, v.profile, v.entries]);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const previous = await storage<string | undefined>("readonly", s => s.get(key));
+    const old = previous ? await unwrapCare(uid, previous) as CareView : undefined;
+    if (old && identity(old) !== identity(value)) throw Error("This handoff ID already has different saved details. The original receipt was preserved.");
+    // A later scan may add online verification, but never rewrite the original
+    // snapshot/first receipt time or downgrade an earlier successful check.
+    const verifiedAt = old?.verifiedAt || (value.verified ? value.verifiedAt : undefined);
+    const retained = old ? { ...old, verified: old.verified || value.verified, ...(verifiedAt ? { verifiedAt } : {}) } : value;
+    const sealed = await wrapCare(retained, await localSharingDevice(uid));
+    await careAccount(uid);
+    // Compare and write in one transaction so concurrent scans cannot undo an
+    // online check while encryption runs outside IndexedDB's transaction.
+    const actual = await storage<string | undefined>("readwrite", s => {
+      const request = s.get(key);
+      request.onsuccess = () => { if (request.result === previous) s.put(sealed, key); };
+      return request;
+    });
+    if (actual === previous) return retained;
+  }
+  throw Error("The receipt changed in another tab. Reopen its saved copy before scanning again.");
 }
 export async function careReceipts(uid: string, id: string): Promise<CareView[]> {
   await careAccount(uid);

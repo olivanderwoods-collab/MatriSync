@@ -10,7 +10,7 @@ export const contributionKinds = {
 export type ContributionKind = (typeof contributionKinds)[CareRole][number];
 export type CareProfile = { name: string; birthDate: string; sourceLocalId: string; sourceUid: string; details?: MotherProfile; history?: string };
 export type CareEntry = { id: string; kind: ContributionKind; actorUid: string; actorName: string; role: CareRole; recordedAt: string; serverAt: string; text: string; fields?: ReferralFields };
-export type CareView = { id: string; key: string; profile: CareProfile; entries: CareEntry[]; verified: boolean; snapshotOnly: boolean; receivedAt: string; handoffId?: string; motherUid?: string };
+export type CareView = { id: string; key: string; profile: CareProfile; entries: CareEntry[]; verified: boolean; snapshotOnly: boolean; receivedAt: string; verifiedAt?: string; handoffId?: string; motherUid?: string };
 export function checkCareProfile(p: CareProfile) {
   if (!p || typeof p.name !== "string" || !p.name.trim() || p.name.length > 120 || typeof p.birthDate !== "string" || p.birthDate.length > 10 || typeof p.sourceLocalId !== "string" || p.sourceLocalId.length > 200 || typeof p.sourceUid !== "string" || p.sourceUid.length > 128) throw Error("Invalid patient identity.");
   if (!/^[A-Za-z0-9_-]{1,200}$/.test(p.sourceLocalId) || !/^[A-Za-z0-9_-]{1,128}$/.test(p.sourceUid) || (p.birthDate && (!/^\d{4}-\d{2}-\d{2}$/.test(p.birthDate) || !Number.isFinite(Date.parse(p.birthDate)) || new Date(p.birthDate).toISOString().slice(0,10) !== p.birthDate))) throw Error("Invalid patient identity or birth date.");

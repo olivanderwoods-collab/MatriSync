@@ -15,6 +15,8 @@
     "test:e2e": "playwright test",
     "lint": "eslint .",
     "test:rules": "vitest run --config vitest.rules.config.ts",
+    "test:rules:care": "vitest run --config vitest.rules.config.ts tests-rules/care.test.ts tests-rules/records.test.ts",
+    "test:care:integration": "vitest run --config vitest.care-integration.config.ts",
     "test:auth": "playwright test --config playwright.auth.config.ts",
     "dev:sharing": "node scripts/start-sharing-pilot.mjs",
     "test:sharing": "playwright test --config playwright.sharing.config.ts",

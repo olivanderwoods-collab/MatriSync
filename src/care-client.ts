@@ -206,10 +206,11 @@ export async function receiveCareHandoff(uid: string, bytes: Uint8Array): Promis
     const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
     if (!["unavailable", "deadline-exceeded"].includes(code)) throw error;
   }
-  const view: CareView = { id: payload.caseId, key: "", profile, entries: [{ id: payload.id, kind: "referral", actorUid: payload.sourceUid, actorName: payload.sourceName, role: "doctor", recordedAt: payload.recordedAt, serverAt: "", text: "", fields }], verified, snapshotOnly: true, receivedAt: new Date().toISOString(), handoffId: packet.id };
+  const receivedAt = new Date().toISOString();
+  const view: CareView = { id: payload.caseId, key: "", profile, entries: [{ id: payload.id, kind: "referral", actorUid: payload.sourceUid, actorName: payload.sourceName, role: "doctor", recordedAt: payload.recordedAt, serverAt: "", text: "", fields }], verified, snapshotOnly: true, receivedAt, ...(verified ? { verifiedAt: receivedAt } : {}), handoffId: packet.id };
   const existing = await readCareCopy(uid, view.id);
   // Retain a previously loaded full record instead of downgrading its history.
-  await saveCareReceipt(uid, view);
-  if (!existing || existing.snapshotOnly) await saveCareCopy(uid, view);
-  await careAccount(uid); return view;
+  const receipt = await saveCareReceipt(uid, view);
+  if (!existing || existing.snapshotOnly) await saveCareCopy(uid, receipt);
+  await careAccount(uid); return receipt;
 }

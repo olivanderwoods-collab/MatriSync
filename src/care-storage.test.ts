@@ -82,4 +82,31 @@ describe("completed connected-care handoff recovery", () => {
     await raw("readwrite", s => s.put(sealed, [f.uid, `outgoing:${otherCase}:${f.saved.id}`]));
     await expect(latestCareHandoff(f.uid, otherCase)).rejects.toThrow("identity differs");
   });
+  it("retains the first receipt and a later online check through concurrent offline rescans", async () => {
+    const f = fixture(), first = { ...f.view, key: "", snapshotOnly: true, verified: false, handoffId: f.saved.id };
+    await saveCareReceipt(f.uid, first);
+    const verifiedAt = "2026-11-08T02:00:00.000Z";
+    await Promise.all([
+      saveCareReceipt(f.uid, { ...first, receivedAt: verifiedAt, verified: true, verifiedAt }),
+      saveCareReceipt(f.uid, { ...first, receivedAt: "2026-11-08T03:00:00.000Z" }),
+    ]);
+    const laterOffline = await saveCareReceipt(f.uid, { ...first, receivedAt: "2026-11-08T04:00:00.000Z" });
+    expect(laterOffline).toEqual({ ...first, verified: true, verifiedAt });
+    expect(await careReceipts(f.uid, f.view.id)).toEqual([laterOffline]);
+  });
+  it("rejects changed patient details or clinical entries under an existing receipt identity", async () => {
+    const f = fixture(), first = { ...f.view, handoffId: f.saved.id };
+    await saveCareReceipt(f.uid, first);
+    await expect(saveCareReceipt(f.uid, { ...first, profile: { ...first.profile, name: "Substituted patient" } })).rejects.toThrow("original receipt was preserved");
+    await expect(saveCareReceipt(f.uid, { ...first, entries: [{ id: "changed", kind: "referral", actorUid: f.uid, actorName: "Different source", role: "doctor", recordedAt: first.receivedAt, serverAt: "", text: "Changed clinical information" }] })).rejects.toThrow("original receipt was preserved");
+    expect(await careReceipts(f.uid, f.view.id)).toEqual([first]);
+  });
+  it("keeps legacy verification without inventing its missing timestamp", async () => {
+    const f = fixture(), legacy = { ...f.view, handoffId: f.saved.id };
+    await saveCareReceipt(f.uid, legacy);
+    const rescanned = await saveCareReceipt(f.uid, { ...legacy, verified: false, receivedAt: "2026-11-09T01:00:00.000Z" });
+    expect(rescanned.verified).toBe(true);
+    expect(rescanned.verifiedAt).toBeUndefined();
+    expect(rescanned.receivedAt).toBe(legacy.receivedAt);
+  });
 });

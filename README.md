@@ -23,6 +23,8 @@ Future controls retain **Coming Soon** labels. Inventory and other synthetic pre
 
 ## Development and tests
 
+The 8 November connected-care acceptance update preserves original handoff receipt times and successful online checks across offline rescans. A nine-account journey passed against real local Firebase Auth/Firestore emulators, including role restrictions, Mother access, revocation, encrypted handoff transfer and recovery. This is emulator acceptance, not a live multi-account or physical NFC certification. See [current acceptance and reproduction notes](docs/CARE-ACCEPTANCE-2026-11-08.md).
+
 Use Node.js and pnpm. The lockfile pins the existing dependencies.
 
 ```sh

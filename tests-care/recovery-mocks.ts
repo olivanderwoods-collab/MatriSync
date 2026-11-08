@@ -1,4 +1,5 @@
-import { readCareCopy, saveCareCopy, saveCareHandoff } from "../src/care-storage";
+import { readCareCopy, saveCareCopy, saveCareHandoff, saveCareReceipt } from "../src/care-storage";
+import { emptyReferralFields } from "../src/referral-draft";
 import { base64 } from "../src/vault-crypto";
 import { frameHandoff } from "../src/handoff-frame";
 import type { CareView } from "../src/care-model";
@@ -27,6 +28,11 @@ export async function seed() {
     if (await readCareCopy(fixture.uid, id)) continue;
     await saveCareCopy(fixture.uid, { id, key: "fixture-key", profile: { name, birthDate: "", sourceLocalId: id, sourceUid: fixture.uid }, entries: [], verified: true, snapshotOnly: false, receivedAt: new Date().toISOString() });
   }
+  const patient = (await readCareCopy(fixture.uid, "patient-b"))!;
+  const receipt: CareView = { ...patient, key: "", snapshotOnly: true, verified: false, handoffId: "synthetic-received-handoff", receivedAt: "2026-11-08T10:00:00.000Z", entries: [{ id: "synthetic-received-handoff", kind: "referral", actorUid: "synthetic-sender", actorName: "Synthetic source doctor", role: "doctor", recordedAt: "2026-11-08T09:00:00.000Z", serverAt: "", text: "", fields: { ...emptyReferralFields(), reason: "Original synthetic received details" } }] };
+  await saveCareReceipt(fixture.uid, receipt);
+  await saveCareReceipt(fixture.uid, { ...receipt, verified: true, verifiedAt: "2026-11-08T10:01:00.000Z", receivedAt: "2026-11-08T10:01:00.000Z" });
+  await saveCareReceipt(fixture.uid, { ...receipt, receivedAt: "2026-11-08T10:02:00.000Z" });
 }
 const unsupported = async () => { throw Error("Outside this isolated UI test"); };
 export const activateCareFacility = unsupported, assignCareStaff = unsupported, contributeCare = unsupported, grantCareProfile = unsupported, receiveCareHandoff = unsupported, registerCareProfile = unsupported;
