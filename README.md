@@ -1,97 +1,65 @@
-# MatriSync
-MatriSync software developed by Team UNCODED for the Healthathon 2026
+# MatriSync — Health-a-thon 2026
 
-## Current submission minimum — 7 November 2026
+Live application: https://matrisync-c9de7.web.app
 
-Start with [the current MVP and presentation guide](docs/SUBMISSION-MVP-2026-11-07.md). Development resumed in Codex: approved pairing codes, manual encrypted profile synchronization, personal care-summary print/PDF and reviewed local PDF read-back in RUHI extend the existing referral/BLE implementation. `Start-MatriSync.cmd` prepares fictional presentation workspaces on the configured Windows computer. Hardware is assembled but remains untouched pending software rehearsal and later integration. Older checkpoints below are retained as history.
+**DEMO / NOT FOR CLINICAL USE.** MatriSync is a maternal-record and referral-continuity prototype by Team UNCODED. Choose a workspace, then **Continue as Guest** to explore the fictional case without creating an account. Workspace selection does not confer clinical authority.
 
-## Previous checkpoint — 5 November 2026
+## Verified public demo
 
-**Start with [the complete Codex → GitHub → Bolt handoff](docs/MATRISYNC_CODEX_HANDOFF_2026-11-05.md) and [latest approved requirements](docs/FINAL-REQUIREMENTS-2026-11-05.md).** They supersede conflicting historical status below. Continue on `handoff/matrisync-codex-2026-11-05`; preserve Firebase, records and the existing design. This remains a synthetic-data development prototype, not a clinically deployable system.
+- Three existing role workspaces: Mother, Healthcare Professional and Healthcare Organization.
+- Ophelia Frost (`MAT-DEMO-001`) linked to Dr. Olivander Woods (`DOC-DEMO-001`).
+- Six read-only medication records with separate prescription/administration times, a separate pending PRBC request and a chronological 15-event timeline.
+- Referral status from the supplied fictional case; dynamic structured handoff, downloadable two-page PDF, print view and a framed 2,827-byte `.msht` demo package.
+- MatriSathi basic conversations, navigation and exact demo-fact read-back. Scripted replies are explicitly labelled **Not generative AI**. Optional local inference is a separate feature requiring a model download.
+- All three investigation references preserve missing-data labels. The source ultrasound and blood reports for Ophelia are unavailable; no results or administering personnel were invented.
 
-The controlled local submission build now combines encrypted profile/original sharing, reviewed printable referrals, destination receiving events and Web Bluetooth handoff. Matching ESP32-S3 firmware compiles; physical BLE and NFC are not verified. Use `pnpm build:submission` for that emulator-bound build. Bolt source preview uses `pnpm dev:bolt`; hosted preview cannot substitute for localhost emulator or hardware tests. Granular healthcare roles, facility device enrollment/PIN sessions, upload acceptance review and clinical AI remain documented work for continuation.
+## Boundaries
 
-See [verification](docs/VERIFICATION-2026-11-05-HANDOFF.md), [ESP32-S3 protocol](docs/ESP32-S3-BLE-HANDOFF.md), and [new-conversation context](docs/NEW-CHATGPT-CONTEXT-2026-11-05.md). The sections below are historical setup/background and are retained for continuity.
+The Guest referral is a supplied event, not confirmed dispatch, clinical approval, patient arrival or receiving-facility acceptance. The demo package is plaintext fictional data; it is not encrypted, has not been written to NFC, and does not fit the user-tested 48-byte tag. The reference firmware is not verified for the user's existing ESP32 WROOM / PN532 V2.2 bridge. Do not flash it as part of software setup.
 
-## Phased development · encrypted local records
+Guest data remains isolated in the tab. Do not enter real medical information. Signed-in functionality includes prototype encrypted local records and connected structured-care code; the public Guest verification does not certify a live multi-account clinical journey. Original uploaded files remain local in that MVP. Production authorization rules were not changed for this release. Mothers and facility administrators are not given permission to author prescriptions.
 
-Responsive React/TypeScript PWA with three role workspaces, separate synthetic Guest sessions and Firebase email/password Authentication. Signed-in professionals can add/edit/search private patient profiles and save encrypted reports and prescription files on the device. Mothers can store their own documents locally. The encrypted Firestore adapter and prototype rules are tested against emulators but not connected to the live app. No deployment has been performed.
+Future controls retain **Coming Soon** labels. Inventory and other synthetic previews do not represent real stock, appointments, credentials or service transactions. Public facility verification, recovery, physical NFC/BLE acceptance and clinical validation remain incomplete. Optional model inference and full offline patient workflows were not revalidated on the public site in this release. Vite reports large optional AI/runtime bundles.
 
-The [current phase and test-database update](docs/PHASED-DEVELOPMENT.md) records the latest user-directed changes and remaining stages. The [v2 specification](docs/MatriSync-Master-Development-Guide-v2.txt) controls the UI. Each public workspace has exactly five navigation tabs; organizational Distribution Management is a nested synthetic preview, not another signup role. See [existing-versus-target comparison and conflicts](docs/V2-ALIGNMENT.md). Older branded demo links redirect to their approved functional destinations.
+## Development and tests
 
-### Run
-
-Requirements: Node 22+ and pnpm. From this repository directory:
+Use Node.js and pnpm. The lockfile pins the existing dependencies.
 
 ```sh
-pnpm install
+pnpm install --frozen-lockfile
+# Copy .env.example to .env.local and supply the intended Firebase WEB app config.
 pnpm dev
-```
-
-Open http://127.0.0.1:5173/. Keep the terminal/server running. For a production PWA preview:
-
-```sh
-pnpm build:demo
-node scripts/serve.mjs --port 5173
-```
-
-Open http://127.0.0.1:5173/. On the development Windows machine, `Start-MatriSync.ps1` starts the existing production build in the background and opens it. Run it from PowerShell in this folder. It does not install packages or deploy anything. For offline demonstrations use the **production preview**, visit online once, wait for the service worker to install, then reload before disconnecting. Development mode does not install a service worker.
-
-Use `pnpm build` for a normal build that excludes the supplied draft databases entirely. `pnpm build:demo` includes them only for local testing; both builds verify this boundary. For development with test lookup, use `pnpm dev:demo`. Nothing is deployed by these commands.
-
-### Account setup
-
-Copy `.env.example` to `.env.local` and fill the four Firebase web configuration variables using the intended project. Restart the dev server or rebuild after changing configuration. Keep `.env.local` ignored. This checkout has the owner-supplied configuration locally; it is not committed. The app initializes Firebase App/Auth on account use, with session-scoped Auth persistence. The separate Firestore adapter is disabled for production; there is no Firebase Storage upload code. No service-account key belongs in frontend variables.
-
-The supplied project was inspected on 20 October 2026: active, billing disabled, email/password provider enabled. No project settings were changed. Its existing authorized domains include localhost. Successful live signup/login/logout has not yet been verified with a real account. The UI displays useful errors if a request fails; no simulated authentication success is used.
-
-### Demo scope and storage
-
-Choose any role and use **Continue as Guest**. Guest records are synthetic. Signed-in professional Home/Patients and mother Reports/Prescriptions use private device records; other workflow previews remain explicitly labelled synthetic or unavailable. The optional testing build separately includes user-supplied, unverified medicine references. Role selection grants no professional or facility privilege. Guest mutable state uses only `matrisync.demo.*` sessionStorage keys and memory. Reset restores defaults; Exit Guest clears all these keys and reloads the public selector, preventing leftover Auth/background state. Account transition clears Guest first. A blocked-storage fallback explicitly warns that reload persistence is unavailable. Normal new tabs are separate; duplicate/restore behavior is browser-dependent.
-
-The public service worker precaches an explicit build-generated asset allowlist. It never caches auth requests, navigation responses, mutable Guest state, or personal records supplied by a user. The explicit testing build also caches the supplied static draft medicine references for offline tests; searches and profile photos are never cached by the service worker. Deep links receive the same public static shell. Updates wait until the user selects **Update now**; the next activation removes obsolete MatriSync shell caches.
-
-### Private local records
-
-Sign in, open Professional > Patients, and set a separate vault passphrase (at least 12 characters). Add a patient, edit their profile, and use their Reports or Prescriptions tab to upload PDF/JPG/PNG/WebP files (up to 10 MB each). Mother > My Health > Reports/Prescriptions uses the account's own local record profile. Documents retain supplied issuer/date metadata and are labelled unverified uploaded copies.
-
-The vault encrypts record data, document metadata and file contents in IndexedDB. It locks on reload/account exit and after five minutes without interaction. The passphrase/key is never saved. **There is currently no passphrase recovery or backup UI.** Clearing browser data or losing the device can permanently remove these documents. Downloads are ordinary decrypted copies. Cloud document/photo uploads remain disabled. See [storage design and limits](docs/FIRESTORE-MODEL.md).
-
-### Checks
-
-```sh
-pnpm lint
 pnpm test
-pnpm build:demo
-pnpm test:e2e
+pnpm lint
+pnpm build
+pnpm preview
 ```
 
-The browser suite uses installed Microsoft Edge. It starts a production preview automatically and checks enabled/disabled account controls according to the build's configuration. Tests never submit live account credentials. Missing-configuration behavior was also tested before local Firebase values were supplied.
+`pnpm build` (or `npm run build`) now runs TypeScript and the production pipeline with the same `VITE_CARE_ENABLED=1` and `VITE_SHARING_PILOT=0` settings for Vite and the release verifier. It generates `dist` and a content-versioned service worker. Do not publish `build:submission`: that historical script is an emulator-only developer build.
 
-The Auth, local-record and AI-failure tests passed on 22 October 2026 using the official Firebase CLI 15.34.0, installed separately from application dependencies. With that CLI available, run `firebase emulators:exec --only auth --project demo-matrisync "node node_modules/@playwright/test/cli.js test --config playwright.auth.config.ts"`. The test app overrides all project values in memory and points only to loopback. `firebase.json` also configures the local Firestore emulator and undeployed prototype rules. No live accounts or project settings are changed. Run this suite separately from the production browser suite because both use Playwright's default results directory.
+The Firebase web config is client configuration, not a service-account credential. Never put service-account JSON, private keys, provider secrets or CLI refresh tokens in source or any `VITE_*` variable. `.env.local`, local tooling, caches, build output and logs are excluded from Git.
 
-See [meeting walkthrough](docs/MEETING-WALKTHROUGH.md), [capabilities and deferred roadmap](docs/CAPABILITIES.md), and [verification evidence](docs/VERIFICATION.md). Screenshots are in `docs/screenshots/`.
+Current release checks: 116 unit tests in 30 files passed; ESLint and production build passed. Public browser checks cover homepage, direct routes for all three roles, medication records, handoff generation, PDF/package downloads and five MatriSathi prompts with no captured browser warnings/errors. The downloaded PDF was parsed and both pages rendered and inspected. See `docs/PUBLIC-RELEASE-2026-11-07.md` for the verification boundary. Historical test documents describe earlier runs, not current certification.
 
-### Structure and branding
+## Update the SAME Firebase Hosting URL
 
-- `src/main.tsx`: existing Auth/Guest integration, shared shell, preferences, accessible native dialogs.
-- `src/data.ts`: preserved synthetic fixtures, exact five-tab role navigation, configurable provisional tagline.
-- `src/workspace.tsx`: v2 read-only screens, contextual navigation and compatibility redirects.
-- `src/workspace-spec.ts`: exact v2 internal sections, More menus and future-action inventories.
-- `src/session.ts`: validated session-only Guest store.
-- `src/auth.ts`: lazy Auth initialization, session persistence, safe error copy.
-- `src/theme.css`: exact supplied Medical Green semantic tokens for light/dark.
-- `scripts/build-sw.mjs`: versioned public-shell allowlist.
-- `docs/branding/MatriSync-approved-original.png`: supplied artwork, unchanged. PWA derivatives preserve proportions and alpha; maskable image has safe padding.
+Existing Firebase project/site: `matrisync-c9de7`. Billing was verified disabled during this release. No paid service is required for static Hosting.
 
-“Every Mother. Every Step.” remains configurable provisional copy pending final acceptance. Language preferences include English, Bengali, Kannada, Hindi, Marathi; unavailable reviewed translations explicitly fall back to English. No translation service is called.
+```sh
+pnpm test
+pnpm lint
+pnpm build
+firebase login:list
+firebase deploy --only hosting --project matrisync-c9de7
+```
 
-Reference implementation behavior follows [Firebase session persistence](https://firebase.google.com/docs/auth/web/auth-state-persistence) and [MDN tab storage semantics](https://developer.mozilla.org/en-US/docs/Web/API/Window/sessionStorage).
+Use an authenticated Firebase CLI with access to the existing project. Do not create a replacement project or deploy Firestore/Storage rules as part of a Hosting update. Verify https://matrisync-c9de7.web.app in a fresh browser, test direct routes and exports, and check the offered **Update now** prompt in an already-open PWA. `index.html` and `sw.js` have no-cache headers; fingerprinted assets and a content-derived shell cache keep releases distinct. Retain the prior working Hosting release if verification fails.
 
-### AI foundation
+## Source provenance
 
-The selected providers and exact zero-cost blockers are documented in [AI integration status](docs/AI-PROVIDER-EVALUATION.md). Mother > MatriSathi > Chat > AI settings contains optional offline installation, preferences and privacy controls. AI usage has separate offline, Gemini and Tavily indicators. Gemini/Tavily remain disabled; there are no paid fallbacks or online uploads.
+Development repository: https://github.com/olivanderwoods-collab/MatriSync
 
-The public Qwen weights are an optional approximately 620 MB download after confirmation, never part of Git or initial PWA precaching. WebGPU with shader-f16 and sufficient memory are required. English safety checks are conservative development controls, not clinically validated triage. Only synthetic inputs are appropriate for current acceptance tests.
+Recovered branch: `handoff/matrisync-codex-2026-11-05`, commit `1de3742496d1b0ed9ffb970b1de8f8ce9673be0e`. The original repository and its history are preserved. The verified release continues on the existing development branch in this repository. Local environment files, credentials and development caches are not published.
 
-`TEST_OFFLINE_MODEL=1` explicitly opts the Auth Playwright suite into the real download/inference test. Also set `TEST_AI_PRODUCTION=1` to test PWA caching and offline worker restart. The isolated build and synthetic browser profile stay in ignored `.local-tools`; `TEST_AUTH_PORT` can move the ordinary Auth suite to a separate test port. Without it, that large-download test is skipped. Keep Auth emulator tests separate from the regular browser suite. Model inference runs in a worker; Stop terminates it. Loading after Stop reads the installed cache without an automatic online fallback.
+Current source and submission repository (confirmed 8 November 2026): https://github.com/olivanderwoods-collab/MatriSync
+

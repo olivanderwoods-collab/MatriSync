@@ -21,3 +21,11 @@ firestore-debug.log
 models/
 *.secret
 .firebase/
+
+# Authentication material must never enter a public submission.
+*service-account*.json
+*serviceAccount*.json
+*credentials*.json
+firebase-tools.json
+*.pem
+*.key
