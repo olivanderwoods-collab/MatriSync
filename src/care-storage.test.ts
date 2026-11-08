@@ -1,0 +1,85 @@
+import "fake-indexeddb/auto";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { careReceipts, latestCareHandoff, readCareCopy, savedCareIds, saveCareCopy, saveCareHandoff, saveCareReceipt, type SavedCareHandoff } from "./care-storage";
+import { emptyReferralFields } from "./referral-draft";
+import { base64, unbase64 } from "./vault-crypto";
+import { frameHandoff, unframeHandoff } from "./handoff-frame";
+import { careHandoffDocument } from "./care-document";
+import type { CareView } from "./care-model";
+
+const auth = vi.hoisted(() => ({ currentUser: { uid: "", isAnonymous: false } }));
+vi.mock("./auth", () => ({ accountAuth: async () => auth }));
+beforeEach(() => { auth.currentUser = { uid: crypto.randomUUID(), isAnonymous: false }; });
+function fixture() {
+  const uid = auth.currentUser.uid, caseId = crypto.randomUUID();
+  const profile = { name: "Private synthetic patient", birthDate: "1995-01-01", sourceLocalId: "local-patient", sourceUid: uid };
+  const view: CareView = { id: caseId, key: "not-in-outgoing-copy", profile, entries: [], verified: true, snapshotOnly: false, receivedAt: "2026-11-08T01:00:00.000Z" };
+  const packet = frameHandoff(new TextEncoder().encode("Exact recipient ciphertext · অপরিবর্তিত"), 32768);
+  const saved: SavedCareHandoff = { version: 1, id: crypto.randomUUID(), caseId, sourceUid: uid, recipientUid: "receiving-facility", profile: { ...profile }, fields: { ...emptyReferralFields(), reason: "Original manually entered reason" }, packet: base64(packet), actorName: "Synthetic doctor", recordedAt: "2026-11-08T01:01:00.000Z" };
+  return { uid, view, saved, packet };
+}
+async function raw<T>(mode: IDBTransactionMode, action: (s: IDBObjectStore) => IDBRequest<T>) {
+  const db = await new Promise<IDBDatabase>((resolve, reject) => {
+    const req = indexedDB.open("matrisync-care-v1", 1);
+    req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
+  });
+  return new Promise<T>((resolve, reject) => {
+    const tx = db.transaction("copies", mode), req = action(tx.objectStore("copies"));
+    tx.oncomplete = () => { db.close(); resolve(req.result); };
+    tx.onabort = tx.onerror = () => { db.close(); reject(tx.error); };
+  });
+}
+describe("completed connected-care handoff recovery", () => {
+  it("persists encrypted data and restores the original snapshot and exact framed packet", async () => {
+    const f = fixture();
+    await saveCareHandoff(f.uid, f.saved);
+    const sealed = await raw<string>("readonly", s => s.get([f.uid, `outgoing:${f.view.id}:${f.saved.id}`]));
+    for (const secret of [f.saved.profile.name, f.saved.fields.reason, f.saved.actorName, f.saved.packet]) expect(sealed).not.toContain(secret);
+    const recovered = await latestCareHandoff(f.uid, f.view.id);
+    expect(recovered).toEqual(f.saved);
+    expect(unbase64(recovered!.packet)).toEqual(f.packet);
+    expect(unframeHandoff(unbase64(recovered!.packet))).toEqual(unframeHandoff(f.packet));
+    f.view.profile.name = "Changed later";
+    await saveCareCopy(f.uid, f.view);
+    const original = careHandoffDocument({ id: recovered!.caseId, profile: recovered!.profile }, recovered!.fields, recovered!.id, recovered!.actorName, recovered!.sourceUid, recovered!.recordedAt);
+    expect(original).toContain("Private synthetic patient");
+    expect(original).toContain(f.saved.recordedAt);
+    expect(original).not.toContain("Changed later");
+  });
+  it("keeps outgoing records out of patient lists and received receipts", async () => {
+    const f = fixture();
+    await saveCareCopy(f.uid, f.view);
+    await saveCareHandoff(f.uid, f.saved);
+    const receipt = { ...f.view, handoffId: crypto.randomUUID() };
+    await saveCareReceipt(f.uid, receipt);
+    expect(await savedCareIds(f.uid)).toEqual([f.view.id]);
+    expect(await readCareCopy(f.uid, f.view.id)).toEqual(f.view);
+    expect(await careReceipts(f.uid, f.view.id)).toEqual([receipt]);
+  });
+  it("isolates patients, accounts and signed-out or anonymous sessions", async () => {
+    const f = fixture(); await saveCareHandoff(f.uid, f.saved);
+    expect(await latestCareHandoff(f.uid, crypto.randomUUID())).toBeUndefined();
+    auth.currentUser.uid = "different-account";
+    expect(await latestCareHandoff("different-account", f.view.id)).toBeUndefined();
+    await expect(latestCareHandoff(f.uid, f.view.id)).rejects.toThrow("Sign in");
+    await expect(saveCareHandoff("different-account", f.saved)).rejects.toThrow("account differs");
+    auth.currentUser = { uid: f.uid, isAnonymous: true };
+    await expect(latestCareHandoff(f.uid, f.view.id)).rejects.toThrow("Sign in");
+  });
+  it("never overwrites completed handoffs and selects the latest recorded version", async () => {
+    const f = fixture(); await saveCareHandoff(f.uid, f.saved);
+    await expect(saveCareHandoff(f.uid, { ...f.saved, actorName: "Changed" })).rejects.toThrow();
+    expect(await latestCareHandoff(f.uid, f.view.id)).toEqual(f.saved);
+    const later = { ...f.saved, id: crypto.randomUUID(), recordedAt: "2026-11-08T02:00:00.000Z" };
+    await saveCareHandoff(f.uid, later);
+    expect(await latestCareHandoff(f.uid, f.view.id)).toEqual(later);
+    expect(await raw("readonly", s => s.get([f.uid, `outgoing:${f.view.id}:${f.saved.id}`]))).toBeTruthy();
+  });
+  it("rejects a valid encrypted record substituted under a different patient key", async () => {
+    const f = fixture(); await saveCareHandoff(f.uid, f.saved);
+    const sealed = await raw<string>("readonly", s => s.get([f.uid, `outgoing:${f.view.id}:${f.saved.id}`]));
+    const otherCase = crypto.randomUUID();
+    await raw("readwrite", s => s.put(sealed, [f.uid, `outgoing:${otherCase}:${f.saved.id}`]));
+    await expect(latestCareHandoff(f.uid, otherCase)).rejects.toThrow("identity differs");
+  });
+});

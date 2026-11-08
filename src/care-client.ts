@@ -2,9 +2,9 @@ import { getFirestore, connectFirestoreEmulator, doc, getDocFromServer, getDocsF
 import { localSharingDevice } from "./sharing-storage";
 import type { PublicDevice } from "./sharing-crypto";
 import { careEnabled, checkCareProfile, checkContribution, type CareProfile, type CareRole, type CareEntry, type CareView, type ContributionKind } from "./care-model";
-import { careAccount, readCareCopy, savedCareIds, saveCareCopy, saveCareReceipt } from "./care-storage";
+import { careAccount, readCareCopy, savedCareIds, saveCareCopy, saveCareReceipt, saveCareHandoff } from "./care-storage";
 import { careHash, jsonBytes, newCareKey, openCare, readJson, sealCare, signCare, unwrapCare, verifyCare, wrapCare } from "./care-crypto";
-import { deriveVaultKey, newSalt, seal, unseal } from "./vault-crypto";
+import { base64, deriveVaultKey, newSalt, seal, unseal } from "./vault-crypto";
 import { frameHandoff, unframeHandoff } from "./handoff-frame";
 import { referralInput, type ReferralFields } from "./referral-draft";
 let db: Firestore | undefined;
@@ -178,7 +178,14 @@ export async function createCareHandoff(uid: string, view: CareView, recipientUi
   if (!(await getDocFromServer(grant)).exists()) batch.set(grant, { caseId: view.id, uid: recipientUid, facilityId: recipientUid, grantedBy: uid, viaNfc: true, wrapped: await wrapCare({ id: view.id, uid: recipientUid, key: view.key }, recipient), createdAt: serverTimestamp() });
   batch.set(doc(database, "careHandoffs", id), { caseId: view.id, sourceUid: uid, recipientUid, ciphertext, createdAt: serverTimestamp() });
   await careAccount(uid); await batch.commit();
-  return { packet, id, recordedAt, fields: clean, actorName: staff.name };
+  // A local quota/device failure must not turn a committed cloud handoff into
+  // an apparent creation failure and encourage duplicate clinical entries.
+  let savedLocally = false;
+  try {
+    await saveCareHandoff(uid, { version: 1, id, caseId: view.id, sourceUid: uid, recipientUid, profile: payload.profile, fields: clean, packet: base64(packet), actorName: staff.name, recordedAt });
+    savedLocally = true;
+  } catch { /* Return the confirmed packet with an explicit recovery warning. */ }
+  return { packet, id, recordedAt, fields: clean, actorName: staff.name, savedLocally };
 }
 export async function receiveCareHandoff(uid: string, bytes: Uint8Array): Promise<CareView> {
   await careAccount(uid);

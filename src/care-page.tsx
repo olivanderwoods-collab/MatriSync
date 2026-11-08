@@ -7,7 +7,8 @@ import { printReferralDocument, referralLabels } from "./referral-document";
 import { careHandoffDocument } from "./care-document";
 import { contributionKinds, type CareRole, type CareView, type ContributionKind } from "./care-model";
 import { activateCareFacility, assignCareStaff, careMembership, contributeCare, createCareHandoff, enrollCareDevice, grantCareProfile, listCareFacilities, listCareProfiles, loadCareProfile, receiveCareHandoff, registerCareProfile } from "./care-client";
-import { careReceipts, readCareCopy, savedCareIds } from "./care-storage";
+import { careReceipts, latestCareHandoff, readCareCopy, savedCareIds } from "./care-storage";
+import { unbase64 } from "./vault-crypto";
 const blank = (): ReferralFields => ({ ...emptyReferralFields(), ...Object.fromEntries(allReferralFields.map(k => [k, ""])) });
 function Facts({ fields }: { fields: ReferralFields }) {
   return <dl>{allReferralFields.map(key => <div key={key} className="care-fact"><dt>{referralLabels[key]}</dt><dd className="preserve-lines">{fields[key] || "Not recorded"}</dd></div>)}</dl>;
@@ -24,6 +25,9 @@ function ReceivedPopup({ value, close }: { value: CareView; close: () => void })
   </dialog>;
 }
 export function CarePage({ uid, role }: { uid: string; role: string }) {
+  return <CareAccountPage key={`${uid}:${role}`} uid={uid} role={role} />;
+}
+function CareAccountPage({ uid, role }: { uid: string; role: string }) {
   const { vault } = useRecords();
   const [membership, setMembership] = useState<Awaited<ReturnType<typeof careMembership>>>({ staff: undefined, facility: undefined });
   const [ids, setIds] = useState<string[]>([]), [id, setId] = useState("");
@@ -34,17 +38,28 @@ export function CarePage({ uid, role }: { uid: string; role: string }) {
   const [facilities, setFacilities] = useState<Awaited<ReturnType<typeof listCareFacilities>>>([]);
   const [destination, setDestination] = useState(""), [fields, setFields] = useState<ReferralFields>(blank);
   const [packet, setPacket] = useState<Uint8Array<ArrayBuffer>>(), [html, setHtml] = useState("");
+  const [handoffId, setHandoffId] = useState("");
+  const selection = useRef(0);
   const [capacity, setCapacity] = useState("32768"), [text, setText] = useState(""), [kind, setKind] = useState<ContributionKind>("clinical-note");
   const [accessCode, setAccessCode] = useState(""), [registration, setRegistration] = useState<{ id: string; code: string }>();
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const staff = membership.staff?.enabled ? membership.staff : undefined;
+  function selectPatient(next: string) {
+    selection.current++;
+    setId(next); setView(undefined); setPopup(undefined); setReceipts([]);
+    setAccessCode(""); setRegistration(undefined); setFields(blank()); setText("");
+    setDestination(""); setPacket(undefined); setHtml(""); setHandoffId("");
+    setError(""); setNotice("");
+    return selection.current;
+  }
   useEffect(() => {
     let live = true;
+    const current = selection.current;
     void savedCareIds(uid).then(async saved => {
-      if (!live) return; setIds(saved);
+      if (!live || current !== selection.current) return; setIds(existing => [...new Set([...existing, ...saved])]);
       if (role === "mother" && saved.length === 1) {
         const copy = await readCareCopy(uid, saved[0]);
-        if (live && copy?.motherUid === uid) { setView(copy); setId(copy.id); }
+        if (live && current === selection.current && copy?.motherUid === uid) { setView(copy); setId(copy.id); }
       }
     }).catch(() => {});
     return () => { live = false; };
@@ -62,11 +77,20 @@ export function CarePage({ uid, role }: { uid: string; role: string }) {
     if (member.staff?.role === "doctor") setFacilities(await listCareFacilities(uid));
     if (vault && await vault.openOnDevice()) setPatients(vault.data?.patients.filter(p => p.id !== "self" && p.kind !== "child") || []);
   }
-  async function open(selected = id) {
-    const next = await loadCareProfile(uid, selected, accessCode || undefined);
-    setView(next); setId(selected); setAccessCode(""); setPacket(undefined); setHtml(""); setFields(blank());
-    setReceipts(await careReceipts(uid, selected));
-    setNotice(next.snapshotOnly ? "Showing the handoff's basic snapshot. Full profile not loaded." : "Authorized profile and timestamped contributions loaded. Original files remain on their source device.");
+  async function open(selected = id, offline = false) {
+    const code = accessCode || undefined, current = selectPatient(selected);
+    const next = offline ? await readCareCopy(uid, selected) : await loadCareProfile(uid, selected, code);
+    if (current !== selection.current) return;
+    if (!next) throw Error("No local copy.");
+    setView(next);
+    const [received, saved] = await Promise.all([careReceipts(uid, selected), latestCareHandoff(uid, selected)]);
+    if (current !== selection.current) return;
+    setReceipts(received);
+    if (saved) {
+      setPacket(unbase64(saved.packet)); setHandoffId(saved.id);
+      setHtml(careHandoffDocument({ id: saved.caseId, profile: saved.profile }, saved.fields, saved.id, saved.actorName, saved.sourceUid, saved.recordedAt));
+    }
+    setNotice((next.snapshotOnly ? "Showing the handoff's basic snapshot. Full profile not loaded." : "Saved profile and timestamped contributions loaded. Original files remain on their source device.") + (saved ? " Original completed handoff restored from encrypted storage on this browser. Its details and packet are unchanged; delivery has not been confirmed." : ""));
   }
   useEffect(() => {
     // A scan is immediately retained. Reconnection fetches the authoritative
@@ -102,22 +126,25 @@ export function CarePage({ uid, role }: { uid: string; role: string }) {
       <button className="button primary" disabled={busy || !localId} onClick={() => void act(async () => {
         const patient = vault?.data?.patients.find(p => p.id === localId); if (!patient) throw Error("Open the saved local profile first.");
         const result = await registerCareProfile(uid, { name: patient.name, birthDate: patient.birthDate, sourceLocalId: patient.id, sourceUid: uid, ...(patient.profile ? { details: patient.profile } : {}), history: patient.history });
-        setRegistration(result); setView(result.view); setId(result.id); setIds(current => [...new Set([...current, result.id])]); setNotice("Connected profile registered. Save the Mother credentials now; they are not placed in the handoff.");
+        selectPatient(result.id); setRegistration(result); setView(result.view); setIds(current => [...new Set([...current, result.id])]); setNotice("Connected profile registered. Save the Mother credentials now; they are not placed in the handoff.");
       })}>Register linked profile and Mother access</button>
       {registration && <div className="notice"><strong>Save these Mother credentials now</strong><p>Patient ID: <span data-testid="mother-patient-id">{registration.id}</span></p><p>Access code: <span data-testid="mother-access-code">{registration.code}</span></p><p>The code is shown for this session only. It never grants a staff role.</p></div>}
     </section>}
     <section className="panel record-form"><h2>Open a saved or assigned profile</h2>
-      <label>Connected patient<select aria-label="Connected patient" value={id} onChange={e => setId(e.target.value)}><option value="">Choose a patient reference</option>{ids.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
+      <label>Connected patient<select aria-label="Connected patient" disabled={busy} value={id} onChange={e => selectPatient(e.target.value)}><option value="">Choose a patient reference</option>{ids.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
       {role === "mother" && <label>Patient access code (first unlock on this browser)<input type="password" autoComplete="off" value={accessCode} onChange={e => setAccessCode(e.target.value)} /></label>}
       <button className="button secondary" disabled={busy || !id} onClick={() => void act(() => open())}>Load / Refresh full profile</button>
-      <button className="text-link" disabled={busy} onClick={() => void act(async () => { setIds(await savedCareIds(uid)); if (id) { const copy = await readCareCopy(uid, id); if (!copy) throw Error("No local copy."); setView(copy); setReceipts(await careReceipts(uid, id)); } })}>Open saved offline copies</button>
+      <button className="text-link" disabled={busy} onClick={() => void act(async () => { const saved = await savedCareIds(uid); setIds(existing => [...new Set([...existing, ...saved])]); if (id) await open(id, true); })}>Open saved offline copies</button>
     </section>
     {role === "organization" && <BleHandoffPanel onRead={async bytes => {
-      const value = await receiveCareHandoff(uid, bytes); setPopup(value); setView(value); setId(value.id); setIds(current => [...new Set([...current, value.id])]); setReceipts(await careReceipts(uid, value.id));
-      if (value.verified && navigator.onLine) { try { setView(await loadCareProfile(uid, value.id)); } catch (e) { setError(e instanceof Error ? e.message : "Full profile not available. Basic handoff retained."); } }
+      const started = selection.current, value = await receiveCareHandoff(uid, bytes);
+      if (started !== selection.current) return;
+      const current = selectPatient(value.id); setPopup(value); setView(value); setIds(existing => [...new Set([...existing, value.id])]);
+      const received = await careReceipts(uid, value.id); if (current !== selection.current) return; setReceipts(received);
+      if (value.verified && navigator.onLine) { try { const full = await loadCareProfile(uid, value.id); if (current === selection.current) setView(full); } catch (e) { if (current === selection.current) setError(e instanceof Error ? e.message : "Full profile not available. Basic handoff retained."); } }
     }} />}
     {view && <section className="panel" aria-label="Connected care profile"><h2>{view.profile.name}</h2><p className="record-id">Patient ID: {view.id}</p>
-      <p>{view.snapshotOnly ? "Basic handoff snapshot · Full profile unavailable" : "Authorized saved full profile"} · {view.verified ? "Online record checked" : "Source and current authority not checked online"}</p>
+      <p>{view.snapshotOnly ? "Basic handoff snapshot · Full profile unavailable" : "Authorized saved full profile"} · {view.verified ? "Checked online when saved; this copy may be out of date" : "Source and current authority not checked online"}</p>
       <p>Date of birth: {view.profile.birthDate || "Not recorded"}</p>
       {view.profile.details && <details><summary>Original manually entered profile</summary><p>Snapshot at registration. Later contributions are listed separately below.</p><dl>{Object.entries(view.profile.details).map(([key, value]) => <div className="care-fact" key={key}><dt>{key.replace(/([A-Z])/g, " $1")}</dt><dd>{String(value || "Not recorded")}</dd></div>)}</dl><p className="preserve-lines">{view.profile.history || "No profile notes recorded."}</p></details>}
       {view.profile.sourceUid === uid && <Link className="button secondary" to={`/professional/patients/${view.profile.sourceLocalId}/overview`}>Open local profile, reports and prescriptions</Link>}
@@ -132,16 +159,16 @@ export function CarePage({ uid, role }: { uid: string; role: string }) {
       {staff?.role === "doctor" && !view.snapshotOnly && <section aria-label="Manual care handoff" className="record-form"><h3>Create referral handoff</h3>
         <p>Manually enter the details you intend to hand over. Nothing is inferred from documents or missing values.</p>
         <aside aria-label="Missing handoff details" aria-live="polite" className="notice"><strong>Missing details — advisory only</strong><p>{missingReferralFields(fields).map(k => referralLabels[k]).join("; ") || "Every listed field has an entry; this does not verify accuracy."}</p><p>You can create and send even with missing fields. Unknown values remain “Not recorded”.</p></aside>
-        {allReferralFields.map(key => <label key={key}>{referralLabels[key]}<textarea value={fields[key] || ""} rows={2} maxLength={8000} onChange={e => { setFields({ ...fields, [key]: e.target.value }); setPacket(undefined); setHtml(""); }} /></label>)}
-        <label>Receiving facility<select value={destination} onChange={e => { setDestination(e.target.value); setPacket(undefined); setHtml(""); }}><option value="">Select the receiving facility</option>{facilities.filter(f => f.id !== staff.facilityId).map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
-        <label>Handoff packet size limit in bytes<input type="number" min={1} max={32768} value={capacity} onChange={e => { setCapacity(e.target.value); setPacket(undefined); }} /></label><p className="small">32,768 is the reference BLE buffer limit. The current PN532 tag has only 48 verified bytes; its full capacity and compact encrypted format are pending. Preparing this packet does not mean it fits your NFC tag. A smaller confirmed limit rejects oversized packets without truncating them.</p>
+        {allReferralFields.map(key => <label key={key}>{referralLabels[key]}<textarea disabled={busy} value={fields[key] || ""} rows={2} maxLength={8000} onChange={e => { setFields({ ...fields, [key]: e.target.value }); setPacket(undefined); setHtml(""); }} /></label>)}
+        <label>Receiving facility<select disabled={busy} value={destination} onChange={e => { setDestination(e.target.value); setPacket(undefined); setHtml(""); }}><option value="">Select the receiving facility</option>{facilities.filter(f => f.id !== staff.facilityId).map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
+        <label>Handoff packet size limit in bytes<input disabled={busy} type="number" min={1} max={32768} value={capacity} onChange={e => { setCapacity(e.target.value); setPacket(undefined); setHtml(""); }} /></label><p className="small">32,768 is the reference BLE buffer limit. The current PN532 tag has only 48 verified bytes; its full capacity and compact encrypted format are pending. Preparing this packet does not mean it fits your NFC tag. A smaller confirmed limit rejects oversized packets without truncating them.</p>
         <button className="button primary" disabled={busy || !destination} onClick={() => void act(async () => {
           const size = Number(capacity); if (!Number.isInteger(size) || size < 1 || size > 32768) throw Error("Enter a packet limit between 1 and 32768 bytes.");
-          const result = await createCareHandoff(uid, view, destination, fields, size); setPacket(result.packet); setHtml(careHandoffDocument(view, result.fields, result.id, result.actorName, uid, result.recordedAt)); setNotice("Doctor-recorded handoff created. Blank details remain unknown. BLE and NFC transfer have not been confirmed.");
+          const result = await createCareHandoff(uid, view, destination, fields, size); setPacket(result.packet); setHandoffId(result.id); setHtml(careHandoffDocument(view, result.fields, result.id, result.actorName, uid, result.recordedAt)); setNotice("Doctor-recorded handoff created. Blank details remain unknown. BLE and NFC transfer have not been confirmed. " + (result.savedLocally ? "Original handoff saved encrypted on this browser for reopening." : "The cloud handoff succeeded, but its offline copy could not be saved. Keep this page open to print or transfer it. Creating again would make a separate handoff."));
         })}>Create and approve handoff with entered details</button>
-        {html && <><iframe sandbox="" title="Handoff summary preview" srcDoc={html} style={{ width: "100%", height: 480 }} /><button className="button secondary" onClick={() => void act(() => printReferralDocument(html))}>Print handoff summary / Save PDF</button></>}
-        {packet && <BleHandoffPanel packet={packet} />}
       </section>}
+      {html && <><iframe sandbox="" title="Handoff summary preview" srcDoc={html} style={{ width: "100%", height: 480 }} /><button className="button secondary" disabled={busy} onClick={() => void act(() => printReferralDocument(html))}>Print handoff summary / Save PDF</button></>}
+      {packet && staff?.role === "doctor" && <BleHandoffPanel key={handoffId} packet={packet} />}
     </section>}
     {error && <p role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}{busy && <p role="status">Working…</p>}
     {popup && <ReceivedPopup value={popup} close={() => setPopup(undefined)} />}
