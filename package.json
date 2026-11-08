@@ -1,0 +1,53 @@
+{
+  "name": "matrisync",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "dev:bolt": "vite --host 0.0.0.0",
+    "dev:demo": "vite --host 127.0.0.1 --mode demo",
+    "build": "tsc -b && node scripts/build-production.mjs",
+    "build:demo": "tsc -b && vite build --mode demo && node scripts/verify-build-mode.mjs demo && node scripts/build-sw.mjs",
+    "build:submission": "tsc -b && node scripts/build-submission.mjs",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "lint": "eslint .",
+    "test:rules": "vitest run --config vitest.rules.config.ts",
+    "test:rules:care": "vitest run --config vitest.rules.config.ts tests-rules/care.test.ts tests-rules/records.test.ts",
+    "test:care:integration": "vitest run --config vitest.care-integration.config.ts",
+    "test:auth": "playwright test --config playwright.auth.config.ts",
+    "dev:sharing": "node scripts/start-sharing-pilot.mjs",
+    "test:sharing": "playwright test --config playwright.sharing.config.ts",
+    "test:identity": "vitest run --config vitest.identity.config.ts",
+    "dev:identity": "node scripts/identity/server.mjs"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "3.8.1",
+    "firebase": "^12.0.0",
+    "jose": "6.2.13",
+    "lucide-react": "^0.468.0",
+    "pdfjs-dist": "6.5.438",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@firebase/rules-unit-testing": "5.0.1",
+    "@playwright/test": "^1.56.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "eslint": "^9.0.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "fake-indexeddb": "6.2.4",
+    "globals": "^16.0.0",
+    "typescript": "~5.9.0",
+    "typescript-eslint": "^8.0.0",
+    "vite": "^6.0.0",
+    "vitest": "^3.0.0"
+  }
+}

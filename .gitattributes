@@ -1,0 +1,4 @@
+# Preserve the supplied testing database byte-for-byte across Windows checkouts.
+fixtures/medicine-demo/*.json -text
+# The original AI instructions contain intentional Markdown hard line breaks.
+docs/AI-INTEGRATION-INSTRUCTIONS.md whitespace=-blank-at-eol

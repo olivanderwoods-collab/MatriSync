@@ -1,0 +1,139 @@
+# MatriSync submission core — 25 October 2026
+
+**5 November superseding priority:** finish the existing phase and transfer a reproducible checkpoint to GitHub/Bolt. Read [the final user requirements](FINAL-REQUIREMENTS-2026-11-05.md) and [current implementation inventory](MATRISYNC_CODEX_HANDOFF_2026-11-05.md). Healthcare operations are primary. ESP32-S3 is confirmed; NFC reader/tag undecided. BLE/print integration is implemented with simulated GATT tests and a compiled hardware sketch; physical operation remains unverified. Full clinical release and all three original core journeys are not declared complete. Do not expand secondary modules before the new permission/device/clinical-review boundaries are resolved.
+
+Submission deadline: **5 November 2026**. This plan prioritizes a complete maternal-care continuity journey over additional modules. Existing records, attachments, UI and secondary features are preserved; further Inventory/distributor/finance expansion is paused.
+
+## Confirmed by the user
+
+- Three priorities: complete referral/handoff, Mother's workspace with an offline companion and organized documents/prescriptions, and Mother–Doctor–Organization profile syncing.
+- Build **real encrypted sharing between explicitly approved test accounts**. Public facility verification/onboarding remains deferred. This supersedes the synthetic-only sharing restriction for this controlled submission scope, not for general production use.
+- If the physical MatriSync device is unavailable, build a small **BLE-connected software device simulator** that mimics its protocol. Label simulator transport honestly; it cannot prove a physical NFC write or read.
+- Offline companion name: **RUHI**, from **R**asheek, r**U**maan, ne**H**a, zuba**I**r. Preserve this exact founder-name origin; do not invent a medical acronym or expansion. MatriSathi remains the containing workspace unless separately changed.
+
+## Essential features and completion checks
+
+### 1. Identity, permissions and real profile syncing
+
+- Distinct approved test accounts for Mother, Doctor and Organization; permissions must be enforced beyond route selection. Provision approval through a controlled mechanism, not a public self-approval switch. No production verification claim.
+- Shared patient identity and document references without duplicate profiles. Preserve approved permanent username/code clinician loading and single Mother ownership claim rules; a revoked grant cannot be recreated by reusing the code.
+- Organization assigns staff; staff accepts before accessing records. Organization does not own or remove the Mother's profile. Doctor and caregiver privileges remain distinct.
+- Encrypt records/files before transfer; the relay stores ciphertext, not private record keys or plaintext clinical content. Define recipient-key authentication, enrollment and recovery before implementing delivery. Do not invent an unreviewed crypto scheme to meet the deadline.
+- Offline saved records remain readable; queued edits visibly remain pending until acknowledged. Reconnection must handle retries, duplicates and conflicts without silently overwriting originals. Revocation blocks future fetching/publication while retaining previously saved copies.
+- **Done when:** a record or attachment saved under one authorized account is genuinely retrievable under another on a separate browser/device, survives reload, is unavailable to an unrelated account and follows the agreed revocation behavior. A shared in-memory test actor selector does not count.
+
+### 2. Referral creation through acknowledged handoff
+
+- Patient-level referral form: clinician-entered reason, history, relevant original documents and explicitly recorded treatment/instructions. A usable manual form is the fallback if AI is unavailable.
+- A separate clinician documentation assistant organizes supplied facts, suggests field placement and flags missing/unclear information with source references. It must not invent diagnoses, medication, urgency or destination. Unknowns stay unknown; optional missing fields must not block emergency referral.
+- Doctor reviews/corrects and explicitly approves the draft. Produce a readable, versioned referral document suitable for preview, printing/PDF and recipient review, preserving source attribution and originals. No automatic transmission while drafting.
+- Organization initiates the approved version and selects the destination. Recipient acceptance, arrival, handoff acknowledgement and closure remain distinct attributed events, not inferred from delivery or a band write. Non-participating recipients use the original paper/soft-copy pathway without fabricated tracking.
+- Compact encrypted handoff: patient/referral identity, approved essential snapshot and authorized retrieval references. Never place the full longitudinal profile, permanent profile code or raw decryption key on the band.
+- MatriSync transport adapter handles connect, send, confirmation/read-back, read, integrity/version checks and clear failures. Use the same contract for the BLE simulator; separately label physical-device and simulator results. Confirm peripheral/host BLE capability before choosing the simulator platform.
+- Receiving side reads the authorized compact snapshot and resolves the patient identity. Load the full profile only through authorized sharing or an existing local copy; offline reading of a compact handoff does not imply access to unavailable history.
+- **Done when:** Mother → Doctor → initiating organization → receiving account completes the journey on separate clients, opens the exact approved document, reads the handoff, resolves the correct profile and records acknowledgement. Test wrong recipients, tampered/stale packets, disconnects and repeat delivery. A UI success message alone is insufficient.
+
+### 3. Mother's workspace and RUHI
+
+- Mother profile, recorded pregnancy stage and existing child profiles remain accessible without an extra routine vault lockscreen.
+- Upload prescription/report originals or capture a photo; organize by patient, document type, date and source; list, open and retrieve originals. Mother cannot generate a digital prescription. Automated OCR/extraction is optional after reliable manual organization.
+- Show connected care team and actual referral state from shared events, not fabricated progress.
+- RUHI runs locally after an explicit initial model download on a supported target device. Use the saved first name and approved dated profile context, respecting opt-out. Clearly handle unsupported hardware, interrupted downloads and unavailable model state.
+- Keep the established nonclinical boundary: warm ordinary conversation, no diagnosis, medicine/dose recommendations or report interpretation. Report quotations remain deferred. The clinician documentation assistant is separate from RUHI's Mother-facing permissions. A behavior packet guides inference; it is not model training or a guarantee.
+- **Done when:** a Mother saves/reopens documents, sees authorized shared changes and chats with the actual downloaded model while offline on an intended demo device. Include clinical-refusal and context-opt-out checks, not only mocked-worker tests.
+
+## Current baseline
+
+26 October implementation update: the first controlled encrypted-document transport is implemented in a separate local-emulator pilot. See `ENCRYPTED-SHARING-PILOT.md` for protocol, enrollment/recovery boundaries, checks and limits. This is partial progress on the first pillar; full-profile syncing and the complete referral journey remain open.
+
+26 October continuation: the transport now also carries source-scoped profile identities, preserved immutable profile versions and byte-verified original-document references. Shared versions stay read-only and separate from local records. Authoritative clinical identity/claims, patient-directory integration, assignment acceptance, shared editing and automatic synchronization are still pending; the source-scoped hash is not a substitute for those requirements. Technical review is performed by the assistant; the user receives only finished user-facing work for usability review.
+
+27 October continuation: facility offers, named-professional acceptance and revocation now gate real encrypted delivery in the controlled local pilot. Approved scope is limited to one source patient, facility and professional; the server denies pending/revoked transfers and the clients reject other-patient content. Saved copies remain readable after revocation, and independent direct connections remain separate. This completes the pilot acceptance boundary, not public verification, permanent-code profile loading, Mother ownership claims or normal-workspace assignment cards.
+
+- Working locally: encrypted account records, profiles, original document uploads/camera capture, child separation, scoped workspace access, local companion integration and limited profile context, navigation and local Inventory records.
+- Synthetic only: cross-account linking/claims/assignment, credential review, referral initiation and retained-copy policy demonstrations.
+- Not yet complete: real encrypted multi-account sharing, source-preserving AI referral drafting, final approved referral document generation, BLE handoff/read-back and receiving-profile retrieval.
+- Actual-model acceptance passed on the Windows/Edge development machine in the continuation below. Intended-phone acceptance and the complete submission journey remain open.
+
+28 October continuation: authorized saved profile versions now appear in the professional and Organization Patients screens inside the controlled sharing build. Overview, Reports and Prescriptions preserve the explicitly selected version and original-file matching. Receiving-account/workspace separation, unrelated direct URLs, unshared children, separate Organization receipt and retained offline access are covered by browser checks. These are read-only received copies; authoritative identity/claims, shared edits, automatic synchronization and the complete referral journey remain open.
+
+RUHI branding is now implemented, including the confirmed founder-name origin. The actual cached Qwen model passed offline conversation, first-name use, medicine/report refusal, dated profile answers, context opt-out, worker restart and full offline page reload on this Windows/Edge test machine. Testing found and fixed companion/user-name confusion, a load-button/device-check race and an opt-out that previously reset on reload. This is evidence for this machine, not all intended phones or a guarantee of model behavior. Profile context still excludes reports, diagnoses and clinical history.
+
+The user has reaffirmed that the assistant owns all developer checks and should deliver the core product for usability review only after it works end to end. No developer checklist is assigned to the user at this checkpoint.
+
+29 October continuation: the professional patient's Referrals tab now supports encrypted manual drafts, immutable saved versions, original-document references/downloads, an organized preview and draft-marked HTML/print/PDF copies. Offline editing, stale-tab protection, selected-version exports, original-byte preservation and multi-page output are checked. This is local drafting only: verified approval, shared-patient drafting, AI documentation assistance, facility initiation and BLE handoff remain open. See `VERIFICATION-2026-10-29.md` for the exact evidence and boundaries.
+
+29 October shared-profile continuation: a professional can now draft against an exact received Mother profile version in the controlled sharing build. The draft retains signed-source identity, revision and original-file hashes without creating a duplicate local patient or changing the Mother's records. Separate profile versions have separate drafts; retained copies remain editable offline after sharing revocation. Organization receipts and unrelated accounts cannot be used as professional draft access. Print output and both local/shared draft workflows were checked. This is preparation only: there is no verified doctor approval, automatic transmission or facility initiation yet. A generic professional route or pilot membership must not be treated as doctor authority.
+
+## Implementation order and target dates
+
+30 October continuation: the controlled test-account build now supports explicit facility credential review with immutable decision history, fixed doctor/caregiver categories and server-enforced approval of an exact saved referral version. The approved copy preserves the content digest, source references and authority event; edits require a separate approval. Confirmed receipts are cached in the encrypted account vault and remain readable/exportable offline after suspension, without allowing new approvals or future sharing. This supersedes the earlier approval-missing status, but does not complete the referral journey. Organization delivery/initiation, receiving events, documentation assistance and compact BLE handoff remain open. Public facility verification is still deferred. See `VERIFICATION-2026-10-30.md`.
+
+These are planning targets, not completion promises. Reassess against working evidence daily and reduce secondary scope before cutting the three core flows.
+
+31 October continuation: the controlled build now delivers one signed/encrypted exact doctor-approved referral to its credential-review Organization. The receiving account verifies the authoritative approval and saves an encrypted offline copy; its approved export matches the doctor's copy. Organization initiation explicitly binds the reviewed version to one approved destination, survives reload and rejects competing/unauthorized changes. These checks supersede the earlier delivery/initiation-missing status. Destination transmission, acceptance, arrival, acknowledgement/closure, authorized handoff/profile retrieval and clinician documentation assistance remain open. No full referral completion is claimed. See `VERIFICATION-2026-10-31.md`.
+
+1. **25–27 October:** establish the controlled-account permission and encrypted-sharing foundation; prove one document reaches the correct other account on a separate client. Specify the handoff and BLE contract alongside it.
+2. **28–30 October:** complete the manual referral/document/recipient flow, then add source-preserving AI assistance. Integrate physical device or BLE simulator against the same contract.
+3. **31 October–1 November:** finish Mother document organization, RUHI branding and actual offline-model/device checks. Aim for one complete submission journey by 1 November.
+4. **2–3 November:** integrated security, offline/retry/conflict, original-file preservation, mobile and accessibility checks. Fix failures; freeze core features by 3 November if acceptance checks pass.
+5. **4 November:** rehearse on the actual presentation devices; prepare a repeatable demonstration, backup recording and an honest capability/limitation sheet.
+6. **5 November:** submission buffer and critical fixes only.
+
+Authorization, encryption and source preservation are foundations during implementation, not work postponed until after real sharing. Use fictional clinical data for development and submission testing; technical delivery is not clinical deployment approval.
+
+## Deferred additions
+
+Further Inventory/distributor/refund expansion; broad analytics and administration; public credential onboarding; advanced drug/reference modules; automatic clinical interpretation; broad OCR/voice/translation enhancements; extra cosmetic changes; full standalone digital-prescribing workflow beyond clinician-entered documentation needed for the referral. Preserve existing features, but do not spend core-submission time expanding them.
+
+After every milestone, report working behavior, actual verification, remaining limitations, the user's check list and next steps. Do not substitute more synthetic screens for real multi-client evidence.
+
+
+## Destination continuation — 31 October 2026
+
+The selected receiving Organization now receives the exact original doctor-signed approved referral inside an initiating-Organization signed/encrypted envelope. Receipt, acceptance, arrival confirmation, handoff acknowledgement and closure are distinct immutable receiving-account events. Independently authorized source-to-destination profile/original sharing resolves the patient without granting profile access from referral metadata. An unavailable referenced revision opens no substitute. This supersedes earlier destination/event-missing status in this document. See [protocol](DESTINATION-REFERRAL-PROTOCOL.md) and [verified checkpoint](VERIFICATION-2026-10-31-DESTINATION.md) for trust boundaries, tests and remaining work. The full submission core, BLE transport and final distribution integration remain incomplete.
+
+
+## Staff workspace continuation — 31 October 2026
+
+Controlled staff assignments are now integrated into professional Home (pending) and Patients (accepted or revoked), Organization Staff Management and the received patient Overview, and Mother permissions (read-only scope visibility). Acceptance is distinct from actual encrypted record receipt. Empty/offline receive attempts do not report success; revoked assignments retain saved offline profile access and preserve independent direct grants. Existing account/device/assignment checks are unchanged. All four sharing journeys, 39 rules tests, 84 unit tests, 26 general and 18 account browser cases passed, along with lint and both builds. See [verified checkpoint](VERIFICATION-2026-10-31-STAFF-WORKSPACES.md).
+
+Authoritative permanent-code loading and atomic first Mother claim remain next work, not implemented by these screens. The [identity implementation boundary](PATIENT-IDENTITY-IMPLEMENTATION-BOUNDARY.md) records the required service, proof, recipient-key and preservation checks. No production activation or public verification is claimed.
+
+
+## Identity metadata foundation — 31 October 2026
+
+A separate local-only service now implements transactional username/source registration, single first Mother ownership, device-bound direct grants, terminal revocation, request receipts and persistent attempt limits. It checks existing approved devices and current scoped clinician/facility authority; the legacy unscoped transport exception cannot authorize identity operations. Competing registrations/claims and retry/restart behavior are tested. See [implementation and review boundary](PATIENT-IDENTITY-REVIEW-STAGE.md) and [verification](VERIFICATION-2026-10-31-IDENTITY.md).
+
+This supersedes the statement that no identity backend exists, but does not implement app code-loading/claim screens or clinical key delivery. The candidate proof has not had independent review. Browser access is deliberately disabled, no clinical channel is created, original local profiles remain untouched, and final core integration remains incomplete.
+
+
+## Durable send outbox — 31 October 2026
+
+The controlled sharing build now persists a signed/self-encrypted prepared profile or document before publication. Explicit retry preserves the same transfer ID, recipient and ciphertext, rechecks current authority and records success only after exact relay acknowledgement. Lost acknowledgements survive reload without duplicate delivery; pending sends are blocked after revocation. Existing local records/design and normal-build exclusion remain unchanged. This supersedes the earlier no-durable-send-outbox statement for profiles/original documents only; automatic syncing, shared edits and referral outbox integration remain open. See [verification and boundaries](VERIFICATION-2026-10-31-OUTBOX.md). Identity protocol review remains a separate gate.
+
+## Resumable original attachments — 1 November 2026
+
+The controlled sharing pilot now supports originals up to 10 MiB through immutable encrypted chunks and durable sender resume. Legacy inline originals remain readable. Interrupted uploads retain their exact transfer and parts; only a complete digest/signature/context-verified package is saved by the recipient. Existing records, keys and design are preserved. This supersedes the older 256 KiB transfer limit and attachment-chunking-missing status.
+
+Verification: 96 unit tests, all 44 rule tests, all six sharing browser journeys, lint, TypeScript and both builds passed. The actual 10 MiB browser journey covers interruption/reload/resume, incomplete-package rejection, exact downloaded bytes and offline retention after revocation. Normal distribution assets remain unchanged and exclude the pilot. See [protocol](ENCRYPTED-ATTACHMENT-PROTOCOL.md) and [verification](VERIFICATION-2026-11-01-ATTACHMENTS.md).
+
+Identity protocol/key review and loading/claim integration remain gated. Shared-edit acknowledgement/conflicts, receive pagination, orphan/history cleanup, documentation assistance, actual BLE transport and final core integration remain unfinished. This is a verified development checkpoint, not the completed submission product. No user developer testing is required.
+
+## Sharing history continuation — 1 November 2026
+
+Connections, staff assignment routes and profile/original receiving now traverse all available pages using bounded server queries. Older records and active assignments no longer disappear behind the first 20 results. Equal timestamps use a document-ID cursor tie-breaker. Each new page rechecks current authority; interrupted receiving reports verified progress and preserves saved copies. Retry rechecks immutable copies without replacing ciphertext or receipt timestamps. The direct sharing screen displays saved progress even when a later page fails.
+
+See [verified history checkpoint](VERIFICATION-2026-11-01-HISTORY.md). This supersedes the older first-20 limitation for these three query paths only. Separate referral/credential histories, automatic sync, shared edits, staging/history cleanup, identity/key review and clinical integration, documentation assistance, BLE transport and the final submission-core rehearsal remain open. Existing records, keys, design and normal-build isolation are preserved.
+
+## Clinician documentation continuation — 1 November 2026
+
+Professional referral editors now include a local source-preserving organizer for clinician-supplied notes. Explicit headings suggest fields; unheaded passages require manual placement. Full preview and fresh review precede appending; saving, approval and sending remain separate. Source/date labels are clinician-supplied editable attribution, not authenticated evidence. Existing wording, units, unknowns, originals and immutable versions are preserved. Empty optional fields do not block saving. No original-file reading, AI generation or RUHI clinical-context expansion is enabled.
+
+This supersedes the documentation-assistance-missing status only for this deterministic local workflow. All 100 unit tests, 7 sharing journeys, 19 account cases and 26 general browser cases passed, plus lint, TypeScript and both builds; the optional actual-model case was skipped. Assisted text survives exact approved-document delivery through both Organizations. See [verification and limits](VERIFICATION-2026-11-01-DOCUMENTATION.md). Identity/key review and clinical integration, acknowledged shared edits/conflicts, BLE transport and final submission-core integration remain open. The assistant owns developer checks.
+
+## Referral send recovery — 2 November 2026
+
+Both controlled referral legs now persist a signed/self-encrypted prepared package before publication. Explicit resume preserves the exact ciphertext, approval and recipient, rechecks current authority, and records confirmation only after exact relay reads. Reload, lost acknowledgement, concurrent retry, older published-envelope compatibility and revoked pending sends are verified. Receiving events remain separate. This supersedes the referral-outbox-missing status; it does not enable automatic syncing, shared edits or BLE.
+
+See [verification and boundaries](VERIFICATION-2026-11-02-REFERRAL-OUTBOX.md). All 103 unit tests, 45 rule tests, seven sharing journeys, the expanded final referral journey, lint, TypeScript and both builds passed. Normal/demo assets remain unchanged and exclude the controlled pilot. Existing records, originals, keys and design are preserved. Identity/key protocol review, shared-edit conflicts, BLE and final core integration remain open; the assistant owns developer verification.

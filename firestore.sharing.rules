@@ -1,0 +1,419 @@
+rules_version = '2';
+// Controlled local-emulator pilot only. Existing firestore.rules stays unchanged.
+// deviceRequests/{uid}: owner-only immutable public {encryption,signing,keyId}; each
+// key is {kty:'EC',crv:'P-256',x,y}, coordinates43 base64url, keyId64 lower hex.
+// members/{uid}: OPERATOR ONLY {enabled:bool,role:mother|professional|organization,keyId:hex64}.
+// channels/{id}: OPERATOR ONLY {enabled:bool,members:[senderUid,recipientUid],
+// senderUid,recipientUid,sender:PublicDevice,recipient:PublicDevice}. No clinical data.
+// channels/{id}/transfers/{uuid}: immutable {version:1,senderUid,recipientUid,
+// senderKeyId,recipientKeyId,ciphertext:JWE string<=700000,createdAt:server timestamp}.
+// No client writes to approvals/channels, no transfer updates/deletes. Deny everything else.
+// Large transfers use version2 metadata: senderUid,recipientUid,senderKeyId,recipientKeyId,
+// chunkCount:int2..70,ciphertextLength:int700001..28000000,ciphertextHash:hex64,createdAt:timestamp.
+// channels/{id}/uploads/{transferId}: same immutable version2 metadata, sender get/create only.
+// uploads/{transferId}/chunks/{index}: immutable {index:int0..69,ciphertext:ASCII<=400000,createdAt:timestamp}.
+// Individual recipient chunk gets require a matching final transfer; no staging/chunk lists or updates/deletes.
+// assignmentRoutes/{id}: OPERATOR ONLY approved test scope {enabled,participants:
+// [sourceUid,facilityUid,staffUid],sourceUid,sourcePatientId,profileId:hex64,
+// facilityUid,staffUid,sourceKeyId,facilityKeyId,staffKeyId}. No names or clinical data.
+// channels may carry assignmentRouteId. Assignment channels require accepted status.
+// staffAssignments/{routeId}: {status:pending|accepted|revoked,createdBy,updatedBy,
+// createdAt,updatedAt,acceptedAt:null|timestamp,revokedAt:null|timestamp}.
+// Named facility creates/revokes; named staff accepts. Revocation is terminal.
+// facilityApprovers/{uid}: OPERATOR ONLY {enabled:bool,keyId:hex64} for approved TEST facilities.
+// credentialScopes/{staffUid}: OPERATOR ONLY {enabled:bool,staffUid,facilityUid,
+// staffKeyId:hex64,facilityKeyId:hex64,category:doctor|caregiver}. No personal credential evidence.
+// clinicalCredentials/{staffUid}: {status:pending|approved|rejected|suspended,
+// createdAt:timestamp,updatedAt:timestamp,updatedBy:uid,lastEventId:uuid}.
+// events/{uuid}: immutable {status,actorUid:uid,at:timestamp,previousEventId:uuid|''}.
+// Each credential transition and its event must be committed atomically.
+// referralApprovals/{doctorUid}/versions/{draftUuid_versionUuid}: immutable {doctorUid,doctorKeyId:hex64,
+// facilityUid,credentialEventId:uuid,contentHash:hex64,createdAt:server timestamp}.
+// Approval attests the exact version digest, not delivery, arrival or future authority.
+// channels/{id}/referrals/{approvalId}: immutable {version:1,approvalId:73-char ID,
+// contentHash:hex64,senderUid,recipientUid,senderKeyId,recipientKeyId,ciphertext<=700000,createdAt:timestamp}.
+// channels/{id}/referralInitiations/{approvalId}: immutable {approvalId,contentHash,
+// initiatedBy,destinationChannelId,destinationUid,destinationKeyId,createdAt:timestamp}.
+// Initiation selects an approved outgoing Organization channel; it does not send to it.
+// forwardedReferrals/{approvalId}: immutable version,approvalId,sourceChannelId<=200,
+// contentHash,senderUid,recipientUid,senderKeyId,recipientKeyId,doctor:authoritative PublicDevice,
+// approval:exact original receipt,initiation:exact destination receipt,ciphertext<=700000,createdAt.
+// events/{received|accepted|arrived|acknowledged|closed}: immutable kind,actorUid,contentHash,createdAt.
+// forwardedReferralIndex/{approvalId}: immutable approvalId,createdAt matching its payload.
+// The index reveals no ciphertext, doctor or patient data; payloads require individual authority checks.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null && request.auth.token.firebase.sign_in_provider != 'anonymous'; }
+    function own(uid) { return signedIn() && request.auth.uid == uid; }
+    function member(uid) { return get(/databases/$(database)/documents/members/$(uid)).data; }
+    function approved(uid) { return member(uid).enabled == true && member(uid).role in ['mother','professional','organization']; }
+    function point(p) {
+      return p is map && p.keys().hasAll(['kty','crv','x','y']) && p.keys().hasOnly(['kty','crv','x','y'])
+        && p.kty == 'EC' && p.crv == 'P-256'
+        && p.x is string && p.x.size() == 43 && p.x.matches('[A-Za-z0-9_-]{43}')
+        && p.y is string && p.y.size() == 43 && p.y.matches('[A-Za-z0-9_-]{43}');
+    }
+    function fingerprint(k) { return k is string && k.size() == 64 && k.matches('[a-f0-9]{64}'); }
+    function isValidDevice(d) {
+      return d.keys().hasAll(['encryption','signing','keyId']) && d.keys().hasOnly(['encryption','signing','keyId'])
+        && point(d.encryption) && point(d.signing) && fingerprint(d.keyId);
+    }
+    function channel(id) { return get(/databases/$(database)/documents/channels/$(id)).data; }
+    function route(id) { return get(/databases/$(database)/documents/assignmentRoutes/$(id)).data; }
+    function activeRoute(r) {
+      return r.enabled == true && approved(r.sourceUid) && approved(r.staffUid) && approved(r.facilityUid)
+        && member(r.facilityUid).role == 'organization' && member(r.staffUid).role == 'professional'
+        && member(r.sourceUid).role in ['mother','professional']
+        && member(r.sourceUid).keyId == r.sourceKeyId
+        && member(r.staffUid).keyId == r.staffKeyId && member(r.facilityUid).keyId == r.facilityKeyId;
+    }
+    function assignmentAccess(c) {
+      let r = route(c.assignmentRouteId);
+      let a = get(/databases/$(database)/documents/staffAssignments/$(c.assignmentRouteId)).data;
+      return activeRoute(r) && a.status == 'accepted'
+        && c.senderUid == r.sourceUid && c.recipientUid == r.staffUid
+        && c.sender.keyId == r.sourceKeyId && c.recipient.keyId == r.staffKeyId;
+    }
+    function active(c) {
+      let sender = member(c.senderUid);
+      let recipient = member(c.recipientUid);
+      return signedIn() && request.auth.uid in c.members && c.enabled == true
+        && c.senderUid != c.recipientUid && c.members == [c.senderUid,c.recipientUid]
+        && sender.enabled == true && recipient.enabled == true
+        && sender.role in ['mother','professional','organization'] && recipient.role in ['mother','professional','organization']
+        && sharingCredentialCurrent(c.senderUid, sender.role) && sharingCredentialCurrent(c.recipientUid, recipient.role)
+        && sender.keyId == c.sender.keyId && recipient.keyId == c.recipient.keyId
+        && (!('assignmentRouteId' in c) || assignmentAccess(c));
+    }
+    function isValidAssignment(d, r) {
+      return d.keys().hasAll(['status','createdBy','updatedBy','createdAt','updatedAt','acceptedAt','revokedAt'])
+        && d.keys().hasOnly(['status','createdBy','updatedBy','createdAt','updatedAt','acceptedAt','revokedAt'])
+        && d.status in ['pending','accepted','revoked']
+        && d.createdBy == r.facilityUid && d.updatedBy in [r.facilityUid,r.staffUid]
+        && d.createdAt is timestamp && d.updatedAt is timestamp && d.updatedAt >= d.createdAt
+        && (d.acceptedAt == null || (d.acceptedAt is timestamp && d.acceptedAt >= d.createdAt && d.acceptedAt <= d.updatedAt))
+        && (d.revokedAt == null || (d.revokedAt is timestamp && d.revokedAt >= d.createdAt && d.revokedAt <= d.updatedAt));
+    }
+    function assignmentTransition(id) {
+      let r = route(id);
+      let d = request.resource.data;
+      let old = resource.data;
+      return signedIn() && activeRoute(r) && isValidAssignment(d, r)
+        && d.createdAt == old.createdAt && d.createdBy == old.createdBy
+        && d.updatedBy == request.auth.uid && d.updatedAt == request.time
+        && ((own(r.staffUid) && old.status == 'pending' && d.status == 'accepted'
+              && d.acceptedAt == request.time && d.revokedAt == null)
+          || (own(r.facilityUid) && old.status in ['pending','accepted'] && d.status == 'revoked'
+              && d.acceptedAt == old.acceptedAt && d.revokedAt == request.time));
+    }
+    function isValidTransfer(d, c, id) {
+      return d.keys().hasAll(['version','senderUid','recipientUid','senderKeyId','recipientKeyId','ciphertext','createdAt'])
+        && d.keys().hasOnly(['version','senderUid','recipientUid','senderKeyId','recipientKeyId','ciphertext','createdAt'])
+        && id.size() == 36 && id.matches('[a-f0-9-]{36}') && d.version == 1
+        && d.senderUid == c.senderUid && d.recipientUid == c.recipientUid
+        && d.senderKeyId == c.sender.keyId && d.recipientKeyId == c.recipient.keyId
+        && d.ciphertext is string && d.ciphertext.size() >= 200 && d.ciphertext.size() <= 700000
+        && d.ciphertext.matches('[A-Za-z0-9_.-]+') && d.createdAt is timestamp && d.createdAt == request.time;
+    }
+    function credentialScope(uid) { return get(/databases/$(database)/documents/credentialScopes/$(uid)).data; }
+    function chunkScope(d, c) {
+      return d.version == 2 && d.senderUid == c.senderUid && d.recipientUid == c.recipientUid
+        && d.senderKeyId == c.sender.keyId && d.recipientKeyId == c.recipient.keyId;
+    }
+    function isValidChunkManifest(d, c, id) {
+      return d.keys().hasAll(['version','senderUid','recipientUid','senderKeyId','recipientKeyId','chunkCount','ciphertextLength','ciphertextHash','createdAt'])
+        && d.keys().hasOnly(['version','senderUid','recipientUid','senderKeyId','recipientKeyId','chunkCount','ciphertextLength','ciphertextHash','createdAt'])
+        && eventId(id) && chunkScope(d,c) && d.chunkCount is int && d.chunkCount >= 2 && d.chunkCount <= 70
+        && d.ciphertextLength is int && d.ciphertextLength > 700000 && d.ciphertextLength <= 28000000
+        && d.ciphertextLength > (d.chunkCount - 1) * 400000 && d.ciphertextLength <= d.chunkCount * 400000
+        && fingerprint(d.ciphertextHash) && d.createdAt is timestamp && d.createdAt == request.time;
+    }
+    function upload(channelId, id) { return get(/databases/$(database)/documents/channels/$(channelId)/uploads/$(id)).data; }
+    function sameChunkManifest(d, u) {
+      return d.version == u.version && d.senderUid == u.senderUid && d.recipientUid == u.recipientUid
+        && d.senderKeyId == u.senderKeyId && d.recipientKeyId == u.recipientKeyId
+        && d.chunkCount == u.chunkCount && d.ciphertextLength == u.ciphertextLength && d.ciphertextHash == u.ciphertextHash;
+    }
+    function isValidCiphertextChunk(d, u, index) {
+      return d.keys().hasAll(['index','ciphertext','createdAt']) && d.keys().hasOnly(['index','ciphertext','createdAt'])
+        && d.index is int && d.index >= 0 && d.index < u.chunkCount && index == string(d.index)
+        && d.ciphertext is string && d.ciphertext.size() == (d.index == u.chunkCount - 1 ? u.ciphertextLength - d.index * 400000 : 400000)
+        && d.ciphertext.size() <= 400000 && d.ciphertext.matches('[A-Za-z0-9_.-]+')
+        && d.createdAt is timestamp && d.createdAt == request.time;
+    }
+    function credentialParticipant(uid) {
+      return signedIn() && (own(uid) || own(credentialScope(uid).facilityUid)) && approved(request.auth.uid);
+    }
+    function activeCredentialScope(uid) {
+      let s = credentialScope(uid);
+      let f = get(/databases/$(database)/documents/facilityApprovers/$(s.facilityUid)).data;
+      let staff = member(uid);
+      let facility = member(s.facilityUid);
+      return s.enabled == true && s.staffUid == uid && s.staffUid != s.facilityUid
+        && s.category in ['doctor','caregiver'] && f.enabled == true && f.keyId == s.facilityKeyId
+        && staff.enabled == true && staff.role == 'professional' && staff.keyId == s.staffKeyId
+        && facility.enabled == true && facility.role == 'organization' && facility.keyId == s.facilityKeyId;
+    }
+    // Legacy explicitly enrolled test pairs can exchange records without a
+    // credential scope; they still have no doctor approval authority. Once a
+    // scope exists, pending/rejected/suspended credentials block future sharing.
+    function sharingCredentialCurrent(uid, role) {
+      return role != 'professional' || sharingProfessionalCredentialCurrent(uid);
+    }
+    function sharingProfessionalCredentialCurrent(uid) {
+      let scope = get(/databases/$(database)/documents/credentialScopes/$(uid));
+      return scope == null || scope.data == null || (activeCredentialScope(uid)
+          && get(/databases/$(database)/documents/clinicalCredentials/$(uid)).data.status == 'approved');
+    }
+    function eventId(id) { return id is string && id.size() == 36 && id.matches('[a-f0-9-]{36}'); }
+    function validCredential(d) {
+      return d.keys().hasAll(['status','createdAt','updatedAt','updatedBy','lastEventId'])
+        && d.keys().hasOnly(['status','createdAt','updatedAt','updatedBy','lastEventId'])
+        && d.status in ['pending','approved','rejected','suspended']
+        && d.createdAt is timestamp && d.updatedAt is timestamp && d.updatedAt >= d.createdAt
+        && d.updatedBy is string && d.updatedBy.size() > 0 && d.updatedBy.size() <= 128
+        && d.updatedBy == request.auth.uid && d.updatedAt == request.time && eventId(d.lastEventId);
+    }
+    function matchingCredentialEvent(uid, d, previous) {
+      let e = getAfter(/databases/$(database)/documents/clinicalCredentials/$(uid)/events/$(d.lastEventId)).data;
+      return e.status == d.status && e.actorUid == d.updatedBy && e.at == d.updatedAt && e.previousEventId == previous
+        && !exists(/databases/$(database)/documents/clinicalCredentials/$(uid)/events/$(d.lastEventId));
+    }
+    function credentialChange(uid) {
+      let d = request.resource.data;
+      let old = resource.data;
+      return activeCredentialScope(uid) && validCredential(d) && d.createdAt == old.createdAt
+        && matchingCredentialEvent(uid, d, old.lastEventId)
+        && ((own(uid) && old.status == 'rejected' && d.status == 'pending')
+          || (own(credentialScope(uid).facilityUid) &&
+            ((old.status == 'pending' && d.status in ['approved','rejected'])
+              || (old.status == 'approved' && d.status == 'suspended'))));
+    }
+    function validReferralApproval(d, id) {
+      let s = credentialScope(request.auth.uid);
+      let c = get(/databases/$(database)/documents/clinicalCredentials/$(request.auth.uid)).data;
+      return id.size() == 73 && id.matches('[a-f0-9-]{36}_[a-f0-9-]{36}')
+        && d.keys().hasAll(['doctorUid','doctorKeyId','facilityUid','credentialEventId','contentHash','createdAt'])
+        && d.keys().hasOnly(['doctorUid','doctorKeyId','facilityUid','credentialEventId','contentHash','createdAt'])
+        && d.doctorUid is string && d.doctorUid.size() <= 128 && d.doctorUid == request.auth.uid
+        && d.facilityUid is string && d.facilityUid.size() <= 128 && d.facilityUid == s.facilityUid
+        && fingerprint(d.doctorKeyId) && d.doctorKeyId == s.staffKeyId
+        && eventId(d.credentialEventId) && d.credentialEventId == c.lastEventId
+        && fingerprint(d.contentHash) && d.createdAt is timestamp && d.createdAt == request.time
+        && activeCredentialScope(request.auth.uid) && s.category == 'doctor' && c.status == 'approved';
+    }
+    function referralChannel(c) {
+      return signedIn() && request.auth.uid in c.members && currentDoctorChannel(c);
+    }
+    function currentDoctorChannel(c) {
+      let staff = member(c.senderUid);
+      let facility = member(c.recipientUid);
+      let scope = credentialScope(c.senderUid);
+      let approver = get(/databases/$(database)/documents/facilityApprovers/$(c.recipientUid)).data;
+      let credential = get(/databases/$(database)/documents/clinicalCredentials/$(c.senderUid)).data;
+      return c.enabled == true && !('assignmentRouteId' in c)
+        && c.senderUid != c.recipientUid && c.members == [c.senderUid,c.recipientUid]
+        && staff.enabled == true && staff.role == 'professional' && staff.keyId == c.sender.keyId
+        && facility.enabled == true && facility.role == 'organization' && facility.keyId == c.recipient.keyId
+        && scope.enabled == true && scope.staffUid == c.senderUid && scope.category == 'doctor'
+        && scope.facilityUid == c.recipientUid && scope.staffKeyId == staff.keyId && scope.facilityKeyId == facility.keyId
+        && approver.enabled == true && approver.keyId == facility.keyId && credential.status == 'approved';
+    }
+    function currentReferralApproval(c, id, hash) {
+      let a = get(/databases/$(database)/documents/referralApprovals/$(c.senderUid)/versions/$(id)).data;
+      let credential = get(/databases/$(database)/documents/clinicalCredentials/$(c.senderUid)).data;
+      return a.doctorUid == c.senderUid && a.facilityUid == c.recipientUid
+        && a.doctorKeyId == c.sender.keyId && a.contentHash == hash
+        && a.credentialEventId == credential.lastEventId && credential.status == 'approved';
+    }
+    function validReferralDelivery(d, c, id) {
+      return id.matches('[a-f0-9-]{36}_[a-f0-9-]{36}') && id.size() == 73
+        && d.keys().hasAll(['version','approvalId','contentHash','senderUid','recipientUid','senderKeyId','recipientKeyId','ciphertext','createdAt'])
+        && d.keys().hasOnly(['version','approvalId','contentHash','senderUid','recipientUid','senderKeyId','recipientKeyId','ciphertext','createdAt'])
+        && d.version == 1 && d.approvalId == id && fingerprint(d.contentHash)
+        && d.senderUid == c.senderUid && d.recipientUid == c.recipientUid
+        && d.senderKeyId == c.sender.keyId && d.recipientKeyId == c.recipient.keyId
+        && d.ciphertext is string && d.ciphertext.size() >= 200 && d.ciphertext.size() <= 700000
+        && d.ciphertext.matches('[A-Za-z0-9_.-]+') && d.createdAt is timestamp && d.createdAt == request.time
+        && currentReferralApproval(c, id, d.contentHash);
+    }
+    function validReferralInitiation(d, c, id, channelId) {
+      let received = get(/databases/$(database)/documents/channels/$(channelId)/referrals/$(id)).data;
+      let destination = channel(d.destinationChannelId);
+      let receiver = member(destination.recipientUid);
+      return d.keys().hasAll(['approvalId','contentHash','initiatedBy','destinationChannelId','destinationUid','destinationKeyId','createdAt'])
+        && d.keys().hasOnly(['approvalId','contentHash','initiatedBy','destinationChannelId','destinationUid','destinationKeyId','createdAt'])
+        && d.approvalId == id && d.contentHash == received.contentHash && fingerprint(d.contentHash)
+        && d.initiatedBy == request.auth.uid && d.initiatedBy == c.recipientUid
+        && d.destinationChannelId is string && d.destinationChannelId.size() > 0 && d.destinationChannelId.size() <= 200
+        && d.destinationChannelId.matches('[A-Za-z0-9_-]+') && d.destinationChannelId != channelId
+        && d.destinationUid is string && d.destinationUid.size() > 0 && d.destinationUid.size() <= 128
+        && d.destinationUid == destination.recipientUid && d.destinationUid != c.recipientUid
+        && fingerprint(d.destinationKeyId) && d.destinationKeyId == destination.recipient.keyId
+        && !('assignmentRouteId' in destination) && destination.senderUid == c.recipientUid
+        && destination.enabled == true && destination.members == [c.recipientUid,destination.recipientUid]
+        && destination.sender.keyId == c.recipient.keyId
+        && receiver.enabled == true && receiver.role == 'organization' && receiver.keyId == destination.recipient.keyId
+        && d.createdAt is timestamp && d.createdAt == request.time
+        && currentReferralApproval(c,id,d.contentHash);
+    }
+    function organizationChannel(c) {
+      let sender = member(c.senderUid);
+      let recipient = member(c.recipientUid);
+      return signedIn() && request.auth.uid in c.members && c.enabled == true
+        && !('assignmentRouteId' in c) && c.senderUid != c.recipientUid
+        && c.members == [c.senderUid,c.recipientUid]
+        && sender.enabled == true && sender.role == 'organization' && sender.keyId == c.sender.keyId
+        && recipient.enabled == true && recipient.role == 'organization' && recipient.keyId == c.recipient.keyId;
+    }
+    // Exact immutable authority copies, not a client-issued approval certificate.
+    function forwardAuthority(d, c, id, channelId) {
+      let source = channel(d.sourceChannelId);
+      let a = get(/databases/$(database)/documents/referralApprovals/$(source.senderUid)/versions/$(id)).data;
+      let i = get(/databases/$(database)/documents/channels/$(d.sourceChannelId)/referralInitiations/$(id)).data;
+      return currentDoctorChannel(source) && source.recipientUid == c.senderUid
+        && source.recipient.keyId == c.sender.keyId && d.doctor == source.sender
+        && d.approval == a && d.initiation == i && d.contentHash == a.contentHash
+        && a.doctorUid == source.senderUid && a.doctorKeyId == source.sender.keyId && a.facilityUid == source.recipientUid
+        && a.credentialEventId == get(/databases/$(database)/documents/clinicalCredentials/$(source.senderUid)).data.lastEventId
+        && i.approvalId == id && i.contentHash == a.contentHash && i.initiatedBy == c.senderUid
+        && i.destinationChannelId == channelId && i.destinationUid == c.recipientUid && i.destinationKeyId == c.recipient.keyId;
+    }
+    function validForward(d, c, id, channelId) {
+      return d.keys().hasAll(['version','approvalId','sourceChannelId','contentHash','senderUid','recipientUid','senderKeyId','recipientKeyId','doctor','approval','initiation','ciphertext','createdAt'])
+        && d.keys().hasOnly(['version','approvalId','sourceChannelId','contentHash','senderUid','recipientUid','senderKeyId','recipientKeyId','doctor','approval','initiation','ciphertext','createdAt'])
+        && id.size() == 73 && id.matches('[a-f0-9-]{36}_[a-f0-9-]{36}') && d.approvalId == id && d.version == 1
+        && d.sourceChannelId is string && d.sourceChannelId.size() > 0 && d.sourceChannelId.size() <= 200 && d.sourceChannelId.matches('[A-Za-z0-9_-]+')
+        && d.senderUid == c.senderUid && d.recipientUid == c.recipientUid
+        && d.senderKeyId == c.sender.keyId && d.recipientKeyId == c.recipient.keyId
+        && d.ciphertext is string && d.ciphertext.size() >= 200 && d.ciphertext.size() <= 700000 && d.ciphertext.matches('[A-Za-z0-9_.-]+')
+        && d.createdAt is timestamp && d.createdAt == request.time && forwardAuthority(d,c,id,channelId);
+    }
+    function receivingParent(channelId, id) {
+      return get(/databases/$(database)/documents/channels/$(channelId)/forwardedReferrals/$(id)).data;
+    }
+    function validForwardIndex(d, channelId, id) {
+      let parent = getAfter(/databases/$(database)/documents/channels/$(channelId)/forwardedReferrals/$(id)).data;
+      return d.keys().hasAll(['approvalId','createdAt']) && d.keys().hasOnly(['approvalId','createdAt'])
+        && id.size() == 73 && id.matches('[a-f0-9-]{36}_[a-f0-9-]{36}') && d.approvalId == id
+        && parent.approvalId == id && d.createdAt is timestamp && d.createdAt == parent.createdAt;
+    }
+    function predecessor(kind) {
+      return kind == 'accepted' ? 'received' : kind == 'arrived' ? 'accepted' : kind == 'acknowledged' ? 'arrived' : 'acknowledged';
+    }
+    function validReceivingEvent(d, c, channelId, id, kind) {
+      let parent = receivingParent(channelId,id);
+      return d.keys().hasAll(['kind','actorUid','contentHash','createdAt']) && d.keys().hasOnly(['kind','actorUid','contentHash','createdAt'])
+        && kind in ['received','accepted','arrived','acknowledged','closed'] && d.kind == kind
+        && d.actorUid == request.auth.uid && d.actorUid == c.recipientUid && d.contentHash == parent.contentHash
+        && d.createdAt is timestamp && d.createdAt == request.time
+        && (kind == 'received'
+          || get(/databases/$(database)/documents/channels/$(channelId)/forwardedReferrals/$(id)/events/$(predecessor(kind))).data.createdAt <= request.time);
+    }
+    match /deviceRequests/{uid} {
+      allow get: if own(uid);
+      allow create: if own(uid) && isValidDevice(request.resource.data);
+    }
+    match /members/{uid} { allow get: if own(uid); }
+    match /facilityApprovers/{uid} { allow get: if own(uid) && approved(uid); }
+    match /referralApprovals/{uid}/versions/{id} {
+      allow get: if signedIn() && approved(request.auth.uid)
+        && (id.matches('[a-f0-9-]{36}_[a-f0-9-]{36}'))
+        && (own(uid) || own(resource.data.facilityUid));
+      allow create: if own(uid) && validReferralApproval(request.resource.data, id);
+    }
+    match /credentialScopes/{uid} {
+      allow get: if signedIn() && approved(request.auth.uid) && (own(uid) || own(resource.data.facilityUid));
+      allow list: if signedIn() && approved(request.auth.uid) && own(resource.data.facilityUid) && request.query.limit <= 20;
+    }
+    match /clinicalCredentials/{uid} {
+      allow get: if credentialParticipant(uid);
+      allow create: if own(uid) && activeCredentialScope(uid) && validCredential(request.resource.data)
+        && request.resource.data.status == 'pending' && request.resource.data.createdAt == request.time
+        && matchingCredentialEvent(uid, request.resource.data, '');
+      allow update: if signedIn() && credentialChange(uid);
+      match /events/{id} {
+        allow get: if credentialParticipant(uid);
+        allow list: if credentialParticipant(uid) && request.query.limit <= 20;
+        allow create: if credentialParticipant(uid) && activeCredentialScope(uid) && eventId(id)
+          && request.resource.data.keys().hasAll(['status','actorUid','at','previousEventId'])
+          && request.resource.data.keys().hasOnly(['status','actorUid','at','previousEventId'])
+          && request.resource.data.status in ['pending','approved','rejected','suspended']
+          && request.resource.data.actorUid is string && request.resource.data.actorUid.size() <= 128
+          && request.resource.data.actorUid == request.auth.uid && request.resource.data.at is timestamp
+          && request.resource.data.at == request.time
+          && (request.resource.data.previousEventId == '' || eventId(request.resource.data.previousEventId))
+          && getAfter(/databases/$(database)/documents/clinicalCredentials/$(uid)).data.lastEventId == id
+          && getAfter(/databases/$(database)/documents/clinicalCredentials/$(uid)).data.status == request.resource.data.status
+          && getAfter(/databases/$(database)/documents/clinicalCredentials/$(uid)).data.updatedBy == request.auth.uid
+          && getAfter(/databases/$(database)/documents/clinicalCredentials/$(uid)).data.updatedAt == request.time;
+      }
+    }
+    match /assignmentRoutes/{id} {
+      allow get: if signedIn() && request.auth.uid in resource.data.participants && approved(request.auth.uid);
+      allow list: if signedIn() && request.auth.uid in resource.data.participants && approved(request.auth.uid) && request.query.limit <= 20;
+    }
+    match /staffAssignments/{id} {
+      allow get: if signedIn() && request.auth.uid in route(id).participants && approved(request.auth.uid);
+      allow create: if own(route(id).facilityUid) && activeRoute(route(id)) && isValidAssignment(request.resource.data, route(id))
+        && request.resource.data.status == 'pending' && request.resource.data.updatedBy == request.auth.uid
+        && request.resource.data.createdAt == request.time && request.resource.data.updatedAt == request.time
+        && request.resource.data.acceptedAt == null && request.resource.data.revokedAt == null;
+      allow update: if assignmentTransition(id);
+    }
+    match /channels/{id} {
+      // A disabled channel's nonclinical metadata remains visible to its own approved
+      // members so the UI can explain revocation. Clinical transfers remain blocked.
+      allow get: if signedIn() && request.auth.uid in resource.data.members && approved(request.auth.uid);
+      allow list: if signedIn() && request.auth.uid in resource.data.members && approved(request.auth.uid) && request.query.limit <= 20;
+      match /forwardedReferrals/{approvalId} {
+        allow get: if organizationChannel(channel(id)) && (resource == null || forwardAuthority(resource.data,channel(id),approvalId,id));
+        allow create: if own(channel(id).senderUid) && organizationChannel(channel(id)) && validForward(request.resource.data,channel(id),approvalId,id);
+        match /events/{kind} {
+          allow get: if organizationChannel(channel(id)) && receivingParent(id,approvalId).recipientUid == channel(id).recipientUid;
+          allow list: if request.query.limit <= 5 && organizationChannel(channel(id)) && receivingParent(id,approvalId).recipientUid == channel(id).recipientUid;
+          allow create: if own(channel(id).recipientUid) && organizationChannel(channel(id)) && validReceivingEvent(request.resource.data,channel(id),id,approvalId,kind);
+        }
+      }
+      match /forwardedReferralIndex/{approvalId} {
+        allow get: if organizationChannel(channel(id));
+        allow list: if request.query.limit <= 20 && organizationChannel(channel(id));
+        allow create: if own(channel(id).senderUid) && organizationChannel(channel(id)) && validForwardIndex(request.resource.data,id,approvalId);
+      }
+      match /referrals/{approvalId} {
+        allow get: if referralChannel(channel(id));
+        allow list: if referralChannel(channel(id)) && request.query.limit <= 20;
+        allow create: if own(channel(id).senderUid) && referralChannel(channel(id))
+          && validReferralDelivery(request.resource.data,channel(id),approvalId);
+      }
+      match /referralInitiations/{approvalId} {
+        allow get: if referralChannel(channel(id));
+        allow create: if own(channel(id).recipientUid) && referralChannel(channel(id))
+          && validReferralInitiation(request.resource.data,channel(id),approvalId,id);
+      }
+      match /transfers/{transferId} {
+        allow get: if active(channel(id));
+        allow list: if active(channel(id)) && request.query.limit <= 20;
+        allow create: if active(channel(id)) && own(channel(id).senderUid)
+          && (isValidTransfer(request.resource.data, channel(id), transferId)
+            || (isValidChunkManifest(request.resource.data, channel(id), transferId)
+              && sameChunkManifest(request.resource.data, upload(id,transferId))));
+      }
+      match /uploads/{transferId} {
+        allow get: if active(channel(id)) && own(channel(id).senderUid);
+        allow create: if active(channel(id)) && own(channel(id).senderUid)
+          && isValidChunkManifest(request.resource.data,channel(id),transferId);
+        match /chunks/{index} {
+          // The final immutable manifest already matched the immutable staging
+          // manifest at creation. Avoid rereading both under the 10-read rule cap.
+          allow get: if active(channel(id))
+            && ((own(channel(id).senderUid) && chunkScope(upload(id,transferId),channel(id)))
+              || (own(channel(id).recipientUid) && chunkScope(get(/databases/$(database)/documents/channels/$(id)/transfers/$(transferId)).data,channel(id))));
+          allow create: if active(channel(id)) && own(channel(id).senderUid) && chunkScope(upload(id,transferId),channel(id))
+            && isValidCiphertextChunk(request.resource.data,upload(id,transferId),index);
+        }
+      }
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

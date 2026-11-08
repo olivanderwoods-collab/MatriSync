@@ -1,0 +1,49 @@
+# MatriSync submission MVP — 7 November 2026
+
+> Historical checkpoint, superseded later on 7 November by `EMERGENCY-MVP-REQUIREMENTS-2026-11-07.md` and the root `MATRISYNC_MVP_ACCOUNT2_HANDOFF.md`. The current companion name is MatriSathi. Current connected care transfers encrypted manual structured data; original uploads remain local. Do not treat the older four-account launcher or reference S3 firmware as the latest submission/hardware acceptance.
+
+This is the current checkpoint. The user resumed Codex development after the 5 November Bolt transfer because no further Bolt work was completed. The submission minimum is approved account pairing/profile sharing, basic handoff creation, printable summaries, and RUHI conversation using saved profile facts and reviewed uploaded text. Preserve the older handoff for architecture and unfinished production requirements.
+
+The latest hardware instruction is **software first**. The user reports that the assembled hardware works, but app-to-device pairing and real handoff transfer have not been tested. Do not flash or replace that working firmware yet. NFC hardware selection/integration must be reconciled with the assembled device later; do not assume the existing reference sketch matches it.
+
+## What is implemented
+
+- **Account pairing:** exchange public `matrisync-pair-v1` codes on More → Encrypted sharing. The app matches an already-approved channel and pins the peer fingerprint. Wrong device codes, self-pairing and absent/revoked channels are rejected. A code cannot enroll a device or grant access. One enrolled browser per account remains the controlled prototype limit.
+- **Profile syncing:** explicitly send a saved profile version and its original documents to the approved recipient. The recipient fetches and verifies encrypted copies. Earlier versions and byte-identical originals remain available. This is manual version synchronization, not background syncing or collaborative editing.
+- **Handoff:** a facility-approved test Doctor reviews an immutable referral version; the sending Organization receives it, records initiation for the selected destination, delivers the encrypted approved copy and creates the compact encrypted BLE handoff. Destination receipt/acceptance/arrival/closure remain separate actions. Production staff verification is not implemented by this demonstration.
+- **Mother summary:** Mother → Home → Create care summary produces an A4 preview with dated profile facts, source-labelled original-document index and unknown fields kept unknown. Print / Save PDF opens the browser print dialog. It is patient-supplied information, not a prescription or approved referral. Files are indexed, not embedded. The Doctor's approved referral retains its separate print/PDF action.
+- **RUHI conversation:** the existing local Qwen model runs on this machine from its installed cache. Its conversation instructions use only the mother's permitted name and dated pregnancy stage, with an opt-out. Exact profile answers and clinical refusals are labelled non-AI. This is instruction/context work and testing, **not model training or clinical validation**.
+- **Uploaded text:** RUHI → AI settings → Choose from my uploaded documents → Extract PDF text on this device → review against the original → accept. “Read my document” returns that text with file/source/date labels. PDF.js runs locally; the language model and cloud never receive these contents. Text is not medically interpreted. Only the mother's own files are offered. New chat, leaving the companion or clearing context removes the accepted in-memory text. Images/scanned PDFs require manual transcription; there is no OCR. Extraction is bounded to 10 MiB, ten pages, 12,000 characters and a twenty-second worker timeout. Tables/order must be reviewed.
+
+## Presentation on this computer
+
+Use `Start-MatriSync.cmd` in the app checkout, or the workspace's `Start-MatriSync-Presentation.cmd` shortcut. The launcher starts/reuses localhost emulator services and opens four separate Edge browser profiles with fresh fictional accounts: Mother, Doctor, Sending facility, Receiving facility. It runs actual app workflows and prepares a real encrypted profile/original/referral chain; it does not install a simulated Bluetooth peripheral or touch the hardware. Setup evidence and PDFs are in `.local-tools/presentation/<run timestamp>/`; `.local-tools/presentation/latest.json` identifies the latest completed run.
+
+The Mother window reuses only the dedicated `.local-tools/ai-browser-test` profile, preserving its installed public model cache and earlier encrypted test records. The other windows use separate dedicated presentation profiles. No normal user browser is cleared. The launcher never downloads model weights silently. If no cache is available, profile/document read-back still works, while general conversation requires an explicit compatible-device model installation. Submission mode currently blocks fresh external weight downloads; do that separately in the normal AI setup before rehearsal.
+
+The locally approved facility/Doctor credentials are explicitly fictional. The operator code can only address the localhost test relay. Closing all four prepared browser windows closes launcher-owned services. Existing emulator services are left running. Restarting creates another fictional dataset; there is no promise of emulator persistence across a computer reboot. Do not use real patient records in this setup. Keep the prepared windows open during the demonstration, because chat context and session authentication are intentionally session-scoped.
+
+Suggested demonstration:
+
+1. Mother: show the saved profile, uploaded original and care-summary print preview.
+2. Doctor: show the received profile version and matching original, then the separately reviewed approved referral/PDF.
+3. Sending Organization: show initiation, selected destination, delivery status and the created encrypted handoff. Leave Connect ESP32-S3 untouched until hardware integration is resumed.
+4. Receiving Organization: show the verified exact approved copy and separate receiving-event controls.
+5. Mother/RUHI: ask “What is my name?”, use “Read my document”, then a simple nonclinical conversation such as “I feel lonely today.” Medical interpretation and medicine advice are refused.
+
+## Verification and limits
+
+- 109 unit tests across 27 files passed; TypeScript and ESLint passed. Production build and production exclusion checks passed. Controlled submission build includes the real transport and excludes the unreviewed identity client.
+- All seven controlled sharing browser journeys passed across the initial run and focused rerun after the pairing accessibility-label fix. Coverage includes actual multi-account encryption, original-byte preservation, retained profile versions, unauthorized access/revocation, interrupted outboxes, exact approved destination copy, receiving events and **simulated GATT** tamper/read-back checks.
+- All twenty ordinary account browser cases passed across the suite and focused rerun. The first dev-server AI failure test was interrupted by a dependency-refresh navigation; all three AI failure cases passed on rerun. The opt-in actual model case was run separately and passed: real generation, profile behavior, refusals, opt-out, cached restart and offline reload.
+- The new document browser test creates a real selectable-text PDF, uploads it encrypted, produces a personal-summary PDF, requires review before read-back, checks offline exact quoting/refusal/new-chat clearing and observes no external request during document use. The generated A4 page and mobile chat screenshot were visually inspected.
+- Presentation launcher rehearsal passed end to end against the built submission app, including emulator startup, four separate accounts, real encrypted delivery, handoff creation, local PDF extraction and the cached RUHI model reaching ready. The generated one-page care summary and both pages of the approved referral were rendered and visually inspected. Rehearsal evidence: `.local-tools/mvp-presentation-check.log`, run `1794019552918`. The visible Edge presentation also reached ready with the model loaded: `.local-tools/presentation.log`, run `1794019688946`; Mother and sending-facility screenshots were inspected. A final wording-only correction makes the initiation notice describe what that action confirms, so it cannot falsely deny a later delivery.
+- Rules, identity proof and firmware were unchanged; their older verification remains historical. No physical BLE/NFC acceptance, production deployment, real facility onboarding, granular staff/PIN/device fleet, upload-acceptance lifecycle, clinical AI, OCR or verified medical knowledge-base completion is claimed.
+
+Evidence logs remain ignored under `.local-tools/mvp-*.log`; no model weights, credentials, browser profiles or real records belong in Git. New dependency: pinned `pdfjs-dist@6.5.438` and its lockfile entries. No backend migration or record/key schema changes.
+
+## Submission wording
+
+“We have a working local prototype demonstrating approved account pairing, encrypted profile/document sharing, referral handoff creation, printable summaries and an offline companion with saved-profile awareness and reviewed document read-back. Hardware assembly has been tested separately; application-to-device handoff integration remains to be validated. Time and development-resource limits prevented full-scale completion. Production authorization, clinical validation and deployment require further work and support.”
+
+Next: inspect the actual assembled hardware/firmware and agree its BLE contract before changing either side. Compare UUIDs, packet framing, capacity, acknowledgement/read-back and disconnect/retry behavior with `docs/ESP32-S3-BLE-HANDOFF.md`. Test only fictional handoffs first and preserve the working hardware program.

@@ -1,0 +1,267 @@
+import {
+  validateAccountFields,
+  type AccountProfile,
+  type AccountProfileKind,
+} from "./account-profile-model";
+import { validateReferralDrafts, type ReferralDraft } from "./referral-draft";
+import {
+  validateReferralApprovals,
+  type ReferralApproval,
+} from "./referral-approval";
+import { validateLedger, type LedgerEntry } from "./inventory-ledger-model";
+import {
+  validateReturns,
+  bandKey,
+  returnRevision,
+  type BandReturn,
+} from "./inventory-returns-model";
+export type Patient = {
+  id: string;
+  name: string;
+  birthDate: string;
+  history: string;
+  createdAt: string;
+  updatedAt: string;
+  profile?: MotherProfile;
+  kind?: "mother" | "child";
+  parentId?: string;
+  child?: { sex: string; bloodGroup: string; allergies: string };
+};
+export type MotherProfile = {
+  pregnancyWeeks?: number;
+  recordedOn?: string;
+  bloodGroup: string;
+  allergies: string;
+  emergencyContact: string;
+  emergencyPhone: string;
+  guardian: string;
+  guardianPhone: string;
+  residence: string;
+  username: string;
+  profileCode: string;
+};
+export function motherProfileInput(input: MotherProfile): MotherProfile {
+  const profile: MotherProfile = {
+    bloodGroup: "",
+    allergies: "",
+    emergencyContact: "",
+    emergencyPhone: "",
+    guardian: "",
+    guardianPhone: "",
+    residence: "",
+    username: "",
+    profileCode: "",
+  };
+  for (const key of Object.keys(profile) as (keyof typeof profile)[]) {
+    const value = input[key];
+    if (
+      typeof value !== "string" ||
+      value.length > (key === "allergies" || key === "residence" ? 1000 : 120)
+    )
+      throw Error("Check the profile fields and their lengths.");
+    Object.assign(profile, { [key]: value.trim() });
+  }
+  if (profile.username && !/^[a-zA-Z0-9_.-]{3,40}$/.test(profile.username))
+    throw Error(
+      "Use 3–40 letters, numbers, dots, hyphens or underscores for the username.",
+    );
+  if (input.pregnancyWeeks !== undefined) {
+    if (
+      !Number.isInteger(input.pregnancyWeeks) ||
+      input.pregnancyWeeks < 0 ||
+      input.pregnancyWeeks > 50
+    )
+      throw Error(
+        "Enter a whole recorded pregnancy week from 0 to 50, or leave it blank.",
+      );
+    if (
+      !input.recordedOn ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(input.recordedOn) ||
+      !Number.isFinite(Date.parse(input.recordedOn)) ||
+      new Date(input.recordedOn).toISOString().slice(0, 10) !== input.recordedOn
+    )
+      throw Error("Supply the date on which the pregnancy week was recorded.");
+    profile.pregnancyWeeks = input.pregnancyWeeks;
+    profile.recordedOn = input.recordedOn;
+  }
+  return profile;
+}
+export type LocalDocument = {
+  id: string;
+  patientId: string;
+  kind: "reports" | "prescriptions";
+  name: string;
+  type: string;
+  size: number;
+  addedAt: string;
+  source: string;
+  reportDate: string;
+};
+export type RecordData = {
+  referralDrafts?: ReferralDraft[];
+  referralApprovals?: ReferralApproval[];
+  version: 1;
+  patients: Patient[];
+  documents: LocalDocument[];
+  accountProfiles?: Partial<Record<AccountProfileKind, AccountProfile>>;
+  inventoryLedger?: LedgerEntry[];
+  inventoryReturns?: BandReturn[];
+};
+export const emptyRecords = (): RecordData => ({
+  version: 1,
+  patients: [],
+  documents: [],
+});
+export function patientInput(name: string, birthDate: string, history: string) {
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  name = name.trim();
+  history = history.trim();
+  if (!name || name.length > 120)
+    throw Error("Enter a name of up to 120 characters.");
+  if (history.length > 8000)
+    throw Error("History must be 8,000 characters or fewer.");
+  if (
+    birthDate &&
+    (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate) ||
+      !Number.isFinite(Date.parse(birthDate)) ||
+      new Date(birthDate).toISOString().slice(0, 10) !== birthDate ||
+      birthDate > today)
+  )
+    throw Error("Enter a valid birth date that is not in the future.");
+  return { name, birthDate, history };
+}
+export function parseRecords(bytes: Uint8Array): RecordData {
+  const value = JSON.parse(new TextDecoder().decode(bytes)) as RecordData;
+  if (
+    value.version !== 1 ||
+    !Array.isArray(value.patients) ||
+    !Array.isArray(value.documents)
+  )
+    throw Error("Unsupported record format.");
+  const ids = new Set<string>();
+  for (const p of value.patients) {
+    if (
+      typeof p.id !== "string" ||
+      ids.has(p.id) ||
+      typeof p.name !== "string" ||
+      typeof p.birthDate !== "string" ||
+      typeof p.history !== "string"
+    )
+      throw Error("Invalid patient record.");
+    patientInput(p.name, p.birthDate, p.history);
+    if (p.profile) motherProfileInput(p.profile);
+    if (
+      p.kind === "child" &&
+      (p.parentId !== "self" ||
+        !p.child ||
+        Object.values(p.child).some(
+          (v) => typeof v !== "string" || v.length > 1000,
+        ))
+    )
+      throw Error("Invalid child profile.");
+    ids.add(p.id);
+  }
+  const files = new Set<string>();
+  for (const d of value.documents) {
+    if (
+      !ids.has(d.patientId) ||
+      typeof d.id !== "string" ||
+      files.has(d.id) ||
+      !["reports", "prescriptions"].includes(d.kind) ||
+      typeof d.name !== "string" ||
+      !["application/pdf", "image/png", "image/jpeg", "image/webp"].includes(
+        d.type,
+      ) ||
+      !Number.isInteger(d.size) ||
+      d.size <= 0 ||
+      d.size > 10 * 1024 * 1024
+    )
+      throw Error("Invalid document record.");
+    files.add(d.id);
+  }
+  for (const kind of ["professional", "organization"] as const) {
+    const profile = value.accountProfiles?.[kind];
+    if (profile) validateAccountFields(kind, profile.fields);
+  }
+  if (value.inventoryLedger !== undefined)
+    validateLedger(value.inventoryLedger);
+  if (value.referralDrafts !== undefined) {
+    validateReferralDrafts(value.referralDrafts);
+    for (const draft of value.referralDrafts) {
+      // Received drafts reference the immutable signed inbox, not a duplicate
+      // local patient/file. Their shape is checked above; opening an original
+      // independently rechecks the signed source and byte digest.
+      if (draft.receivedOrigin) continue;
+      if (
+        !ids.has(draft.patientId) ||
+        draft.versions.some((version) =>
+          version.documents.some(
+            (reference) =>
+              !value.documents.some(
+                (document) =>
+                  document.id === reference.id &&
+                  document.patientId === draft.patientId,
+              ),
+          ),
+        )
+      )
+        throw Error("Invalid referral patient or document link.");
+    }
+  }
+  if (value.referralApprovals !== undefined)
+    validateReferralApprovals(
+      value.referralApprovals,
+      value.referralDrafts || [],
+    );
+  if (value.inventoryReturns !== undefined)
+    validateReturns(value.inventoryReturns);
+  for (const entry of value.inventoryLedger || []) {
+    for (const review of entry.reviews || []) {
+      const linked = value.inventoryReturns?.find(
+        (item) => item.id === review.returnId,
+      );
+      if (
+        !linked ||
+        entry.kind === "deposit" ||
+        bandKey(linked.bandId) !== bandKey(entry.bandId) ||
+        review.returnRevision > returnRevision(linked)
+      )
+        throw Error("Invalid return reconciliation link.");
+    }
+  }
+  return value;
+}
+// Explicit allowlist: document bytes, filenames and document metadata cannot enter
+// a structured-record cloud backup, even if RecordData gains additional fields.
+export function cloudRecords(data: RecordData) {
+  return {
+    version: 1 as const,
+    patients: data.patients.map((p) => ({
+      id: p.id,
+      name: p.name,
+      birthDate: p.birthDate,
+      history: p.history,
+      createdAt: p.createdAt,
+      updatedAt: p.updatedAt,
+    })),
+  };
+}
+export async function validatedDocument(file: File) {
+  if (!file.size || file.size > 10 * 1024 * 1024)
+    throw Error("Choose a PDF, JPG, PNG or WebP file up to 10 MB.");
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const header = new TextDecoder("latin1").decode(bytes.subarray(0, 12));
+  const actual = header.startsWith("%PDF-")
+    ? "application/pdf"
+    : bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff
+      ? "image/jpeg"
+      : [137, 80, 78, 71, 13, 10, 26, 10].every((n, i) => bytes[i] === n)
+        ? "image/png"
+        : header.startsWith("RIFF") && header.slice(8, 12) === "WEBP"
+          ? "image/webp"
+          : "";
+  if (!actual || actual !== file.type)
+    throw Error("The file content must match its PDF, JPG, PNG or WebP type.");
+  return bytes;
+}

@@ -1,0 +1,31 @@
+node_modules/
+dist/
+.env*
+!.env.example
+*.local
+*.local.*
+*.tsbuildinfo
+test-results/
+playwright-report/
+firebase-debug.log
+ui-debug.log
+emulator-data/
+
+.local-tools/
+firestore-debug.log
+
+# Optional AI weights, caches and provider secrets
+*.onnx
+*.onnx_data
+.cache/
+models/
+*.secret
+.firebase/
+
+# Authentication material must never enter a public submission.
+*service-account*.json
+*serviceAccount*.json
+*credentials*.json
+firebase-tools.json
+*.pem
+*.key
