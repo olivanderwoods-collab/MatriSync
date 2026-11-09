@@ -8,17 +8,17 @@ Prepared 9 November 2026, Asia/Calcutta. Read this before historical handoffs. T
 | --- | --- |
 | Source and submission repository | https://github.com/olivanderwoods-collab/MatriSync |
 | Continuing branch | `main` |
-| Latest application-code commit | `e85eac12a8790d08eaf119f85c78acc219ca6208` |
-| Application tree at that commit | `efa3b92619a8e87f9e3e57b62e28c2a7f14f0b8e` |
-| Application-code commit parent | `9516d652aab9603a68864b4828d410f0767cf5ad` |
+| Latest application-code commit | `5062f19bf9543d31ce06ff7b02c06a91e5a158b4` |
+| Application tree at that commit | `d7ed462250f0a1e5050f172bf0cfa610c5f1ed6d` |
+| Application-code commit parent | `1085a62c0064940a8e1cdb73c9b7679bb7e243ae` |
 | Required live URL | **https://matrisync-c9de7.web.app** |
 | Firebase project and Hosting site | `matrisync-c9de7` |
-| Deployed shell cache | `c76381b12cf9` |
-| Deployed main bundle | `assets/index-CIQDKopI.js` |
-| Latest completed feature | Encrypted recovery of unfinished connected-care referral forms |
-| Next software slice | Recover uncertain handoff submissions without duplicates |
+| Deployed shell cache | `6f27aa746ef9` |
+| Deployed main bundle | `assets/index-BLWSUBon.js` |
+| Latest completed feature | Stable approved-handoff retry recovery and lossless compact transfer |
+| Next software slice | Browser reload/retry and cached-update acceptance; then scoped authenticated acceptance/device-key recovery |
 
-This handoff and its companion prompt are published in a documentation-only child commit of the application commit above. The transfer bundle's `TRANSFER-CHECKPOINT.txt` records that exact documentation commit after publication. The application commit is the stable code/testing anchor; do not mistake it for a claim that later documentation commits do not exist.
+This updated handoff is a documentation-only child of the application commit above. The supplied November 9 transfer ZIP records the **earlier** checkpoint `1085a62c0064940a8e1cdb73c9b7679bb7e243ae`, descended from `e85eac12a8790d08eaf119f85c78acc219ca6208`; it does not describe this new release. Read GitHub main and inspect later commits. Current release detail: `docs/CARE-RETRY-2026-11-09.md`.
 
 The user explicitly selected this repository instead of `MatriSync--Health-a-thon-submission`, required continued use of the submitted web.app URL, and authorized all fixed code on main with an explicit note that it was committed **after the Health-a-thon 2026 submission date**. Preserve that notice in future commits and documentation. Do not backdate, rewrite history or force-push. Earlier instructions to preserve main without merging were superseded by this direct user decision.
 
@@ -26,7 +26,7 @@ The user explicitly selected this repository instead of `MatriSync--Health-a-tho
 
 MatriSync is an offline-first maternal-record and referral-continuity prototype by Team UNCODED. It has the approved Mother/Caregiver, Healthcare Professional and Healthcare Organization workspaces, the Medical Green design, local records, a fictional submission case, and prototype encrypted structured-care workflows.
 
-The submission demo is working and hosted. The connected-care client, permissions and encrypted transfer have passed a real Firebase emulator journey. Recovery of completed handoffs, immutable receipts and unfinished referral drafts is implemented. Public authenticated multi-account acceptance, resilient pending-send recovery, device/key recovery, public facility verification and physical NFC/BLE integration are not complete. A percentage would obscure these distinct levels of readiness.
+The submission demo is working and hosted. The connected-care client, permissions and encrypted transfer have passed a real Firebase emulator journey. Recovery of completed handoffs, immutable receipts and unfinished referral drafts is implemented. Stable pending-send recovery and compact transfer are implemented and emulator-tested. Current browser interaction checks, public authenticated multi-account acceptance, device/key recovery, public facility verification and physical NFC/BLE integration remain incomplete. A percentage would obscure these distinct levels of readiness.
 
 | Area | Implemented | Evidence / limit |
 | --- | --- | --- |
@@ -40,6 +40,8 @@ The submission demo is working and hosted. The connected-care client, permission
 | Completed handoff recovery | Original packet, ID, timestamp and summary snapshot saved encrypted | Reopens exact stored bytes; local-save failure after cloud success is reported without falsely claiming cloud failure |
 | Received handoff recovery | Basic snapshot plus later online verification | First-received time/content preserved; offline rescans cannot erase verification; verification is historical |
 | Unfinished referral recovery | Exact manual fields, destination and packet limit encrypted per account/patient | Reload recovery, sequential edits, competing tabs and cleanup verified |
+| Approved-operation recovery | Signed/encrypted pending state, stable ID, authoritative reconciliation and transactional retries | Failure injection and real emulator checks passed; current browser checks blocked |
+| Compact connected-care transfer | Lossless positional encoding, bounded compression and binary JWE transport with legacy decoding | Synthetic sample 2,351 to 1,104 bytes; not verified to fit current tag |
 | Older sharing/attachment pilots | Separate controlled encrypted sharing, referral and chunked attachment code exists | Historical local evidence, including 10 MiB attachments; not automatically a public MVP capability |
 | Inventory and future workflows | Existing previews and Coming Soon controls retained | Synthetic/read-only or incomplete; not live stock, scheduling, payment or clinical AI services |
 | Physical hardware | Software framing and reference BLE implementation | No app-to-current-board physical acceptance; do not flash |
@@ -49,7 +51,7 @@ The submission demo is working and hosted. The connected-care client, permission
 1. This handoff and `MATRISYNC_ACCOUNT2_START_PROMPT.md`.
 2. `AGENTS.md`, interpreted with the later user decisions in section 1.
 3. `docs/EMERGENCY-MVP-REQUIREMENTS-2026-11-07.md` and `docs/MatriSync-Master-Development-Guide-v2.txt`.
-4. `docs/CARE-DRAFTS-2026-11-08.md`, `docs/CARE-ACCEPTANCE-2026-11-08.md`, `docs/CARE-RECOVERY-2026-11-08.md`.
+4. `docs/CARE-RETRY-2026-11-09.md`, then `docs/CARE-DRAFTS-2026-11-08.md`, `docs/CARE-ACCEPTANCE-2026-11-08.md`, `docs/CARE-RECOVERY-2026-11-08.md`.
 5. `docs/PUBLIC-RELEASE-2026-11-07.md` and `docs/POST-SUBMISSION-UPDATE-2026-11-08.md`.
 6. Relevant protocol/requirements documents: `docs/FINAL-REQUIREMENTS-2026-11-05.md`, `docs/SHARING-ACCESS-PLAN.md`, `docs/DESTINATION-REFERRAL-PROTOCOL.md`, `docs/ENCRYPTED-ATTACHMENT-PROTOCOL.md`, `docs/RELEASE-GATES.md`.
 
@@ -103,6 +105,8 @@ MatriSathi's basic conversation path is deterministic and labelled scripted/not 
 
 ## 7. Latest recovery work in detail
 
+Approved operations now persist signed/encrypted before any cloud mutation. The original packet, snapshot, ID and timestamp survive uncertain outcomes. Retry uses authoritative matching evidence or a permission-checked transaction on the same IDs; unavailable reads never mean absence. Restoring a draft or pending approval never sends automatically. Existing controls handle recovery and preserve newer drafts. See `docs/CARE-RETRY-2026-11-09.md` for protocol, compact format and failure boundaries.
+
 Completed outgoing handoffs preserve original packet bytes, identity, time and snapshot. They can be reopened/printed after reload. A local-storage failure after a confirmed cloud commit returns the confirmed handoff with a recovery warning, not a misleading cloud failure.
 
 Received handoffs preserve their first snapshot/time. A later online check can add `verifiedAt`; later offline rescans cannot downgrade it. Conflicting content under an existing handoff ID is rejected. Concurrent saves compare before writing. A saved online check is historical and does not assert current offline authorization.
@@ -113,7 +117,15 @@ Wait for the saved status before leaving. Browser leave-page warnings are best e
 
 ## 8. Verification and honest boundaries
 
-Latest application release completed across 8–9 November 2026:
+Current continuation checks on 9 November 2026:
+
+- **150 unit tests / 33 files**, **10 current care/record rules tests**, and **one real nine-account Auth/Firestore emulator journey** passed. The latter includes compact receiving, lost acknowledgements, unavailable reconciliation, concurrent retries and revocation.
+- TypeScript, ESLint and documented production build passed. No dependencies or security rules changed.
+- Hosting-only deployment succeeded. **16 public static files** matched the tested build byte-for-byte; `/`, `/professional`, `/organization` and `/mother` returned the expected HTTP shell. Cache `6f27aa746ef9`.
+- **Current browser checks did not run:** local browser use is disabled in Work settings. The new fixture reload/retry flow, rendered public app and cached Update now behavior remain pending. No physical hardware was accessed.
+- Local evidence: `.local-tools/compact-{unit,integration,lint,build,deploy}.log`, `compact-live-verification.json`, `handoff-size.json`, and `retry-rules.log`.
+
+Historical previous release evidence (8–9 November, before this continuation):
 
 - **134 unit tests across 32 files passed.** Six new draft cases cover exact encrypted recovery, account/patient isolation, concurrent writes, cleanup and sequential sessions.
 - **10 current care/record Firestore rules tests passed.** Four historical sharing-pilot suites need their separate port-8087 emulator; their broad invocation previously failed setup and was not claimed as passing.
@@ -124,7 +136,7 @@ Latest application release completed across 8–9 November 2026:
 
 Earlier public release evidence: all three role route sets, six medication cards, dynamic PDF download/open/render, package download and five MatriSathi prompts were checked 7 November. Those are dated checks, not a fresh exhaustive rerun of every browser/device on 9 November. Playwright browser launch was blocked in the earlier sandbox; available in-app browser checks were used. No claim of full historical Playwright coverage.
 
-Still unverified/incomplete: public authenticated nine-account UI journey; production facility authority/bootstrap; account-wide role/recovery policy completeness; safe uncertain-send retries; device/key recovery; accepted-upload review and granular device/PIN target workflows; original missing reports; optional generative-model public behavior; independent security/clinical assessment; physical BLE/NFC acceptance.
+Still unverified/incomplete: public authenticated nine-account UI journey; production facility authority/bootstrap; account-wide role/recovery policy completeness; current browser retry/update acceptance; device/key recovery; accepted-upload review and granular device/PIN target workflows; original missing reports; optional generative-model public behavior; independent security/clinical assessment; physical BLE/NFC acceptance.
 
 ## 9. Set up the next account
 
@@ -179,21 +191,13 @@ Browser fixture command: `node node_modules/vite/bin/vite.js --config tests-care
 
 ## 10. Exact next development slice
 
-Start at `createCareHandoff` in `src/care-client.ts`, its caller in `care-page.tsx`, and `care-client.test.ts` / `tests-care/client.integration.test.ts`. It currently generates a new UUID/packet on each invocation, commits an atomic Firestore batch, then saves a local completed copy. The known local-save-after-success issue is handled; an uncertain network outcome before the client observes success is not durably reconciled. Blind retry can create another handoff/referral entry.
+The former planned stable-operation slice is **implemented**, not work to restart. Read `docs/CARE-RETRY-2026-11-09.md` and inspect the current code/tests. Do not replace the stable operation with a new UUID per retry or re-encode already approved packets. Never weaken append-only rules or automatically submit a restored draft.
 
-Recommended implementation sequence, subject to inspecting the current source:
+First complete the blocked browser checks when browser access is available: updated `tests-care/RECOVERY-CHECKS.md` reload/retry, account/patient isolation, original completed summary and newer-draft preservation. Then check the actual public app and cached Update now path. HTTP byte equality alone is not browser acceptance. The user does not need to run developer pilots.
 
-1. Design a durable encrypted pending operation with a stable operation/handoff ID, immutable approved fields/recipient/packet and an explicit state model. Persist it before issuing the approved cloud mutation; a failure to persist must not silently claim recoverability.
-2. On reload/retry, query authoritative server state for that same operation and verify immutable identity/content. Distinguish confirmed success, confirmed absence and unknown/unavailable. Never infer absence from a cached or failed read.
-3. Preserve current permission/revocation checks for any new submission. Reading evidence of an already committed operation is different from permission to create a new one. Do not weaken append-only rules just to replay writes.
-4. Make one approved operation produce one referral entry/handoff across timeout/reload/competing-tab cases. Keep draft revision cleanup bound to the approved snapshot; a newer draft must survive.
-5. Reuse existing controls and status areas. Do not send merely because a draft was restored. Do not expose internal implementation details where plain recovery guidance suffices.
-6. Add meaningful failure-injection and emulator tests: timeout before commit, server committed but response lost, unavailable reconciliation, revoked access, changed recipient/device identity, tampered operation, two tabs, local quota failure and reloaded success. Check stable packet/ID and unchanged original receipt/summary.
-7. Run required checks, deploy Hosting only to the same site, verify live assets/cached update, commit to main with the post-submission note, and update this handoff.
+Next continue scoped public authenticated acceptance and explicitly designed device/key recovery. Changed keys/revoked access can intentionally leave an uncommitted approval pending; no discard/replacement policy or cross-device recovery has been invented. Public facility verification stays deferred until authority is resolved. Accepted-upload/device/PIN requirements remain targets where not implemented.
 
-This is the next planned slice, not an implementation already completed. Do not claim exactly-once transport merely because the client reuses an ID. Inspect server/rules feasibility and design the smallest correct protocol. If additional UI or authority decisions truly conflict with settled instructions, explain the concrete issue while continuing independent authorized work.
-
-After that: scoped public authenticated acceptance, agreed device/key recovery and remaining accepted-upload/device/PIN requirements. Public facility verification stays deferred until the user resolves authority. Hardware remains a separate later task.
+The latest user asked to minimize NFC handoffs: lossless compact connected-care transfer is now implemented, with a 53% reduction on the recorded synthetic sample. It still exceeds the only verified 48 tag bytes. Inspect full usable tag capacity and obtain the current bridge source/protocol before any separate hardware work; no firmware flashing is authorized in this slice.
 
 ## 11. Hardware boundary
 
@@ -216,7 +220,9 @@ For source publication, use ordinary non-force Git push when available. If local
 
 ## 13. Local machine paths and transfer warnings
 
-Current workspace: `C:\Users\Olivander Woods\Documents\Codex\2026-11-07\files-pasted-by-the-user-matrisync`.
+Current continuation checkout: `C:\Users\Olivander Woods\OneDrive\Documents\ChatGPT\MatriSync\continuation-2026-11-09` (fresh clone of main). Existing dependency installation is reused through a local node_modules junction; `.env.local` is private/ignored.
+
+Preserved previous-account workspace: `C:\Users\Olivander Woods\Documents\Codex\2026-11-07\files-pasted-by-the-user-matrisync`. The following paths are historical and must not replace current main:
 
 - Active edited source: `work\active` under that workspace.
 - Release evidence and this transfer bundle: `outputs` under that workspace.
