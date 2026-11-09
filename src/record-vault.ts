@@ -1,3 +1,4 @@
+import { checkManualRecord, manualRecordText, type ManualRecord } from "./record-entry";
 import {
   deriveVaultKey,
   newSalt,
@@ -792,6 +793,14 @@ export class RecordVault {
       throw Error("Account changed. Open the companion again.");
     return data.patients.find((p) => p.id === "self");
   }
+  async addManualDocument(patientId: string, kind: LocalDocument["kind"], input: ManualRecord, source: string, reportDate: string) {
+    if (!this.key || !this.records?.patients.some(p=>p.id===patientId)) throw Error("Unlock the patient's records first.");
+    this.requirePatientAccess(patientId);
+    if (source.length>200 || (reportDate && (!/^\d{4}-\d{2}-\d{2}$/.test(reportDate) || !Number.isFinite(Date.parse(reportDate)) || new Date(reportDate).toISOString().slice(0,10)!==reportDate))) throw Error("Check source and document date.");
+    const manual=checkManualRecord(input), now=new Date().toISOString();
+    const doc:LocalDocument={id:crypto.randomUUID(),patientId,kind,name:manual.title+".txt",type:"text/plain",size:new TextEncoder().encode(manualRecordText(manual)).length,addedAt:now,source:source.trim(),reportDate,manual,enteredBy:this.uid};
+    await this.persist({...this.records,documents:[...this.records.documents,doc]});
+  }
   async addDocument(
     patientId: string,
     kind: LocalDocument["kind"],
@@ -827,6 +836,7 @@ export class RecordVault {
       type: file.type,
       size: file.size,
       addedAt: new Date().toISOString(),
+      enteredBy: this.uid,
       source: source.trim(),
       reportDate,
     };
@@ -843,6 +853,8 @@ export class RecordVault {
     this.requirePatientAccess(doc.patientId);
     const epoch = this.epoch;
     await this.authorize();
+    if (epoch !== this.epoch || !this.key) throw Error("The vault was locked.");
+    if (doc.manual) return {doc, bytes:new TextEncoder().encode(manualRecordText(doc.manual))};
     const sealed = await readFile(this.uid, id);
     if (epoch !== this.epoch || !this.key) throw Error("The vault was locked.");
     const bytes = await unseal(this.key, sealed, `${this.uid}:file:${id}`);

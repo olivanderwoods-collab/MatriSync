@@ -1,3 +1,4 @@
+import { checkManualRecord, type ManualRecord } from "./record-entry";
 import {
   validateAccountFields,
   type AccountProfile,
@@ -87,6 +88,8 @@ export function motherProfileInput(input: MotherProfile): MotherProfile {
   return profile;
 }
 export type LocalDocument = {
+  manual?: ManualRecord;
+  enteredBy?: string;
   id: string;
   patientId: string;
   kind: "reports" | "prescriptions";
@@ -170,14 +173,13 @@ export function parseRecords(bytes: Uint8Array): RecordData {
       files.has(d.id) ||
       !["reports", "prescriptions"].includes(d.kind) ||
       typeof d.name !== "string" ||
-      !["application/pdf", "image/png", "image/jpeg", "image/webp"].includes(
-        d.type,
-      ) ||
+      !(["application/pdf", "image/png", "image/jpeg", "image/webp"].includes(d.type) || (d.type === "text/plain" && !!d.manual)) ||
       !Number.isInteger(d.size) ||
       d.size <= 0 ||
       d.size > 10 * 1024 * 1024
     )
       throw Error("Invalid document record.");
+    if (d.manual) checkManualRecord(d.manual);
     files.add(d.id);
   }
   for (const kind of ["professional", "organization"] as const) {

@@ -2738,3 +2738,8 @@ button.back-link {
 .care-fact { margin-bottom: 12px; overflow-wrap: anywhere; }
 .care-fact dt { font-weight: 600; }
 .care-fact dd { margin: 3px 0 0; }
+
+/* Record entry expands below the existing section heading on narrow screens. */
+.panel-heading:has(> .record-entry-form) { flex-wrap: wrap; }
+.panel-heading > .record-entry-form { flex: 1 0 100%; width: 100%; }
+.record-entry-form fieldset { min-width: 0; border: 0; padding: 0; margin: 0; display: grid; gap: 1rem; }

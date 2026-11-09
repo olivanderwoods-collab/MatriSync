@@ -777,7 +777,7 @@ function AuthPage() {
             Continue as Guest <ArrowRight size={18} />
           </button>
           <p className="guest-copy">
-            Fictional sample data, kept in this tab. Use Exit Guest to clear it.
+            Fictional sample data. Added document copies stay on this browser after Exit Guest.
             Browser session restore may preserve a session. Please do not enter
             personal or medical information.
           </p>
@@ -1429,9 +1429,7 @@ function SettingsPage({ role, section }: { role: Role; section?: string }) {
           combinedProfile) && (
           <Panel title="Privacy and Data Controls">
             <p>
-              Guest uses fictional information and temporary tab storage.
-              Browser restore or duplicated tabs may preserve a session.
-              Explicitly exit to clear the demo.
+              Guest preferences use temporary tab storage. Added prescription and report copies stay on this browser, including after Reset Demo or Exit Guest. They are separate from signed-in account records.
             </p>
             {app.demo && (
               <>

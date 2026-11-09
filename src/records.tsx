@@ -14,7 +14,7 @@ import type { LocalDocument, Patient } from "./records-model";
 import { professionalSections, maternalSections } from "./workspace-spec";
 import { profileContext } from "./ai/behavior";
 import type { MotherProfile } from "./records-model";
-import { CameraCapture } from "./camera-capture";
+import { AddRecord, ManualFacts } from "./record-entry-form";
 import { ReferralDrafts } from "./referral-drafts";
 import { PatientSummaryPanel } from "./patient-summary-panel";
 import { ProfileLinkPreview, TestAssignments } from "./workflow-tests";
@@ -567,188 +567,16 @@ function PatientForm({
     </form>
   );
 }
-export function Documents({
-  patient,
-  kind,
-}: {
-  patient: Patient;
-  kind: LocalDocument["kind"];
-}) {
-  const { vault, refresh } = useContext(Context);
-  const [adding, setAdding] = useState(false);
-  const [camera, setCamera] = useState(false);
-  const [file, setFile] = useState<File>();
-  const [source, setSource] = useState("");
-  const [date, setDate] = useState("");
-  const [status, setStatus] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const files = vault!.data!.documents.filter(
-    (d) => d.patientId === patient.id && d.kind === kind,
-  );
-  async function save(event: FormEvent) {
-    event.preventDefault();
-    if (!file) return;
-    setBusy(true);
-    setError("");
-    setStatus("");
-    try {
-      await vault!.addDocument(patient.id, kind, file, source, date);
-      refresh();
-      setFile(undefined);
-      setSource("");
-      setDate("");
-      setAdding(false);
-      setStatus("Saved encrypted on this device.");
-    } catch (error) {
-      setError(message(error));
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function download(id: string) {
-    setError("");
-    setBusy(true);
-    try {
-      const { bytes, doc } = await vault!.document(id);
-      // Download only: do not execute/render potentially active user PDFs in the app.
-      const url = URL.createObjectURL(
-        new Blob([bytes], { type: "application/octet-stream" }),
-      );
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = doc.name;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setStatus(
-        "Downloaded copy is no longer protected by the MatriSync vault.",
-      );
-    } catch (error) {
-      setError(message(error));
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <section className="panel">
-      <div className="panel-heading">
-        <h2>{kind === "reports" ? "Reports" : "Prescriptions"}</h2>
-        {!adding && !camera && (
-          <div className="action-row">
-            <button
-              className="button secondary"
-              onClick={() => {
-                setCamera(false);
-                setAdding(true);
-              }}
-            >
-              Upload From Device
-            </button>
-            <button
-              className="button secondary"
-              onClick={() => setCamera(true)}
-            >
-              Take Photo
-            </button>
-          </div>
-        )}
-      </div>
-      <p className="small muted">
-        Encrypted on this device · Cloud uploads disabled
-      </p>
-      {camera && (
-        <CameraCapture
-          onCancel={() => setCamera(false)}
-          onCapture={(photo) => {
-            setFile(photo);
-            setCamera(false);
-            setAdding(true);
-            setError("");
-          }}
-        />
-      )}
-      {adding && (
-        <form className="record-form document-form" onSubmit={save}>
-          <label>
-            Document
-            <input
-              type="file"
-              accept={
-                camera
-                  ? "image/jpeg,image/png,image/webp"
-                  : "application/pdf,image/jpeg,image/png,image/webp"
-              }
-              capture={camera ? "environment" : undefined}
-              required={!file}
-              onChange={(e) => setFile(e.target.files?.[0])}
-            />
-          </label>
-          {file && <p className="small">Selected: {file.name}</p>}
-          <p className="small">PDF, JPG, PNG or WebP · Up to 10 MB</p>
-          <label>
-            Issuing facility / source (optional)
-            <input
-              maxLength={200}
-              value={source}
-              onChange={(e) => setSource(e.target.value)}
-            />
-          </label>
-          <label>
-            Document date (optional)
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
-          </label>
-          <div className="action-row">
-            <button className="button primary" disabled={busy || !file}>
-              {busy ? "Saving…" : "Save document"}
-            </button>
-            <button
-              type="button"
-              className="button cancel"
-              disabled={busy}
-              onClick={() => {
-                setAdding(false);
-                setFile(undefined);
-                setError("");
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-      )}
-      {error && <p role="alert">{error}</p>}
-      {status && <p role="status">{status}</p>}
-      {!files.length && !adding && <p>No documents saved.</p>}
-      <div className="document-list">
-        {files.map((d) => (
-          <article className="local-document" key={d.id}>
-            <div>
-              <h3>{d.name}</h3>
-              <p>
-                {d.reportDate || "Date not supplied"} ·{" "}
-                {d.source || "Source not supplied"}
-              </p>
-              <p className="small">
-                Uploaded copy · Source not verified ·{" "}
-                {(d.size / 1024).toFixed(1)} KB
-              </p>
-            </div>
-            <button
-              className="button secondary"
-              disabled={busy}
-              onClick={() => void download(d.id)}
-            >
-              Download Document
-            </button>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
+export function Documents({patient,kind}:{patient:Patient;kind:LocalDocument["kind"]}) {
+  const {vault,refresh}=useContext(Context); const [error,setError]=useState("");
+  const files=vault!.data!.documents.filter(d=>d.patientId===patient.id&&d.kind===kind).slice().sort((a,b)=>b.addedAt.localeCompare(a.addedAt));
+  async function download(id:string){try{setError("");const {bytes,doc}=await vault!.document(id);const url=URL.createObjectURL(new Blob([bytes],{type:"application/octet-stream"}));const a=document.createElement("a");a.href=url;a.download=doc.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(e){setError(message(e));}}
+  return <section className="panel"><div className="panel-heading"><h2>{kind==="reports"?"Reports":"Medications and prescription documents"}</h2><AddRecord kind={kind} onSave={async value=>{if(value.manual)await vault!.addManualDocument(patient.id,kind,value.manual,value.source,value.date);else await vault!.addDocument(patient.id,kind,value.file!,value.source,value.date);refresh();}}/></div>
+    <p className="small muted">Encrypted on this device · Files are not transferred</p>
+    {!files.length&&<p>No records saved.</p>}
+    <div className="document-list">{files.map(d=><article className="local-document" key={d.id}><div><h3>{d.manual?.title||d.name}</h3>{d.manual&&<p className="small">Manually copied record · Source not independently verified</p>}{d.manual?(kind==="prescriptions"?<ManualFacts value={d.manual}/>:<p className="preserve-lines">{d.manual.notes||"No findings entered"}</p>):<p>Uploaded document · Contents not extracted</p>}<p>{d.reportDate||"Date not supplied"} · {d.source||"Source not supplied"}</p></div><button className="button secondary" onClick={()=>void download(d.id)}>Download copy</button></article>)}</div>
+    <h3>{kind==="reports"?"Report history":"Prescription history"}</h3><ol>{files.map(d=><li key={d.id}>{d.addedAt} · {d.manual?.title||d.name} · Added by {d.enteredBy||"Account holder (identity not recorded)"} · {d.manual?"Manually copied record":"Uploaded copy"}</li>)}</ol>{error&&<p role="alert">{error}</p>}
+  </section>;
 }
 function PatientAdd() {
   const [choice, setChoice] = useState("");
