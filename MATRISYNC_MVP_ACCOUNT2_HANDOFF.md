@@ -8,17 +8,17 @@ Prepared 9 November 2026, Asia/Calcutta. Read this before historical handoffs. T
 | --- | --- |
 | Source and submission repository | https://github.com/olivanderwoods-collab/MatriSync |
 | Continuing branch | `main` |
-| Latest application-code commit | `2b783d90aceae57591a987d4daa1b22657767084` |
-| Application tree at that commit | `346b67e9851966ecf5ebbfd7efa08b6f1b8e4d3b` |
-| Application-code commit parent | `62805e7bf63daa641e7e18250312f91b1408d01d` |
+| Latest application-code commit | `6f5b46748520de6f2f7aa9a55518ffd6b53a8f84` |
+| Application tree at that commit | `b7b1a58c89b79fa9f376963764e3df9a7e028671` |
+| Application-code commit parent | `7cf3f95495b186bc55dc53329f14585a4bf0197b` |
 | Required live URL | **https://matrisync-c9de7.web.app** |
 | Firebase project and Hosting site | `matrisync-c9de7` |
-| Deployed shell cache | `980d5bfdc502` |
-| Deployed main bundle | `assets/index-Dodr_BEc.js` |
-| Latest completed feature | Content-first records, local Add new flows, concise demo handoff and organized full PDF |
+| Deployed shell cache | `9ae35f092f40` |
+| Deployed main bundle | `assets/index-tlronZ0R.js` |
+| Latest completed feature | Facility intake/pairing, role-specific handoff views and immutable Doctor approval of Mother-submitted copies |
 | Next software slice | Approved-operation browser recovery fixture, then scoped authenticated acceptance/device-key recovery |
 
-This updated handoff is a documentation-only child of the application commit above. The supplied November 9 transfer ZIP records the **earlier** checkpoint `1085a62c0064940a8e1cdb73c9b7679bb7e243ae`, descended from `e85eac12a8790d08eaf119f85c78acc219ca6208`; it does not describe this new release. Read GitHub main and inspect later commits. Current release detail: `docs/RECORDS-UPDATE-2026-11-09.md`; previous stable-operation/compact protocol: `docs/CARE-RETRY-2026-11-09.md`.
+This updated handoff is a documentation-only child of the application commit above. The supplied November 9 transfer ZIP records the **earlier** checkpoint `1085a62c0064940a8e1cdb73c9b7679bb7e243ae`, descended from `e85eac12a8790d08eaf119f85c78acc219ca6208`; it does not describe this new release. Read GitHub main and inspect later commits. Current release detail: `docs/INTAKE-REVIEW-2026-11-09.md`; prior record release: `docs/RECORDS-UPDATE-2026-11-09.md`; previous stable-operation/compact protocol: `docs/CARE-RETRY-2026-11-09.md`.
 
 The user explicitly selected this repository instead of `MatriSync--Health-a-thon-submission`, required continued use of the submitted web.app URL, and authorized all fixed code on main with an explicit note that it was committed **after the Health-a-thon 2026 submission date**. Preserve that notice in future commits and documentation. Do not backdate, rewrite history or force-push. Earlier instructions to preserve main without merging were superseded by this direct user decision.
 
@@ -36,7 +36,7 @@ The submission demo is working and hosted. The connected-care client, permission
 | Handoff/PDF | Dynamic demo summary, downloadable PDF, print view and `.msht` export | Live PDF downloaded, parsed and both pages inspected 7 Nov; summary rechecked 9 Nov |
 | RUHI in the MatriSathi tab | Scripted greetings, navigation, source-fact read-back and safety responses | Explicitly labelled not generative AI; optional local model is a separate path |
 | Local records | Encrypted browser vault and prototype encrypted cloud-record support | Device/account isolation and unit/rules coverage; not a reviewed recovery system |
-| Connected care | Facility invitations, staff assignments, Doctor-created Mother profiles/access codes, append-only contributions, grants and encrypted handoffs | Real nine-account Auth/Firestore emulator journey passed; public authenticated journey not certified |
+| Connected care | Invited facility registration/intake, Mother one-use pairing, staff assignment, immutable record reviews and encrypted handoffs | Nine-account handoff journey plus six-account intake/review journey passed; public authenticated journey not certified |
 | Completed handoff recovery | Original packet, ID, timestamp and summary snapshot saved encrypted | Reopens exact stored bytes; local-save failure after cloud success is reported without falsely claiming cloud failure |
 | Received handoff recovery | Basic snapshot plus later online verification | First-received time/content preserved; offline rescans cannot erase verification; verification is historical |
 | Unfinished referral recovery | Exact manual fields, destination and packet limit encrypted per account/patient | Reload recovery, sequential edits, competing tabs and cleanup verified |
@@ -51,13 +51,13 @@ The submission demo is working and hosted. The connected-care client, permission
 1. This handoff and `MATRISYNC_ACCOUNT2_START_PROMPT.md`.
 2. `AGENTS.md`, interpreted with the later user decisions in section 1.
 3. `docs/EMERGENCY-MVP-REQUIREMENTS-2026-11-07.md` and `docs/MatriSync-Master-Development-Guide-v2.txt`.
-4. `docs/RECORDS-UPDATE-2026-11-09.md`, then `docs/CARE-RETRY-2026-11-09.md`, then `docs/CARE-DRAFTS-2026-11-08.md`, `docs/CARE-ACCEPTANCE-2026-11-08.md`, `docs/CARE-RECOVERY-2026-11-08.md`.
+4. `docs/INTAKE-REVIEW-2026-11-09.md`, then `docs/RECORDS-UPDATE-2026-11-09.md`, then `docs/CARE-RETRY-2026-11-09.md`, then `docs/CARE-DRAFTS-2026-11-08.md`, `docs/CARE-ACCEPTANCE-2026-11-08.md`, `docs/CARE-RECOVERY-2026-11-08.md`.
 5. `docs/PUBLIC-RELEASE-2026-11-07.md` and `docs/POST-SUBMISSION-UPDATE-2026-11-08.md`.
 6. Relevant protocol/requirements documents: `docs/FINAL-REQUIREMENTS-2026-11-05.md`, `docs/SHARING-ACCESS-PLAN.md`, `docs/DESTINATION-REFERRAL-PROTOCOL.md`, `docs/ENCRYPTED-ATTACHMENT-PROTOCOL.md`, `docs/RELEASE-GATES.md`.
 
 Historical documentation is retained as evidence, not rewritten to look current. Old README test counts (116), older acceptance counts (128), old cache IDs, RUHI naming, the abandoned submission repository and earlier branch restrictions must not override this handoff's dated checkpoint. Latest user naming clarification (9 November): **MatriSathi is the Mother tab; RUHI is the companion**. This supersedes earlier companion naming requirements. Granular staff PIN/device/accepted-upload requirements in older final plans remain targets where not implemented.
 
-Preserve the approved UI. Do not add tabs, sections or buttons, redesign the app, start unrelated Inventory expansion or create another deployment URL. Missing values remain missing. Do not introduce diagnoses, doses, treatment recommendations or invented report interpretation. The assistant owns builds and developer verification; do not ask the user to operate test pilots.
+Preserve the approved UI. The latest approved additions are Organization Add patient, Referral Handoff for care teams, Mother pairing and Doctor review. Do not add unrelated tabs, sections or buttons, redesign the app, start unrelated Inventory expansion or create another deployment URL. Missing values remain missing. Do not introduce diagnoses, doses, treatment recommendations or invented report interpretation. The assistant owns builds and developer verification; do not ask the user to operate test pilots.
 
 ## 4. Codebase map and architecture
 
@@ -117,6 +117,14 @@ Wait for the saved status before leaving. Browser leave-page warnings are best e
 
 ## 8. Verification and honest boundaries
 
+Latest intake/review release: **157 unit tests / 35 files**, **14 care/record rules tests**, and **two real emulator journeys** passed, plus TypeScript, lint and production build. Deployed the tested Firestore rules required by this feature and Hosting to the same project/site. Final cache `9ae35f092f40`; main bundle `assets/index-tlronZ0R.js`; 16 public static files byte-equal and four route shells matched. The final public cached Update now retained Guest state and loaded this exact bundle.
+
+Browser acceptance covered Organization manual intake/reload, local Mother pairing success/expiry/reuse rejection, Professional profile visibility without Add patient, the simplified Mother view, and actual emulator-backed Mother submission → separately-reviewed Doctor approval → Mother read-only view. Local original copies remain accessible. This is not public authenticated clinical acceptance or physical device testing. See `docs/INTAKE-REVIEW-2026-11-09.md` for exact implementation, limits, test fixture and next steps.
+
+Latest decisions: Mother has no referral tab/internal audit; Organization owns intake; assigned professionals have Referral Handoff. Files stay local, as expressly confirmed by the user; encrypted structured submissions and immutable approval records are shared. Mother and facility admins still cannot prescribe. Pairing currently works for already-linked full care profiles, not independently created unlinked local profiles. Previously downloaded keys/copies are not retroactively erased.
+
+Previous record release evidence follows:
+
 Latest record/display/export release: **155 unit tests / 34 files**, TypeScript, lint and production build passed. Hosting-only deployment succeeded at the same URL; 16 static files byte-matched and four HTTP route shells matched. Cache `980d5bfdc502`.
 
 Browser access is now available. Local browser checks passed for manual prescription saving/reload, manual multiline report, PDF upload, photo-mode options/cancel, concise preview and full-PDF download with additions. All three exported pages were parsed/rendered/visually inspected. Public cached Update now passed and retained the demo session; the updated prescription layout, Add new report options and concise preview were checked without production records. Actual camera capture, prior approved-operation browser fixture, public authenticated multi-account acceptance and physical NFC/BLE remain pending. See `docs/RECORDS-UPDATE-2026-11-09.md` for complete evidence and limits.
@@ -146,7 +154,7 @@ Historical previous release evidence (8–9 November, before this continuation):
 
 Earlier public release evidence: all three role route sets, six medication cards, dynamic PDF download/open/render, package download and five MatriSathi prompts were checked 7 November. Those are dated checks, not a fresh exhaustive rerun of every browser/device on 9 November. Playwright browser launch was blocked in the earlier sandbox; available in-app browser checks were used. No claim of full historical Playwright coverage.
 
-Still unverified/incomplete: public authenticated nine-account UI journey; production facility authority/bootstrap; account-wide role/recovery policy completeness; current browser retry/update acceptance; device/key recovery; accepted-upload review and granular device/PIN target workflows; original missing reports; optional generative-model public behavior; independent security/clinical assessment; physical BLE/NFC acceptance.
+Still unverified/incomplete: public authenticated nine-account UI journey; production facility authority/bootstrap; account-wide role/recovery policy completeness; earlier approved-operation browser retry acceptance; device/key recovery; granular device/PIN target workflows; original missing reports; optional generative-model public behavior; independent security/clinical assessment; physical BLE/NFC acceptance.
 
 ## 9. Set up the next account
 
@@ -205,7 +213,7 @@ The former planned stable-operation slice is **implemented**, not work to restar
 
 Browser access now works. The current record forms and public Update now have been checked; complete the earlier approved-operation browser fixture next: updated `tests-care/RECOVERY-CHECKS.md` reload/retry, account/patient isolation, original completed summary and newer-draft preservation. The current public app and cached Update now path passed during the record release; rerun after future UI releases as appropriate. HTTP byte equality alone is not browser acceptance. The user does not need to run developer pilots.
 
-Next continue scoped public authenticated acceptance and explicitly designed device/key recovery. Changed keys/revoked access can intentionally leave an uncommitted approval pending; no discard/replacement policy or cross-device recovery has been invented. Public facility verification stays deferred until authority is resolved. Accepted-upload/device/PIN requirements remain targets where not implemented.
+Next continue scoped public authenticated acceptance and explicitly designed device/key recovery. Changed keys/revoked access can intentionally leave an uncommitted approval pending; no discard/replacement policy or cross-device recovery has been invented. Public facility verification stays deferred until authority is resolved. Mother-submitted copy review is now implemented with original-review attestation and immutable approval. Cross-device files, unlinked local-profile publishing and granular device/PIN requirements remain separate targets.
 
 The latest user asked to minimize NFC handoffs: lossless compact connected-care transfer is now implemented, with a 53% reduction on the recorded synthetic sample. It still exceeds the only verified 48 tag bytes. Inspect full usable tag capacity and obtain the current bridge source/protocol before any separate hardware work; no firmware flashing is authorized in this slice.
 
