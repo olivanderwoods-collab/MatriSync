@@ -1,5 +1,5 @@
 import { getFirestore, connectFirestoreEmulator, doc, getDocFromServer, getDocsFromServer, collection, query, where, limit, orderBy, setDoc, writeBatch, runTransaction, serverTimestamp, type Firestore } from "firebase/firestore";
-import { localSharingDevice } from "./sharing-storage";
+import { existingSharingDevice, localSharingDevice } from "./sharing-storage";
 import type { PublicDevice } from "./sharing-crypto";
 import { careEnabled, checkCareProfile, checkContribution, type CareProfile, type CareRole, type CareEntry, type CareView, type ContributionKind } from "./care-model";
 import { careAccount, readCareCopy, savedCareIds, saveCareCopy, saveCareReceipt, readCareDraft, readPendingCareHandoff, claimPendingCareHandoff, confirmPendingCareHandoff, type PendingCareHandoff } from "./care-storage";
@@ -24,9 +24,14 @@ export async function careDb(uid: string) {
   return db;
 }
 export async function enrollCareDevice(uid: string) {
-  const database = await careDb(uid), device = await localSharingDevice(uid), ref = doc(database, "careDevices", uid);
+  const database = await careDb(uid), ref = doc(database, "careDevices", uid);
   const current = await getDocFromServer(ref);
-  if (current.exists() && current.data().keyId !== device.keyId) throw Error("This account is enrolled on another browser. Device recovery is required; no existing key was replaced.");
+  const existing = await existingSharingDevice(uid);
+  // Authentication cannot recover a browser's non-exportable private keys.
+  // Inspect enrollment before generating anything: a missing key is not a
+  // request to replace the enrolled identity or start an automatic recovery.
+  if (current.exists() && current.data().keyId !== existing?.keyId) throw Error("This account is enrolled on another browser. Use the original browser with its saved data. Device recovery is not available yet; no existing key was replaced.");
+  const device = existing ?? await localSharingDevice(uid);
   if (!current.exists()) await setDoc(ref, { encryption: device.encryption, signing: device.signing, keyId: device.keyId });
   return device;
 }

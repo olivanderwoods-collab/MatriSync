@@ -3,7 +3,7 @@ import "fake-indexeddb/auto";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, type Auth } from "firebase/auth";
 import { deleteApp } from "firebase/app";
-import { doc, getDocFromServer, terminate } from "firebase/firestore";
+import { doc, getDocFromServer, setDoc, deleteDoc, terminate } from "firebase/firestore";
 import { accountAuth } from "../src/auth";
 import { activateCareFacility, assignCareStaff, careDb, contributeCare, createCareHandoff, enrollCareDevice, grantCareProfile, listCareProfiles, loadCareProfile, motherLoginEmail, receiveCareHandoff, registerCareProfile } from "../src/care-client";
 import { careHash } from "../src/care-crypto";
@@ -12,6 +12,8 @@ import { CareDraftSession } from "../src/care-draft-session";
 import { emptyReferralFields } from "../src/referral-draft";
 import { unbase64 } from "../src/vault-crypto";
 import type { CareRole, CareView } from "../src/care-model";
+import { existingSharingDevice, localSharingDevice } from "../src/sharing-storage";
+import type { SharingDevice } from "../src/sharing-crypto";
 
 // Failure injection surrounds real SDK operations; the server commit, rules,
 // encryption and subsequent reconciliation are all real emulator operations.
@@ -232,4 +234,50 @@ it("registers at a facility, pairs with Mother consent and approves immutable co
  await approveMotherRecord(people.doctor.uid,view.id,id,true);await approveMotherRecord(people.doctor.uid,view.id,id,true);
  await signInWithEmailAndPassword(auth,motherLoginEmail(registered.id),registered.code);
  const after=await listMotherRecords(motherUid,await loadCareProfile(motherUid,view.id));expect(after).toHaveLength(1);expect(after[0].approved?.reviewerUid).toBe(people.doctor.uid);expect(after[0].record).toEqual(record);
+},60000);
+
+// Synthetic IndexedDB fault injection only. Never clear a real browser store.
+async function testDevice(uid: string, value?: SharingDevice) {
+  const db = await new Promise<IDBDatabase>((resolve,reject)=>{
+    const request=indexedDB.open("matrisync-sharing-pilot-v1",1);
+    request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);
+  });
+  await new Promise<void>((resolve,reject)=>{
+    const tx=db.transaction("devices","readwrite"),store=tx.objectStore("devices");
+    if(value)store.put(value,uid);else store.delete(uid);
+    tx.oncomplete=()=>{db.close();resolve();};tx.onerror=tx.onabort=()=>{db.close();reject(tx.error);};
+  });
+}
+
+it("preserves enrolled identities and encrypted records when browser keys are missing or different",async()=>{
+  const source=await facility("device-boundary"),people=await team(source);
+  await login(source);
+  const registered=await registerCareProfile(source.uid,{name:"Synthetic recovery patient",birthDate:"",sourceLocalId:crypto.randomUUID(),sourceUid:source.uid},true);
+  await grantCareProfile(source.uid,registered.view,people.doctor.uid);
+  await login(people.doctor);
+  const uid=people.doctor.uid,view=await loadCareProfile(uid,registered.id),original=await existingSharingDevice(uid);
+  expect(original).toBeDefined();
+  expect(original!.decryptKey.extractable).toBe(false);expect(original!.signKey.extractable).toBe(false);
+  const database=await careDb(uid),ref=doc(database,"careDevices",uid),enrolled=(await getDocFromServer(ref)).data();
+  try {
+    await testDevice(uid);
+    // A successful password login is not possession of the enrolled private key.
+    await signOut(auth);await login(people.doctor);
+    await expect(enrollCareDevice(uid)).rejects.toThrow("Use the original browser");
+    expect(await existingSharingDevice(uid)).toBeUndefined();
+    expect((await getDocFromServer(ref)).data()).toEqual(enrolled);
+    const replacement=await localSharingDevice(uid);
+    await expect(enrollCareDevice(uid)).rejects.toThrow("no existing key was replaced");
+    await expect(readCareCopy(uid,view.id)).rejects.toThrow();
+    await expect(loadCareProfile(uid,view.id)).rejects.toThrow();
+    await expect(setDoc(ref,{encryption:replacement.encryption,signing:replacement.signing,keyId:replacement.keyId})).rejects.toMatchObject({code:"permission-denied"});
+    await expect(deleteDoc(ref)).rejects.toMatchObject({code:"permission-denied"});
+    expect((await getDocFromServer(ref)).data()).toEqual(enrolled);
+  } finally {
+    // Reattach the same in-memory test key, not a user-facing recovery/import.
+    await testDevice(uid,original!);
+  }
+  expect((await enrollCareDevice(uid)).keyId).toBe(original!.keyId);
+  expect(await readCareCopy(uid,view.id)).toEqual(view);
+  expect((await loadCareProfile(uid,view.id)).profile).toEqual(view.profile);
 },60000);

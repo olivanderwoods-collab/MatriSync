@@ -47,12 +47,15 @@ async function access<T>(
     };
   });
 }
-export async function localSharingDevice(uid: string) {
-  const current = await access<SharingDevice | undefined>(
+export function existingSharingDevice(uid: string) {
+  return access<SharingDevice | undefined>(
     "devices",
     "readonly",
     (s) => s.get(uid),
   );
+}
+export async function localSharingDevice(uid: string) {
+  const current = await existingSharingDevice(uid);
   if (current) return current;
   const fresh = await newSharingDevice();
   try {

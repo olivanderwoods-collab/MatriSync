@@ -1,10 +1,10 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { newSharingDevice } from "./sharing-crypto";
-import { localSharingDevice } from "./sharing-storage";
+import { existingSharingDevice, localSharingDevice } from "./sharing-storage";
 import { emptyReferralFields } from "./referral-draft";
 import { newCareKey, wrapCare, unwrapCare } from "./care-crypto";
-import { createCareHandoff } from "./care-client";
+import { createCareHandoff, enrollCareDevice } from "./care-client";
 import * as storage from "./care-storage";
 import { CareDraftSession } from "./care-draft-session";
 import type { CareView } from "./care-model";
@@ -48,6 +48,36 @@ beforeEach(async()=>{
   mocks.data.set(`careDevices/${mocks.uid}`,sender as unknown as Record<string,unknown>); mocks.data.set("careDevices/recipient",recipient as unknown as Record<string,unknown>);
   mocks.data.set("careFacilities/recipient",{enabled:true});
   view={id:crypto.randomUUID(),key:newCareKey(),profile:{name:"Synthetic mother",birthDate:"",sourceLocalId:"local",sourceUid:mocks.uid},entries:[],verified:true,snapshotOnly:false,receivedAt:""};
+});
+describe("care device recovery boundary",()=>{
+  it("does not create a replacement key when the enrolled key is missing locally",async()=>{
+    mocks.uid=`lost-device-${crypto.randomUUID()}`;
+    const original=await newSharingDevice();
+    mocks.data.set(`careDevices/${mocks.uid}`,original as unknown as Record<string,unknown>);
+    await expect(enrollCareDevice(mocks.uid)).rejects.toThrow("Use the original browser");
+    expect(await existingSharingDevice(mocks.uid)).toBeUndefined();
+    expect(mocks.data.get(`careDevices/${mocks.uid}`)).toBe(original);
+    expect(mocks.writes).toBe(0);
+  });
+  it("preserves a different local key and the original server enrollment",async()=>{
+    const local=await existingSharingDevice(mocks.uid),original=await newSharingDevice();
+    mocks.data.set(`careDevices/${mocks.uid}`,original as unknown as Record<string,unknown>);
+    await expect(enrollCareDevice(mocks.uid)).rejects.toThrow("no existing key was replaced");
+    expect((await existingSharingDevice(mocks.uid))?.keyId).toBe(local?.keyId);
+    expect(mocks.data.get(`careDevices/${mocks.uid}`)).toBe(original);
+    expect(mocks.writes).toBe(0);
+  });
+  it("does not generate a new key when authoritative enrollment cannot be checked",async()=>{
+    mocks.uid=`offline-device-${crypto.randomUUID()}`;mocks.unavailable=true;
+    await expect(enrollCareDevice(mocks.uid)).rejects.toThrow("Server unavailable");
+    expect(await existingSharingDevice(mocks.uid)).toBeUndefined();
+    expect(mocks.writes).toBe(0);
+  });
+  it("reuses the original device without writing another enrollment",async()=>{
+    const original=await existingSharingDevice(mocks.uid);
+    expect((await enrollCareDevice(mocks.uid)).keyId).toBe(original?.keyId);
+    expect(mocks.writes).toBe(0);
+  });
 });
 describe("durable approved handoff reconciliation",()=>{
   it("persists before mutation and recovers the original packet after a timeout before commit",async()=>{
