@@ -1,5 +1,17 @@
 # Isolated connected-care recovery checks
 
+## Unfinished referral draft regression (8 November follow-up)
+
+1. Enroll/refresh the synthetic Doctor, open patient A, enter a multiline referral reason, select the receiving facility and set the packet limit to 48. Wait for the encrypted-save status.
+2. Switch to patient B and open its saved copy. Confirm blank referral fields, no preview and the default 32768 limit.
+3. Reload and reopen A's offline copy, then refresh care access. Confirm exact multiline text, destination and 48-byte limit. Creating the oversized packet must fail without losing the draft.
+4. Open A in a second fixture tab. Change the reason in the first tab and wait for its save. Change it in the second tab: it must show a conflict, retain its unsaved text and leave the first tab's stored text intact. Reload the first tab and reopen A to verify the winning value.
+5. Set the limit to 32768 and use the existing Create and approve button. Reload and open A's saved copy: the completed summary remains. Refresh care access: the unfinished form is blank.
+
+All five checks passed in the real in-app browser with synthetic fixtures. Six new automated cases in `care-storage.test.ts` cover draft encryption, isolation, concurrent writes, cleanup and sequential sessions. The real Firebase emulator journey separately checks that failed creation retains a draft and successful creation clears it.
+
+## Completed handoff recovery
+
 Run `node node_modules/vite/bin/vite.js --config tests-care/recovery.config.ts`, then open `http://127.0.0.1:4181/tests-care/recovery-fixture.html` in a test browser. The fixture replaces account, care-network and records-context calls only in this development configuration. It uses the real CarePage, encrypted care storage, device keys, IndexedDB, summary document and BLE panel. It never calls Firebase or requests hardware unless a tester explicitly clicks the hardware connection control. Do not do that for these checks.
 
 1. Enroll/refresh the synthetic Doctor. Choose patient-a and load it.

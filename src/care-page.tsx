@@ -7,7 +7,8 @@ import { printReferralDocument, referralLabels } from "./referral-document";
 import { careHandoffDocument } from "./care-document";
 import { contributionKinds, type CareRole, type CareView, type ContributionKind } from "./care-model";
 import { activateCareFacility, assignCareStaff, careMembership, contributeCare, createCareHandoff, enrollCareDevice, grantCareProfile, listCareFacilities, listCareProfiles, loadCareProfile, receiveCareHandoff, registerCareProfile } from "./care-client";
-import { careReceipts, latestCareHandoff, readCareCopy, savedCareIds } from "./care-storage";
+import { careReceipts, latestCareHandoff, readCareCopy, readCareDraft, savedCareIds } from "./care-storage";
+import { CareDraftSession } from "./care-draft-session";
 import { unbase64 } from "./vault-crypto";
 const blank = (): ReferralFields => ({ ...emptyReferralFields(), ...Object.fromEntries(allReferralFields.map(k => [k, ""])) });
 function Facts({ fields }: { fields: ReferralFields }) {
@@ -40,6 +41,7 @@ function CareAccountPage({ uid, role }: { uid: string; role: string }) {
   const [packet, setPacket] = useState<Uint8Array<ArrayBuffer>>(), [html, setHtml] = useState("");
   const [handoffId, setHandoffId] = useState("");
   const selection = useRef(0);
+  const draftSessions = useRef(new Map<string, CareDraftSession>());
   const [capacity, setCapacity] = useState("32768"), [text, setText] = useState(""), [kind, setKind] = useState<ContributionKind>("clinical-note");
   const [accessCode, setAccessCode] = useState(""), [registration, setRegistration] = useState<{ id: string; code: string }>();
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
@@ -48,9 +50,30 @@ function CareAccountPage({ uid, role }: { uid: string; role: string }) {
     selection.current++;
     setId(next); setView(undefined); setPopup(undefined); setReceipts([]);
     setAccessCode(""); setRegistration(undefined); setFields(blank()); setText("");
-    setDestination(""); setPacket(undefined); setHtml(""); setHandoffId("");
+    setDestination(""); setCapacity("32768"); setPacket(undefined); setHtml(""); setHandoffId("");
     setError(""); setNotice("");
     return selection.current;
+  }
+  useEffect(() => {
+    const sessions = draftSessions.current;
+    const protectUnsaved = (event: BeforeUnloadEvent) => {
+      if ([...sessions.values()].some(session => session.pending > 0 || session.error)) { event.preventDefault(); event.returnValue = ""; }
+    };
+    window.addEventListener("beforeunload", protectUnsaved);
+    return () => window.removeEventListener("beforeunload", protectUnsaved);
+  }, []);
+  function editDraft(nextFields = fields, nextDestination = destination, nextCapacity = capacity) {
+    setFields(nextFields); setDestination(nextDestination); setCapacity(nextCapacity);
+    setPacket(undefined); setHtml(""); setError("");
+    if (!view) return;
+    const session = draftSessions.current.get(view.id), current = selection.current;
+    if (!session) { setError("Load this patient's saved draft before editing."); return; }
+    setNotice("Saving referral draft on this browser…");
+    void session.save({ fields: nextFields, destination: nextDestination, capacity: nextCapacity }).then(() => {
+      if (current === selection.current && session.pending === 0) { setError(""); setNotice("Referral draft saved encrypted on this browser. Review and approve it to create a handoff."); }
+    }).catch(e => {
+      if (current === selection.current) { setNotice(""); setError(`Draft not saved: ${e instanceof Error ? e.message : "Storage is unavailable."} Keep this page open to preserve your edits.`); }
+    });
   }
   useEffect(() => {
     let live = true;
@@ -79,18 +102,24 @@ function CareAccountPage({ uid, role }: { uid: string; role: string }) {
   }
   async function open(selected = id, offline = false) {
     const code = accessCode || undefined, current = selectPatient(selected);
+    const previousSession = draftSessions.current.get(selected);
+    await previousSession?.wait();
     const next = offline ? await readCareCopy(uid, selected) : await loadCareProfile(uid, selected, code);
     if (current !== selection.current) return;
     if (!next) throw Error("No local copy.");
     setView(next);
-    const [received, saved] = await Promise.all([careReceipts(uid, selected), latestCareHandoff(uid, selected)]);
+    const [received, saved, storedDraft] = await Promise.all([careReceipts(uid, selected), latestCareHandoff(uid, selected), previousSession?.error ? Promise.resolve(previousSession.latest) : readCareDraft(uid, selected)]);
     if (current !== selection.current) return;
     setReceipts(received);
-    if (saved) {
+    const draft = storedDraft?.cleared ? undefined : storedDraft;
+    draftSessions.current.set(selected, previousSession?.error ? previousSession : new CareDraftSession(uid, selected, storedDraft));
+    if (draft) { setFields(draft.fields); setDestination(draft.destination); setCapacity(draft.capacity); }
+    if (previousSession?.error) setError(`Unsaved edits restored from this open tab: ${previousSession.error}`);
+    if (saved && !draft) {
       setPacket(unbase64(saved.packet)); setHandoffId(saved.id);
       setHtml(careHandoffDocument({ id: saved.caseId, profile: saved.profile }, saved.fields, saved.id, saved.actorName, saved.sourceUid, saved.recordedAt));
     }
-    setNotice((next.snapshotOnly ? "Showing the handoff's basic snapshot. Full profile not loaded." : "Saved profile and timestamped contributions loaded. Original files remain on their source device.") + (saved ? " Original completed handoff restored from encrypted storage on this browser. Its details and packet are unchanged; delivery has not been confirmed." : ""));
+    setNotice((next.snapshotOnly ? "Showing the handoff's basic snapshot. Full profile not loaded." : "Saved profile and timestamped contributions loaded. Original files remain on their source device.") + (draft ? " Unapproved referral draft restored. Refresh care access to edit if needed; review and approve explicitly before sending." : saved ? " Original completed handoff restored from encrypted storage on this browser. Its details and packet are unchanged; delivery has not been confirmed." : ""));
   }
   useEffect(() => {
     // A scan is immediately retained. Reconnection fetches the authoritative
@@ -126,7 +155,7 @@ function CareAccountPage({ uid, role }: { uid: string; role: string }) {
       <button className="button primary" disabled={busy || !localId} onClick={() => void act(async () => {
         const patient = vault?.data?.patients.find(p => p.id === localId); if (!patient) throw Error("Open the saved local profile first.");
         const result = await registerCareProfile(uid, { name: patient.name, birthDate: patient.birthDate, sourceLocalId: patient.id, sourceUid: uid, ...(patient.profile ? { details: patient.profile } : {}), history: patient.history });
-        selectPatient(result.id); setRegistration(result); setView(result.view); setIds(current => [...new Set([...current, result.id])]); setNotice("Connected profile registered. Save the Mother credentials now; they are not placed in the handoff.");
+        selectPatient(result.id); draftSessions.current.set(result.id, new CareDraftSession(uid, result.id)); setRegistration(result); setView(result.view); setIds(current => [...new Set([...current, result.id])]); setNotice("Connected profile registered. Save the Mother credentials now; they are not placed in the handoff.");
       })}>Register linked profile and Mother access</button>
       {registration && <div className="notice"><strong>Save these Mother credentials now</strong><p>Patient ID: <span data-testid="mother-patient-id">{registration.id}</span></p><p>Access code: <span data-testid="mother-access-code">{registration.code}</span></p><p>The code is shown for this session only. It never grants a staff role.</p></div>}
     </section>}
@@ -159,12 +188,16 @@ function CareAccountPage({ uid, role }: { uid: string; role: string }) {
       {staff?.role === "doctor" && !view.snapshotOnly && <section aria-label="Manual care handoff" className="record-form"><h3>Create referral handoff</h3>
         <p>Manually enter the details you intend to hand over. Nothing is inferred from documents or missing values.</p>
         <aside aria-label="Missing handoff details" aria-live="polite" className="notice"><strong>Missing details — advisory only</strong><p>{missingReferralFields(fields).map(k => referralLabels[k]).join("; ") || "Every listed field has an entry; this does not verify accuracy."}</p><p>You can create and send even with missing fields. Unknown values remain “Not recorded”.</p></aside>
-        {allReferralFields.map(key => <label key={key}>{referralLabels[key]}<textarea disabled={busy} value={fields[key] || ""} rows={2} maxLength={8000} onChange={e => { setFields({ ...fields, [key]: e.target.value }); setPacket(undefined); setHtml(""); }} /></label>)}
-        <label>Receiving facility<select disabled={busy} value={destination} onChange={e => { setDestination(e.target.value); setPacket(undefined); setHtml(""); }}><option value="">Select the receiving facility</option>{facilities.filter(f => f.id !== staff.facilityId).map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
-        <label>Handoff packet size limit in bytes<input disabled={busy} type="number" min={1} max={32768} value={capacity} onChange={e => { setCapacity(e.target.value); setPacket(undefined); setHtml(""); }} /></label><p className="small">32,768 is the reference BLE buffer limit. The current PN532 tag has only 48 verified bytes; its full capacity and compact encrypted format are pending. Preparing this packet does not mean it fits your NFC tag. A smaller confirmed limit rejects oversized packets without truncating them.</p>
-        <button className="button primary" disabled={busy || !destination} onClick={() => void act(async () => {
+        {allReferralFields.map(key => <label key={key}>{referralLabels[key]}<textarea disabled={busy || !draftSessions.current.has(view.id)} value={fields[key] || ""} rows={2} maxLength={8000} onChange={e => editDraft({ ...fields, [key]: e.target.value })} /></label>)}
+        <label>Receiving facility<select disabled={busy || !draftSessions.current.has(view.id)} value={destination} onChange={e => editDraft(fields, e.target.value)}><option value="">Select the receiving facility</option>{destination && !facilities.some(f => f.id === destination) && <option value={destination}>Previously selected facility · availability not checked</option>}{facilities.filter(f => f.id !== staff.facilityId).map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
+        <label>Handoff packet size limit in bytes<input disabled={busy || !draftSessions.current.has(view.id)} type="number" min={1} max={32768} value={capacity} onChange={e => editDraft(fields, destination, e.target.value)} /></label><p className="small">32,768 is the reference BLE buffer limit. The current PN532 tag has only 48 verified bytes; its full capacity and compact encrypted format are pending. Preparing this packet does not mean it fits your NFC tag. A smaller confirmed limit rejects oversized packets without truncating them.</p>
+        <button className="button primary" disabled={busy || !destination || !draftSessions.current.has(view.id)} onClick={() => void act(async () => {
           const size = Number(capacity); if (!Number.isInteger(size) || size < 1 || size > 32768) throw Error("Enter a packet limit between 1 and 32768 bytes.");
-          const result = await createCareHandoff(uid, view, destination, fields, size); setPacket(result.packet); setHandoffId(result.id); setHtml(careHandoffDocument(view, result.fields, result.id, result.actorName, uid, result.recordedAt)); setNotice("Doctor-recorded handoff created. Blank details remain unknown. BLE and NFC transfer have not been confirmed. " + (result.savedLocally ? "Original handoff saved encrypted on this browser for reopening." : "The cloud handoff succeeded, but its offline copy could not be saved. Keep this page open to print or transfer it. Creating again would make a separate handoff."));
+          const session = draftSessions.current.get(view.id)!; await session.wait(); if (session.error) throw Error(session.error);
+          const result = await createCareHandoff(uid, view, destination, fields, size);
+          let draftWarning = "";
+          try { await session.complete(); } catch { draftWarning = " A saved draft could not be cleared. Reload before starting another handoff; creating again is not a cleanup retry."; }
+          setPacket(result.packet); setHandoffId(result.id); setHtml(careHandoffDocument(view, result.fields, result.id, result.actorName, uid, result.recordedAt)); setNotice("Doctor-recorded handoff created. Blank details remain unknown. BLE and NFC transfer have not been confirmed. " + (result.savedLocally ? "Original handoff saved encrypted on this browser for reopening." : "The cloud handoff succeeded, but its offline copy could not be saved. Keep this page open to print or transfer it. Creating again would make a separate handoff.") + draftWarning);
         })}>Create and approve handoff with entered details</button>
       </section>}
       {html && <><iframe sandbox="" title="Handoff summary preview" srcDoc={html} style={{ width: "100%", height: 480 }} /><button className="button secondary" disabled={busy} onClick={() => void act(() => printReferralDocument(html))}>Print handoff summary / Save PDF</button></>}

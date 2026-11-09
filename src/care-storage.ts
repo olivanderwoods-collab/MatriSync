@@ -2,7 +2,11 @@ import { accountAuth } from "./auth";
 import { localSharingDevice } from "./sharing-storage";
 import { wrapCare, unwrapCare } from "./care-crypto";
 import type { CareView } from "./care-model";
-import type { ReferralFields } from "./referral-draft";
+import { emptyReferralFields, referralInput, type ReferralFields } from "./referral-draft";
+export type CareHandoffDraft = {
+  version: 1; caseId: string; sourceUid: string; revision: string;
+  fields: ReferralFields; destination: string; capacity: string; updatedAt: string; cleared?: boolean;
+};
 export type SavedCareHandoff = {
   version: 1; id: string; caseId: string; sourceUid: string; recipientUid: string;
   profile: CareView["profile"]; fields: ReferralFields; packet: string;
@@ -96,4 +100,42 @@ export async function careReceipts(uid: string, id: string): Promise<CareView[]>
   const results: CareView[] = [];
   for (const key of keys) results.push(await unwrapCare(uid, await storage<string>("readonly", s => s.get(key))));
   await careAccount(uid); return results;
+}
+function checkDraft(uid: string, caseId: string, value: CareHandoffDraft) {
+  if (!value || value.version !== 1 || value.sourceUid !== uid || value.caseId !== caseId || !/^[a-f0-9-]{36}$/.test(value.revision) || typeof value.destination !== "string" || value.destination.length > 128 || typeof value.capacity !== "string" || value.capacity.length > 10 || !Number.isFinite(Date.parse(value.updatedAt))) throw Error("Saved referral draft identity or format differs.");
+  referralInput(value.fields); // Validate without trimming unfinished input.
+  return value;
+}
+export async function readCareDraft(uid: string, caseId: string): Promise<CareHandoffDraft | undefined> {
+  await careAccount(uid);
+  const sealed = await storage<string | undefined>("readonly", s => s.get([uid, `draft:${caseId}`]));
+  if (!sealed) return;
+  const value = checkDraft(uid, caseId, await unwrapCare(uid, sealed));
+  await careAccount(uid); return value;
+}
+async function changeCareDraft(uid: string, caseId: string, expectedRevision: string | null, next: CareHandoffDraft) {
+  await careAccount(uid);
+  const key = [uid, `draft:${caseId}`];
+  const previous = await storage<string | undefined>("readonly", s => s.get(key));
+  const old = previous ? checkDraft(uid, caseId, await unwrapCare(uid, previous)) : undefined;
+  if ((old?.revision || null) !== expectedRevision) throw Error("This referral draft changed in another tab. Your edits are still on this page; copy them before reloading the saved draft.");
+  const sealed = await wrapCare(checkDraft(uid, caseId, next), await localSharingDevice(uid));
+  await careAccount(uid);
+  const actual = await storage<string | undefined>("readwrite", s => {
+    const request = s.get(key);
+    request.onsuccess = () => { if (request.result === previous) s.put(sealed, key); };
+    return request;
+  });
+  if (actual !== previous) throw Error("This referral draft changed in another tab. Your edits are still on this page; copy them before reloading the saved draft.");
+}
+export async function saveCareDraft(uid: string, value: CareHandoffDraft, expectedRevision: string | null) {
+  if (value.revision === expectedRevision) throw Error("A draft edit requires a new revision.");
+  await changeCareDraft(uid, value.caseId, expectedRevision, value);
+}
+export async function clearCareDraft(uid: string, caseId: string, expectedRevision: string | null) {
+  // Retain an encrypted revision marker so a stale empty tab cannot resurrect
+  // an old draft after another tab completes the handoff.
+  const cleared: CareHandoffDraft = { version: 1, caseId, sourceUid: uid, revision: crypto.randomUUID(), fields: emptyReferralFields(), destination: "", capacity: "32768", updatedAt: new Date().toISOString(), cleared: true };
+  await changeCareDraft(uid, caseId, expectedRevision, cleared);
+  return cleared;
 }

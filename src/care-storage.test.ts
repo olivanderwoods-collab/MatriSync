@@ -1,6 +1,7 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { careReceipts, latestCareHandoff, readCareCopy, savedCareIds, saveCareCopy, saveCareHandoff, saveCareReceipt, type SavedCareHandoff } from "./care-storage";
+import { careReceipts, latestCareHandoff, readCareCopy, savedCareIds, saveCareCopy, saveCareHandoff, saveCareReceipt, readCareDraft, saveCareDraft, clearCareDraft, type CareHandoffDraft, type SavedCareHandoff } from "./care-storage";
+import { CareDraftSession } from "./care-draft-session";
 import { emptyReferralFields } from "./referral-draft";
 import { base64, unbase64 } from "./vault-crypto";
 import { frameHandoff, unframeHandoff } from "./handoff-frame";
@@ -108,5 +109,73 @@ describe("completed connected-care handoff recovery", () => {
     expect(rescanned.verified).toBe(true);
     expect(rescanned.verifiedAt).toBeUndefined();
     expect(rescanned.receivedAt).toBe(legacy.receivedAt);
+  });
+});
+
+function draftFixture() {
+  const f = fixture();
+  const draft: CareHandoffDraft = { version: 1, caseId: f.view.id, sourceUid: f.uid, revision: crypto.randomUUID(), fields: { ...emptyReferralFields(), reason: "  Unfinished synthetic reason\nSecond line  " }, destination: "synthetic-facility", capacity: "", updatedAt: "2026-11-08T12:00:00.000Z" };
+  return { ...f, draft };
+}
+describe("encrypted unfinished care drafts", () => {
+  it("restores exact unfinished input without publishing a handoff or exposing plaintext", async () => {
+    const f = draftFixture(); await saveCareCopy(f.uid, f.view);
+    await saveCareDraft(f.uid, f.draft, null);
+    expect(await readCareDraft(f.uid, f.view.id)).toEqual(f.draft);
+    const sealed = await raw<string>("readonly", s => s.get([f.uid, `draft:${f.view.id}`]));
+    for (const secret of [f.draft.fields.reason, f.draft.destination, f.uid]) expect(sealed).not.toContain(secret);
+    expect(await savedCareIds(f.uid)).toEqual([f.view.id]);
+    expect(await latestCareHandoff(f.uid, f.view.id)).toBeUndefined();
+    expect(await careReceipts(f.uid, f.view.id)).toEqual([]);
+  });
+  it("isolates accounts/patients and rejects a substituted encrypted draft", async () => {
+    const f = draftFixture(); await saveCareDraft(f.uid, f.draft, null);
+    const other = crypto.randomUUID(); expect(await readCareDraft(f.uid, other)).toBeUndefined();
+    const sealed = await raw<string>("readonly", s => s.get([f.uid, `draft:${f.view.id}`]));
+    await raw("readwrite", s => s.put(sealed, [f.uid, `draft:${other}`]));
+    await expect(readCareDraft(f.uid, other)).rejects.toThrow("identity");
+    auth.currentUser.uid = "another-account";
+    expect(await readCareDraft(auth.currentUser.uid, f.view.id)).toBeUndefined();
+    await expect(readCareDraft(f.uid, f.view.id)).rejects.toThrow("Sign in");
+  });
+  it("allows only one competing update and preserves the winning revision", async () => {
+    const f = draftFixture(); await saveCareDraft(f.uid, f.draft, null);
+    const edits = ["First tab", "Second tab"].map(reason => ({ ...f.draft, revision: crypto.randomUUID(), fields: { ...f.draft.fields, reason } }));
+    const results = await Promise.allSettled(edits.map(draft => saveCareDraft(f.uid, draft, f.draft.revision)));
+    expect(results.filter(r => r.status === "fulfilled")).toHaveLength(1);
+    expect(await readCareDraft(f.uid, f.view.id)).toEqual(edits[results.findIndex(r => r.status === "fulfilled")]);
+  });
+  it("clears only the approved revision and prevents stale-tab resurrection", async () => {
+    const f = draftFixture(); await saveCareDraft(f.uid, f.draft, null);
+    const newer = { ...f.draft, revision: crypto.randomUUID(), fields: { ...f.draft.fields, reason: "Newer unapproved draft" } };
+    await saveCareDraft(f.uid, newer, f.draft.revision);
+    await expect(clearCareDraft(f.uid, f.view.id, f.draft.revision)).rejects.toThrow("another tab");
+    expect(await readCareDraft(f.uid, f.view.id)).toEqual(newer);
+    const cleared = await clearCareDraft(f.uid, f.view.id, newer.revision);
+    expect(cleared.cleared).toBe(true); expect(cleared.fields.reason).toBe("");
+    await expect(saveCareDraft(f.uid, { ...f.draft, revision: crypto.randomUUID() }, null)).rejects.toThrow("another tab");
+    await expect(saveCareDraft(f.uid, { ...f.draft, revision: crypto.randomUUID() }, newer.revision)).rejects.toThrow("another tab");
+    const next = new CareDraftSession(f.uid, f.view.id, await readCareDraft(f.uid, f.view.id));
+    expect(next.latest).toBeUndefined();
+    await next.save({ fields: { ...f.draft.fields, reason: "Next intentional draft" }, destination: "", capacity: "32768" });
+    expect((await readCareDraft(f.uid, f.view.id))?.fields.reason).toBe("Next intentional draft");
+  });
+  it("serializes fast edits and completes only after the latest input is durable", async () => {
+    const f = draftFixture(), session = new CareDraftSession(f.uid, f.view.id);
+    await Promise.all(["a", "ab", "abc"].map(reason => session.save({ fields: { ...f.draft.fields, reason }, destination: f.draft.destination, capacity: "32768" })));
+    expect(session.pending).toBe(0); expect(session.error).toBe("");
+    expect((await readCareDraft(f.uid, f.view.id))?.fields.reason).toBe("abc");
+    await session.complete();
+    expect((await readCareDraft(f.uid, f.view.id))?.cleared).toBe(true);
+    expect(session.latest).toBeUndefined();
+  });
+  it("keeps unsaved edits available after a conflict and refuses to clear the other tab's draft", async () => {
+    const f = draftFixture(), session = new CareDraftSession(f.uid, f.view.id);
+    await saveCareDraft(f.uid, f.draft, null);
+    await expect(session.save({ fields: { ...f.draft.fields, reason: "Unsaved local work" }, destination: "", capacity: "32768" })).rejects.toThrow("another tab");
+    expect(session.latest?.fields.reason).toBe("Unsaved local work");
+    expect(session.pending).toBe(0); expect(session.error).toContain("another tab");
+    await expect(session.complete()).rejects.toThrow("another tab");
+    expect(await readCareDraft(f.uid, f.view.id)).toEqual(f.draft);
   });
 });
