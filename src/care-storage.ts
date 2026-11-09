@@ -1,6 +1,6 @@
 import { accountAuth } from "./auth";
 import { localSharingDevice } from "./sharing-storage";
-import { wrapCare, unwrapCare } from "./care-crypto";
+import { wrapCare, unwrapCare, signCare, verifyCare } from "./care-crypto";
 import type { CareView } from "./care-model";
 import { emptyReferralFields, referralInput, type ReferralFields } from "./referral-draft";
 export type CareHandoffDraft = {
@@ -11,6 +11,11 @@ export type SavedCareHandoff = {
   version: 1; id: string; caseId: string; sourceUid: string; recipientUid: string;
   profile: CareView["profile"]; fields: ReferralFields; packet: string;
   actorName: string; recordedAt: string;
+};
+export type PendingCareHandoff = {
+  version: 1; status: "pending" | "confirmed"; handoff: SavedCareHandoff;
+  approvalRevision: string | null; capacity: number; sourceFacility: string;
+  senderKeyId: string; recipientKeyId: string; entryEncrypted: string; grantWrapped: string;
 };
 async function storage<T>(mode: IDBTransactionMode, work: (store: IDBObjectStore) => IDBRequest<T>) {
   const db = await new Promise<IDBDatabase>((resolve, reject) => {
@@ -138,4 +143,59 @@ export async function clearCareDraft(uid: string, caseId: string, expectedRevisi
   const cleared: CareHandoffDraft = { version: 1, caseId, sourceUid: uid, revision: crypto.randomUUID(), fields: emptyReferralFields(), destination: "", capacity: "32768", updatedAt: new Date().toISOString(), cleared: true };
   await changeCareDraft(uid, caseId, expectedRevision, cleared);
   return cleared;
+}
+
+async function decodePending(uid: string, caseId: string, sealed: string): Promise<PendingCareHandoff> {
+  const wrapped = await unwrapCare(uid, sealed);
+  const value = await verifyCare(wrapped.proof, await localSharingDevice(uid)) as PendingCareHandoff;
+  if (JSON.stringify(value) !== JSON.stringify(wrapped.value) || value.version !== 1 || !["pending", "confirmed"].includes(value.status) || value.handoff.sourceUid !== uid || value.handoff.caseId !== caseId || value.handoff.version !== 1 || !/^[a-f0-9-]{36}$/.test(value.handoff.id)) throw Error("Saved approved handoff identity or integrity differs. No retry was sent.");
+  referralInput(value.handoff.fields);
+  await careAccount(uid); return value;
+}
+export async function readPendingCareHandoff(uid: string, caseId: string) {
+  await careAccount(uid);
+  const sealed = await storage<string | undefined>("readonly", s => s.get([uid, `pending:${caseId}`]));
+  return sealed ? decodePending(uid, caseId, sealed) : undefined;
+}
+// An encrypted, signed immutable approval is durably claimed before any cloud
+// write. One account/patient slot serializes competing tabs, including revisions.
+export async function claimPendingCareHandoff(uid: string, value: PendingCareHandoff, previous?: PendingCareHandoff) {
+  await careAccount(uid);
+  const key = [uid, `pending:${value.handoff.caseId}`];
+  const before = await storage<string | undefined>("readonly", s => s.get(key));
+  const old = before ? await decodePending(uid, value.handoff.caseId, before) : undefined;
+  if (old && (old.status === "pending" || old.approvalRevision === value.approvalRevision)) return old;
+  if (JSON.stringify(old) !== JSON.stringify(previous)) throw Error("The approved handoff changed in another tab. Reload this patient before approving again.");
+  const sealed = await wrapCare({ value, proof: await signCare(uid, value) }, await localSharingDevice(uid));
+  await careAccount(uid);
+  const actual = await storage<string | undefined>("readwrite", s => {
+    const request = s.get(key);
+    request.onsuccess = () => { if (request.result === before) s.put(sealed, key); };
+    return request;
+  });
+  if (actual !== before) throw Error("Another tab saved an approved handoff. Reload this patient to check it; no new handoff was sent.");
+  return value;
+}
+export async function confirmPendingCareHandoff(uid: string, value: PendingCareHandoff) {
+  await careAccount(uid);
+  const h = value.handoff, outgoingKey = [uid, `outgoing:${h.caseId}:${h.id}`], pendingKey = [uid, `pending:${h.caseId}`];
+  const before = await storage<string | undefined>("readonly", s => s.get(pendingKey));
+  if (!before) throw Error("Approved handoff recovery state is missing.");
+  const current = await decodePending(uid, h.caseId, before);
+  if (current.handoff.id !== h.id || JSON.stringify(current.handoff) !== JSON.stringify(h)) throw Error("Approved handoff changed in another tab.");
+  const old = await storage<string | undefined>("readonly", s => s.get(outgoingKey));
+  if (old && JSON.stringify(await unwrapCare(uid, old)) !== JSON.stringify(h)) throw Error("The saved completed handoff differs.");
+  const confirmed = { ...value, status: "confirmed" as const };
+  const device = await localSharingDevice(uid);
+  const [saved, pending] = await Promise.all([wrapCare(h, device), wrapCare({ value: confirmed, proof: await signCare(uid, confirmed) }, device)]);
+  await careAccount(uid);
+  const actual = await storage<string | undefined>("readwrite", s => {
+    const request = s.get(pendingKey);
+    request.onsuccess = () => { if (request.result === before) { if (!old) s.add(saved, outgoingKey); s.put(pending, pendingKey); } };
+    return request;
+  });
+  if (actual !== before) {
+    const latest = await readPendingCareHandoff(uid, h.caseId);
+    if (latest?.status !== "confirmed" || JSON.stringify(latest.handoff) !== JSON.stringify(h)) throw Error("Handoff recovery changed in another tab.");
+  }
 }

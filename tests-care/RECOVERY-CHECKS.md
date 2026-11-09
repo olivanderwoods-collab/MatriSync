@@ -1,5 +1,17 @@
 # Isolated connected-care recovery checks
 
+## Pending approval recovery (9 November; browser check still pending)
+
+The updated fixture deliberately fails the first approval after saving the real encrypted pending operation. For either historical creation step below, expect that first failure, then use the same existing button (now **Check / retry approved handoff**) to finish.
+
+1. Create an approval for A and observe the synthetic uncertain-outcome error. Its fields and destination must become read-only.
+2. Reload and open A's saved copy. The same approved fields must return; no automatic submission or completed preview may occur.
+3. Use Check / retry approved handoff. Verify the original ID, recorded time and fields in the completed summary.
+4. Switch to B and then to the other fixture account: A's pending/completed data must not appear.
+5. Repeat the old completed-recovery and draft-conflict checks below, accounting for the new deliberate first-attempt failure.
+
+These new browser steps have **not** passed in this environment: the browser tool reports “Local browser use is disabled in Work settings”. The older browser observations below remain dated historical evidence. Current automated storage/client tests and the real Firebase emulator journey cover failure recovery separately.
+
 ## Unfinished referral draft regression (8 November follow-up)
 
 1. Enroll/refresh the synthetic Doctor, open patient A, enter a multiline referral reason, select the receiving facility and set the packet limit to 48. Wait for the encrypted-save status.

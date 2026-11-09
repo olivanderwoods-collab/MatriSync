@@ -6,11 +6,30 @@ import { doc, getDocFromServer, terminate } from "firebase/firestore";
 import { accountAuth } from "../src/auth";
 import { activateCareFacility, assignCareStaff, careDb, contributeCare, createCareHandoff, enrollCareDevice, grantCareProfile, listCareProfiles, loadCareProfile, motherLoginEmail, receiveCareHandoff, registerCareProfile } from "../src/care-client";
 import { careHash } from "../src/care-crypto";
-import { careReceipts, latestCareHandoff, readCareCopy, readCareDraft } from "../src/care-storage";
+import { careReceipts, latestCareHandoff, readCareCopy, readCareDraft, readPendingCareHandoff } from "../src/care-storage";
 import { CareDraftSession } from "../src/care-draft-session";
 import { emptyReferralFields } from "../src/referral-draft";
 import { unbase64 } from "../src/vault-crypto";
 import type { CareRole, CareView } from "../src/care-model";
+
+// Failure injection surrounds real SDK operations; the server commit, rules,
+// encryption and subsequent reconciliation are all real emulator operations.
+const network = vi.hoisted(() => ({ loseResponse: false, unavailable: false, failBefore: false }));
+vi.mock("firebase/firestore", async importOriginal => {
+  const actual = await importOriginal<typeof import("firebase/firestore")>();
+  return { ...actual,
+    getDocFromServer: async (...args: Parameters<typeof actual.getDocFromServer>) => {
+      if (network.unavailable) throw Object.assign(Error("Injected unavailable reconciliation"), { code: "unavailable" });
+      return actual.getDocFromServer(...args);
+    },
+    runTransaction: async (...args: Parameters<typeof actual.runTransaction>) => {
+      if (network.failBefore) { network.failBefore=false; throw Error("Injected timeout before commit"); }
+      const result = await actual.runTransaction(...args);
+      if (network.loseResponse) { network.loseResponse=false; network.unavailable=true; throw Error("Injected lost commit response"); }
+      return result;
+    },
+  };
+});
 
 const project = "demo-matrisync", run = crypto.randomUUID(), password = "Synthetic-local-test-only-42!";
 type Account = { uid: string; email: string; name: string };
@@ -90,7 +109,19 @@ it("completes the nine-account encrypted care journey with real Auth and Firesto
   expect((await loadCareProfile(sending.doctor.uid, full.id)).entries).toHaveLength(3);
   await expect(createCareHandoff(sending.doctor.uid, full, destination.uid, fields, 48)).rejects.toThrow();
   expect((await readCareDraft(sending.doctor.uid, full.id))?.fields.reason).toBe(fields.reason);
-  const handoff = await createCareHandoff(sending.doctor.uid, full, destination.uid, fields, 32768);
+  network.loseResponse = true;
+  await expect(createCareHandoff(sending.doctor.uid, full, destination.uid, fields, 32768, draft.revision)).rejects.toThrow("completion is not confirmed");
+  const approved = await readPendingCareHandoff(sending.doctor.uid, full.id);
+  expect(approved?.status).toBe("pending");
+  await expect(createCareHandoff(sending.doctor.uid, full, destination.uid, fields, 32768, draft.revision)).rejects.toThrow("completion is not confirmed");
+  network.unavailable = false;
+  const [handoff, simultaneous] = await Promise.all([
+    createCareHandoff(sending.doctor.uid, full, destination.uid, fields, 32768, draft.revision),
+    createCareHandoff(sending.doctor.uid, full, destination.uid, fields, 32768, draft.revision),
+  ]);
+  expect(handoff.id).toBe(approved?.handoff.id); expect(handoff.packet).toEqual(unbase64(approved!.handoff.packet));
+  expect(simultaneous.packet).toEqual(handoff.packet);
+  expect((await loadCareProfile(sending.doctor.uid, full.id)).entries.filter(e => e.id === handoff.id)).toHaveLength(1);
   await draft.complete();
   expect((await readCareDraft(sending.doctor.uid, full.id))?.cleared).toBe(true);
   expect(handoff.savedLocally).toBe(true);
@@ -152,4 +183,28 @@ it("completes the nine-account encrypted care journey with real Auth and Firesto
   expect((await loadCareProfile(sending.nurse.uid, full.id)).profile.name).toBe(profile.name);
   vi.stubGlobal("navigator", { onLine: true });
   await expect(contributeCare(sending.nurse.uid, full, "observation", "Revoked staff draft")).rejects.toThrow("staff account");
+
+  // Competing actual transactions for one saved approval, after a pre-commit
+  // timeout and revocation. Revocation cannot become permission to retry.
+  await login(sending.doctor);
+  const nextDraft = new CareDraftSession(sending.doctor.uid, full.id, await readCareDraft(sending.doctor.uid, full.id));
+  const nextFields = { ...fields, reason: "Second explicitly approved synthetic referral" };
+  await nextDraft.save({ fields: nextFields, destination: destination.uid, capacity: "32768" });
+  network.failBefore=true;
+  const retry = () => createCareHandoff(sending.doctor.uid, full, destination.uid, nextFields, 32768, nextDraft.revision);
+  await expect(retry()).rejects.toThrow("completion is not confirmed");
+  await login(source); await assignCareStaff(source.uid, sending.doctor.uid, sending.doctor.name, "doctor", false);
+  await login(sending.doctor); await expect(retry()).rejects.toThrow("completion is not confirmed");
+  await login(source); await assignCareStaff(source.uid, sending.doctor.uid, sending.doctor.name, "doctor", true);
+  await login(sending.doctor);
+  const competing = await Promise.all([retry(), retry()]);
+  expect(competing[0].packet).toEqual(competing[1].packet);
+  const afterRetry = await loadCareProfile(sending.doctor.uid, full.id);
+  expect(afterRetry.entries).toHaveLength(8);
+  expect(afterRetry.entries.filter(e => e.id === competing[0].id)).toHaveLength(1);
+  await login(source); await assignCareStaff(source.uid, sending.doctor.uid, sending.doctor.name, "doctor", false);
+  await login(sending.doctor);
+  // Authors can still read their exact committed handoff, even though revoked
+  // case access now prevents reading entries or creating another one.
+  expect((await retry()).packet).toEqual(competing[0].packet);
 });

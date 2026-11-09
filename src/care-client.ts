@@ -2,10 +2,10 @@ import { getFirestore, connectFirestoreEmulator, doc, getDocFromServer, getDocsF
 import { localSharingDevice } from "./sharing-storage";
 import type { PublicDevice } from "./sharing-crypto";
 import { careEnabled, checkCareProfile, checkContribution, type CareProfile, type CareRole, type CareEntry, type CareView, type ContributionKind } from "./care-model";
-import { careAccount, readCareCopy, savedCareIds, saveCareCopy, saveCareReceipt, saveCareHandoff } from "./care-storage";
-import { careHash, jsonBytes, newCareKey, openCare, readJson, sealCare, signCare, unwrapCare, verifyCare, wrapCare } from "./care-crypto";
-import { base64, deriveVaultKey, newSalt, seal, unseal } from "./vault-crypto";
-import { frameHandoff, unframeHandoff } from "./handoff-frame";
+import { careAccount, readCareCopy, savedCareIds, saveCareCopy, saveCareReceipt, readCareDraft, readPendingCareHandoff, claimPendingCareHandoff, confirmPendingCareHandoff, type PendingCareHandoff } from "./care-storage";
+import { careHash, jsonBytes, newCareKey, openCare, readJson, sealCare, signCare, unwrapCare, verifyCare, wrapCare, wrapCareBytes, unwrapCareBytes } from "./care-crypto";
+import { base64, unbase64, deriveVaultKey, newSalt, seal, unseal } from "./vault-crypto";
+import { compactCarePayload, compactCareWrapper, compactCarePacket, readCarePacket, expandCareWrapper, expandCarePayload } from "./care-handoff-codec";
 import { referralInput, type ReferralFields } from "./referral-draft";
 let db: Firestore | undefined;
 export type CareStaff = { facilityId: string; name: string; role: CareRole; enabled: boolean };
@@ -160,38 +160,114 @@ export async function contributeCare(uid: string, view: CareView, kind: Contribu
   await setDoc(doc(await careDb(uid), "careCases", view.id, "entries", id), { actorUid: uid, actorName: staff.name, role: staff.role, kind, encrypted, createdAt: serverTimestamp() });
   return { id, recordedAt, actorName: staff.name, role: staff.role };
 }
-export async function createCareHandoff(uid: string, view: CareView, recipientUid: string, fields: ReferralFields, capacity: number) {
+export async function createCareHandoff(uid: string, view: CareView, recipientUid: string, fields: ReferralFields, capacity: number, approvalRevision?: string | null) {
+  await careAccount(uid);
+  let pending = await readPendingCareHandoff(uid, view.id);
+  const draft = await readCareDraft(uid, view.id);
+  const revision = approvalRevision === undefined ? (pending?.status === "pending" ? pending.approvalRevision : draft?.revision || null) : approvalRevision;
+  const clean = referralInput(fields);
+  if (pending?.status === "pending" || (pending && (pending.approvalRevision === revision || !draft || draft.cleared))) {
+    if (pending.capacity !== capacity || pending.handoff.recipientUid !== recipientUid || JSON.stringify(pending.handoff.fields) !== JSON.stringify(clean)) throw Error("A saved approval has different details. Reload this patient and check the original approved handoff before creating another.");
+    return submitPendingCareHandoff(uid, pending);
+  }
+  if ((draft?.revision || null) !== revision) throw Error("The referral draft changed. Reload before approving it.");
+  if (draft && !draft.cleared && (JSON.stringify(referralInput(draft.fields)) !== JSON.stringify(clean) || draft.destination !== recipientUid || Number(draft.capacity) !== capacity)) throw Error("Save the current referral draft before approving it.");
   const staff = await doctor(uid), database = await careDb(uid), sender = await enrollCareDevice(uid), recipient = await publicCareDevice(uid, recipientUid);
   const facility = await getDocFromServer(doc(database, "careFacilities", recipientUid));
   if (!facility.exists() || !facility.data().enabled || view.snapshotOnly || !view.key) throw Error("Choose an approved receiving facility and load the full profile.");
-  const clean = referralInput(fields), id = crypto.randomUUID(), recordedAt = new Date().toISOString();
+  // A draft revision is the stable operation ID. The initial blank form has a
+  // deterministic account/patient ID too, never a fresh retry UUID.
+  const digest = await careHash(JSON.stringify([uid, view.id, revision]));
+  const id = `${digest.slice(0,8)}-${digest.slice(8,12)}-${digest.slice(12,16)}-${digest.slice(16,20)}-${digest.slice(20,32)}`, recordedAt = new Date().toISOString();
   const { name, birthDate, sourceLocalId, sourceUid } = view.profile;
   const payload = { version: 1, id, caseId: view.id, sourceUid: uid, sourceName: staff.name, sourceFacility: staff.facilityId, recipientUid, recordedAt, profile: { name, birthDate, sourceLocalId, sourceUid }, fields: clean };
-  const signed = await signCare(uid, payload);
-  const ciphertext = await wrapCare({ signed, sender: { encryption: sender.encryption, signing: sender.signing, keyId: sender.keyId } }, recipient);
-  const packet = frameHandoff(jsonBytes({ kind: "care-referral", id, ciphertext }), capacity);
-  // Size checks happen before writes. Blank clinical fields never stop this;
-  // permissions, invalid/corrupt data and physical tag capacity still do.
-  const batch = writeBatch(database);
-  batch.set(doc(database, "careCases", view.id, "entries", id), { actorUid: uid, actorName: staff.name, role: "doctor", kind: "referral", encrypted: await sealCare(view.key, `care-entry:${view.id}:${id}`, { text: "", recordedAt, fields: clean }), createdAt: serverTimestamp() });
-  const grant = doc(database, "careAccess", `${view.id}_${recipientUid}`);
-  if (!(await getDocFromServer(grant)).exists()) batch.set(grant, { caseId: view.id, uid: recipientUid, facilityId: recipientUid, grantedBy: uid, viaNfc: true, wrapped: await wrapCare({ id: view.id, uid: recipientUid, key: view.key }, recipient), createdAt: serverTimestamp() });
-  batch.set(doc(database, "careHandoffs", id), { caseId: view.id, sourceUid: uid, recipientUid, ciphertext, createdAt: serverTimestamp() });
-  await careAccount(uid); await batch.commit();
-  // A local quota/device failure must not turn a committed cloud handoff into
-  // an apparent creation failure and encourage duplicate clinical entries.
-  let savedLocally = false;
+  const signed = await signCare(uid, compactCarePayload(payload));
+  const ciphertext = await wrapCareBytes(await compactCareWrapper(signed, sender), recipient);
+  const packet = compactCarePacket(id, ciphertext, capacity);
+  pending = await claimPendingCareHandoff(uid, {
+    version: 1, status: "pending", approvalRevision: revision, capacity, sourceFacility: staff.facilityId, senderKeyId: sender.keyId, recipientKeyId: recipient.keyId,
+    handoff: { version: 1, id, caseId: view.id, sourceUid: uid, recipientUid, profile: payload.profile, fields: clean, packet: base64(packet), actorName: staff.name, recordedAt },
+    entryEncrypted: await sealCare(view.key, `care-entry:${view.id}:${id}`, { text: "", recordedAt, fields: clean }),
+    grantWrapped: await wrapCare({ id: view.id, uid: recipientUid, key: view.key }, recipient),
+  }, pending);
+  if (pending.approvalRevision !== revision || pending.capacity !== capacity || pending.handoff.recipientUid !== recipientUid || JSON.stringify(pending.handoff.fields) !== JSON.stringify(clean)) throw Error("Another approval is awaiting confirmation. Reload this patient to check it.");
+  return submitPendingCareHandoff(uid, pending);
+}
+
+async function submitPendingCareHandoff(uid: string, pending: PendingCareHandoff) {
+  const h = pending.handoff, database = await careDb(uid), packet = unbase64(h.packet);
+  const envelope = readCarePacket(packet);
+  if (h.sourceUid !== uid || envelope.kind !== "care-referral" || envelope.id !== h.id || typeof envelope.ciphertext !== "string") throw Error("Saved approval packet differs. No retry was sent.");
+  const handoffRef = doc(database, "careHandoffs", h.id), entryRef = doc(database, "careCases", h.caseId, "entries", h.id);
+  const matchesHandoff = (d: Record<string, unknown>) => d.caseId === h.caseId && d.sourceUid === uid && d.recipientUid === h.recipientUid && d.ciphertext === envelope.ciphertext;
+  const matchesEntry = (d: Record<string, unknown>) => d.actorUid === uid && d.actorName === h.actorName && d.role === "doctor" && d.kind === "referral" && d.encrypted === pending.entryEncrypted;
+  async function reconcile() {
+    // A missing handoff get is denied by existing rules. Denial is NOT absence.
+    // Its case entry is readable even when absent by currently authorized users.
+    try {
+      const receipt = await getDocFromServer(handoffRef);
+      if (receipt.exists()) {
+        if (!matchesHandoff(receipt.data())) throw Error("The server handoff differs from this saved approval. No retry was sent.");
+        try {
+          const entry = await getDocFromServer(entryRef);
+          if (!entry.exists() || !matchesEntry(entry.data())) throw Error("The server referral entry differs from this saved approval. No retry was sent.");
+        } catch (error) {
+          // Revocation may remove case access while an author can still read
+          // the exact immutable handoff. That is historical commit evidence,
+          // never authority to append a new entry.
+          if ((error as {code?:string}).code !== "permission-denied") throw error;
+        }
+        return true; // Historical commit evidence remains readable to its author.
+      }
+    } catch (error) {
+      if ((error as {code?:string}).code !== "permission-denied") throw error;
+    }
+    const entry = await getDocFromServer(entryRef);
+    if (entry.exists()) throw Error("A referral entry exists but its matching handoff could not be confirmed. No retry was sent.");
+    return false;
+  }
   try {
-    await saveCareHandoff(uid, { version: 1, id, caseId: view.id, sourceUid: uid, recipientUid, profile: payload.profile, fields: clean, packet: base64(packet), actorName: staff.name, recordedAt });
-    savedLocally = true;
-  } catch { /* Return the confirmed packet with an explicit recovery warning. */ }
-  return { packet, id, recordedAt, fields: clean, actorName: staff.name, savedLocally };
+    if (!await reconcile()) {
+      if (pending.status === "confirmed") throw Error("A previously confirmed handoff is missing from the server. No replacement was created.");
+      await careAccount(uid);
+      await runTransaction(database, async tx => {
+        // Firestore transactions read server state and serialize competing tabs.
+        // Existing records are checked, never updated to make retries succeed.
+        const entry = await tx.get(entryRef);
+        if (entry.exists()) {
+          const receipt = await tx.get(handoffRef);
+          if (!matchesEntry(entry.data()) || !receipt.exists() || !matchesHandoff(receipt.data())) throw Error("The server operation differs from this approval.");
+          return;
+        }
+        const [member, sender, recipient, facility, grant] = await Promise.all([
+          tx.get(doc(database, "careStaff", uid)), tx.get(doc(database, "careDevices", uid)), tx.get(doc(database, "careDevices", h.recipientUid)),
+          tx.get(doc(database, "careFacilities", h.recipientUid)), tx.get(doc(database, "careAccess", `${h.caseId}_${h.recipientUid}`)),
+        ]);
+        if (!member.exists() || !member.data().enabled || member.data().role !== "doctor" || member.data().facilityId !== pending.sourceFacility || member.data().name !== h.actorName) throw Error("The original Doctor assignment changed. No new submission was made.");
+        if (!sender.exists() || sender.data().keyId !== pending.senderKeyId || !recipient.exists() || recipient.data().keyId !== pending.recipientKeyId) throw Error("A device identity changed. The saved approval cannot be sent to a different device.");
+        if (!facility.exists() || !facility.data().enabled) throw Error("The receiving facility is no longer active.");
+        await careAccount(uid);
+        tx.set(entryRef, { actorUid: uid, actorName: h.actorName, role: "doctor", kind: "referral", encrypted: pending.entryEncrypted, createdAt: serverTimestamp() });
+        if (!grant.exists()) tx.set(doc(database, "careAccess", `${h.caseId}_${h.recipientUid}`), { caseId: h.caseId, uid: h.recipientUid, facilityId: h.recipientUid, grantedBy: uid, viaNfc: true, wrapped: pending.grantWrapped, createdAt: serverTimestamp() });
+        tx.set(handoffRef, { caseId: h.caseId, sourceUid: uid, recipientUid: h.recipientUid, ciphertext: envelope.ciphertext, createdAt: serverTimestamp() });
+      });
+    }
+  } catch (error) {
+    // A lost acknowledgement can follow a successful commit. Only an exact
+    // authoritative match resolves it; unavailable reads keep the approval.
+    let confirmed = false;
+    try { confirmed = await reconcile(); } catch { /* Keep uncertainty durable. */ }
+    if (!confirmed) throw Error(`The approved handoff is saved, but completion is not confirmed. Reload this patient and use the same approval action to check or retry it. ${error instanceof Error ? error.message : "Connection unavailable."}`);
+  }
+  let savedLocally = false;
+  try { await confirmPendingCareHandoff(uid, pending); savedLocally = true; } catch { /* Pending original still retained for reconciliation. */ }
+  return { packet, id: h.id, recordedAt: h.recordedAt, fields: h.fields, actorName: h.actorName, profile: h.profile, approvalRevision: pending.approvalRevision, savedLocally };
 }
 export async function receiveCareHandoff(uid: string, bytes: Uint8Array): Promise<CareView> {
   await careAccount(uid);
-  const packet = readJson(unframeHandoff(bytes));
+  const packet = readCarePacket(bytes);
   if (packet.kind !== "care-referral" || typeof packet.id !== "string" || typeof packet.ciphertext !== "string") throw Error("This is not a supported care handoff.");
-  const wrapper = await unwrapCare(uid, packet.ciphertext), payload = await verifyCare(wrapper.signed, wrapper.sender);
+  const wrapper = await expandCareWrapper(await unwrapCareBytes(uid, packet.ciphertext)), payload = expandCarePayload(await verifyCare(wrapper.signed, wrapper.sender));
   if (payload.version !== 1 || payload.id !== packet.id || payload.recipientUid !== uid || !/^[a-f0-9-]{36}$/.test(payload.caseId)) throw Error("Handoff identity or receiving facility differs.");
   if (!/^[a-f0-9-]{36}$/.test(packet.id) || typeof payload.sourceUid !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(payload.sourceUid) || typeof payload.sourceName !== "string" || !payload.sourceName.trim() || payload.sourceName.length > 120 || typeof payload.recordedAt !== "string" || !/^\d{4}-\d{2}-\d{2}T/.test(payload.recordedAt) || !Number.isFinite(Date.parse(payload.recordedAt))) throw Error("Invalid handoff attribution.");
   const profile = checkCareProfile(payload.profile); const fields = referralInput(payload.fields);

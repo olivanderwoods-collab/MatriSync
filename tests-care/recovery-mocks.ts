@@ -1,6 +1,7 @@
-import { readCareCopy, saveCareCopy, saveCareHandoff, saveCareReceipt } from "../src/care-storage";
+import { readCareCopy, saveCareCopy, saveCareReceipt, readPendingCareHandoff, claimPendingCareHandoff, confirmPendingCareHandoff } from "../src/care-storage";
 import { emptyReferralFields } from "../src/referral-draft";
-import { base64 } from "../src/vault-crypto";
+import { localSharingDevice } from "../src/sharing-storage";
+import { base64, unbase64 } from "../src/vault-crypto";
 import { frameHandoff } from "../src/handoff-frame";
 import type { CareView } from "../src/care-model";
 import type { ReferralFields } from "../src/referral-draft";
@@ -15,12 +16,19 @@ export const loadCareProfile = async (uid: string, id: string) => {
   const view = await readCareCopy(uid, id); if (!view) throw Error("Fixture patient missing");
   return view;
 };
-export async function createCareHandoff(uid: string, view: CareView, recipientUid: string, fields: ReferralFields, capacity: number) {
-  const id = crypto.randomUUID(), recordedAt = new Date().toISOString(), actorName = "Synthetic Doctor";
-  const packet = frameHandoff(new TextEncoder().encode("Synthetic packet for " + id), capacity);
-  await saveCareHandoff(uid, { version: 1, id, caseId: view.id, sourceUid: uid, recipientUid, profile: view.profile, fields, packet: base64(packet), actorName, recordedAt });
-  fixture.creates++; sessionStorage.setItem("fixture-creates", String(fixture.creates));
-  return { packet, id, fields, actorName, recordedAt, savedLocally: true };
+export async function createCareHandoff(uid: string, view: CareView, recipientUid: string, fields: ReferralFields, capacity: number, approvalRevision: string | null) {
+  let pending = await readPendingCareHandoff(uid, view.id);
+  if (!pending || (pending.status === "confirmed" && pending.approvalRevision !== approvalRevision)) {
+    const id = crypto.randomUUID(), recordedAt = new Date().toISOString(), actorName = "Synthetic Doctor";
+    const packet = frameHandoff(new TextEncoder().encode("Synthetic packet for " + id), capacity);
+    const device = await localSharingDevice(uid);
+    pending = await claimPendingCareHandoff(uid, {version:1,status:"pending",approvalRevision,capacity,sourceFacility:"source",senderKeyId:device.keyId,recipientKeyId:"fixture-only",entryEncrypted:"fixture-only",grantWrapped:"fixture-only",handoff:{version:1,id,caseId:view.id,sourceUid:uid,recipientUid,profile:view.profile,fields,packet:base64(packet),actorName,recordedAt}}, pending);
+    fixture.creates++; sessionStorage.setItem("fixture-creates", String(fixture.creates));
+    throw Error("Synthetic uncertain network outcome. Approval saved. Reload this patient and retry the same approval.");
+  }
+  await confirmPendingCareHandoff(uid,pending);
+  const h = pending.handoff;
+  return {packet:unbase64(h.packet),id:h.id,fields:h.fields,actorName:h.actorName,recordedAt:h.recordedAt,profile:h.profile,approvalRevision:pending.approvalRevision,savedLocally:true};
 }
 export async function seed() {
   fixture.creates = Number(sessionStorage.getItem("fixture-creates") || 0);

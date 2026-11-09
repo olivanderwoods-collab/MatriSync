@@ -16,14 +16,20 @@ async function aes(raw: string) {
 export async function sealCare(key: string, context: string, value: unknown) { return JSON.stringify(await seal(await aes(key), jsonBytes(value), context)); }
 export async function openCare(key: string, context: string, value: string) { return readJson(await unseal(await aes(key), JSON.parse(value), context)); }
 export async function wrapCare(value: unknown, recipient: PublicDevice) {
+  return wrapCareBytes(jsonBytes(value), recipient);
+}
+export async function wrapCareBytes(bytes: Uint8Array, recipient: PublicDevice) {
   await checkPublicDevice(recipient);
-  return new CompactEncrypt(jsonBytes(value)).setProtectedHeader({ alg: "ECDH-ES", enc: "A256GCM", typ: "matrisync-care+jwe", kid: recipient.keyId }).encrypt(await importJWK(recipient.encryption, "ECDH-ES"));
+  return new CompactEncrypt(bytes).setProtectedHeader({ alg: "ECDH-ES", enc: "A256GCM", typ: "matrisync-care+jwe", kid: recipient.keyId }).encrypt(await importJWK(recipient.encryption, "ECDH-ES"));
 }
 export async function unwrapCare(uid: string, envelope: string) {
+  return readJson(await unwrapCareBytes(uid, envelope));
+}
+export async function unwrapCareBytes(uid: string, envelope: string) {
   const device = await localSharingDevice(uid);
   const result = await compactDecrypt(envelope, device.decryptKey, { keyManagementAlgorithms: ["ECDH-ES"], contentEncryptionAlgorithms: ["A256GCM"] });
   if (result.protectedHeader.kid !== device.keyId || result.protectedHeader.typ !== "matrisync-care+jwe") throw Error("Handoff belongs to another enrolled device.");
-  return readJson(result.plaintext);
+  return result.plaintext;
 }
 export async function signCare(uid: string, value: unknown) {
   const device = await localSharingDevice(uid);

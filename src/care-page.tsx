@@ -7,7 +7,7 @@ import { printReferralDocument, referralLabels } from "./referral-document";
 import { careHandoffDocument } from "./care-document";
 import { contributionKinds, type CareRole, type CareView, type ContributionKind } from "./care-model";
 import { activateCareFacility, assignCareStaff, careMembership, contributeCare, createCareHandoff, enrollCareDevice, grantCareProfile, listCareFacilities, listCareProfiles, loadCareProfile, receiveCareHandoff, registerCareProfile } from "./care-client";
-import { careReceipts, latestCareHandoff, readCareCopy, readCareDraft, savedCareIds } from "./care-storage";
+import { careReceipts, latestCareHandoff, readCareCopy, readCareDraft, readPendingCareHandoff, type PendingCareHandoff, savedCareIds } from "./care-storage";
 import { CareDraftSession } from "./care-draft-session";
 import { unbase64 } from "./vault-crypto";
 const blank = (): ReferralFields => ({ ...emptyReferralFields(), ...Object.fromEntries(allReferralFields.map(k => [k, ""])) });
@@ -41,13 +41,14 @@ function CareAccountPage({ uid, role }: { uid: string; role: string }) {
   const [packet, setPacket] = useState<Uint8Array<ArrayBuffer>>(), [html, setHtml] = useState("");
   const [handoffId, setHandoffId] = useState("");
   const selection = useRef(0);
+  const [pendingApproval, setPendingApproval] = useState<PendingCareHandoff>();
   const draftSessions = useRef(new Map<string, CareDraftSession>());
   const [capacity, setCapacity] = useState("32768"), [text, setText] = useState(""), [kind, setKind] = useState<ContributionKind>("clinical-note");
   const [accessCode, setAccessCode] = useState(""), [registration, setRegistration] = useState<{ id: string; code: string }>();
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const staff = membership.staff?.enabled ? membership.staff : undefined;
   function selectPatient(next: string) {
-    selection.current++;
+    selection.current++; setPendingApproval(undefined);
     setId(next); setView(undefined); setPopup(undefined); setReceipts([]);
     setAccessCode(""); setRegistration(undefined); setFields(blank()); setText("");
     setDestination(""); setCapacity("32768"); setPacket(undefined); setHtml(""); setHandoffId("");
@@ -108,18 +109,19 @@ function CareAccountPage({ uid, role }: { uid: string; role: string }) {
     if (current !== selection.current) return;
     if (!next) throw Error("No local copy.");
     setView(next);
-    const [received, saved, storedDraft] = await Promise.all([careReceipts(uid, selected), latestCareHandoff(uid, selected), previousSession?.error ? Promise.resolve(previousSession.latest) : readCareDraft(uid, selected)]);
+    const [received, saved, storedDraft, approved] = await Promise.all([careReceipts(uid, selected), latestCareHandoff(uid, selected), previousSession?.error ? Promise.resolve(previousSession.latest) : readCareDraft(uid, selected), readPendingCareHandoff(uid, selected)]);
     if (current !== selection.current) return;
     setReceipts(received);
     const draft = storedDraft?.cleared ? undefined : storedDraft;
     draftSessions.current.set(selected, previousSession?.error ? previousSession : new CareDraftSession(uid, selected, storedDraft));
     if (draft) { setFields(draft.fields); setDestination(draft.destination); setCapacity(draft.capacity); }
     if (previousSession?.error) setError(`Unsaved edits restored from this open tab: ${previousSession.error}`);
-    if (saved && !draft) {
+    if (approved?.status === "pending") { setPendingApproval(approved); setFields(approved.handoff.fields); setDestination(approved.handoff.recipientUid); setCapacity(String(approved.capacity)); }
+    if (saved && !draft && approved?.status !== "pending") {
       setPacket(unbase64(saved.packet)); setHandoffId(saved.id);
       setHtml(careHandoffDocument({ id: saved.caseId, profile: saved.profile }, saved.fields, saved.id, saved.actorName, saved.sourceUid, saved.recordedAt));
     }
-    setNotice((next.snapshotOnly ? "Showing the handoff's basic snapshot. Full profile not loaded." : "Saved profile and timestamped contributions loaded. Original files remain on their source device.") + (draft ? " Unapproved referral draft restored. Refresh care access to edit if needed; review and approve explicitly before sending." : saved ? " Original completed handoff restored from encrypted storage on this browser. Its details and packet are unchanged; delivery has not been confirmed." : ""));
+    setNotice((next.snapshotOnly ? "Showing the handoff's basic snapshot. Full profile not loaded." : "Saved profile and timestamped contributions loaded. Original files remain on their source device.") + (approved?.status === "pending" ? " An approved handoff is awaiting confirmation. Its original details are locked; use the approval action to check or retry it. Nothing is sent automatically. Any newer draft remains saved separately." : draft ? " Unapproved referral draft restored. Refresh care access to edit if needed; review and approve explicitly before sending." : saved ? " Original completed handoff restored from encrypted storage on this browser. Its details and packet are unchanged; delivery has not been confirmed." : ""));
   }
   useEffect(() => {
     // A scan is immediately retained. Reconnection fetches the authoritative
@@ -185,20 +187,22 @@ function CareAccountPage({ uid, role }: { uid: string; role: string }) {
         <h3>Add your contribution</h3><label>Contribution type<select value={kind} onChange={e => setKind(e.target.value as ContributionKind)}>{contributionKinds[staff.role].filter(k => k !== "referral").map(k => <option key={k} value={k}>{k}</option>)}</select></label>
         <label>Recorded contribution<textarea value={text} onChange={e => setText(e.target.value)} maxLength={8000} rows={5} required /></label><button className="button primary" disabled={busy}>Save contribution</button>
       </form>}
-      {staff?.role === "doctor" && !view.snapshotOnly && <section aria-label="Manual care handoff" className="record-form"><h3>Create referral handoff</h3>
+      {(staff?.role === "doctor" || (role === "professional" && pendingApproval)) && !view.snapshotOnly && <section aria-label="Manual care handoff" className="record-form"><h3>Create referral handoff</h3>
         <p>Manually enter the details you intend to hand over. Nothing is inferred from documents or missing values.</p>
         <aside aria-label="Missing handoff details" aria-live="polite" className="notice"><strong>Missing details — advisory only</strong><p>{missingReferralFields(fields).map(k => referralLabels[k]).join("; ") || "Every listed field has an entry; this does not verify accuracy."}</p><p>You can create and send even with missing fields. Unknown values remain “Not recorded”.</p></aside>
-        {allReferralFields.map(key => <label key={key}>{referralLabels[key]}<textarea disabled={busy || !draftSessions.current.has(view.id)} value={fields[key] || ""} rows={2} maxLength={8000} onChange={e => editDraft({ ...fields, [key]: e.target.value })} /></label>)}
-        <label>Receiving facility<select disabled={busy || !draftSessions.current.has(view.id)} value={destination} onChange={e => editDraft(fields, e.target.value)}><option value="">Select the receiving facility</option>{destination && !facilities.some(f => f.id === destination) && <option value={destination}>Previously selected facility · availability not checked</option>}{facilities.filter(f => f.id !== staff.facilityId).map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
-        <label>Handoff packet size limit in bytes<input disabled={busy || !draftSessions.current.has(view.id)} type="number" min={1} max={32768} value={capacity} onChange={e => editDraft(fields, destination, e.target.value)} /></label><p className="small">32,768 is the reference BLE buffer limit. The current PN532 tag has only 48 verified bytes; its full capacity and compact encrypted format are pending. Preparing this packet does not mean it fits your NFC tag. A smaller confirmed limit rejects oversized packets without truncating them.</p>
+        {allReferralFields.map(key => <label key={key}>{referralLabels[key]}<textarea disabled={busy || !!pendingApproval || !draftSessions.current.has(view.id)} value={fields[key] || ""} rows={2} maxLength={8000} onChange={e => editDraft({ ...fields, [key]: e.target.value })} /></label>)}
+        <label>Receiving facility<select disabled={busy || !!pendingApproval || !draftSessions.current.has(view.id)} value={destination} onChange={e => editDraft(fields, e.target.value)}><option value="">Select the receiving facility</option>{destination && !facilities.some(f => f.id === destination) && <option value={destination}>Previously selected facility · availability not checked</option>}{facilities.filter(f => f.id !== staff?.facilityId).map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
+        <label>Handoff packet size limit in bytes<input disabled={busy || !!pendingApproval || !draftSessions.current.has(view.id)} type="number" min={1} max={32768} value={capacity} onChange={e => editDraft(fields, destination, e.target.value)} /></label><p className="small">32,768 is the reference BLE buffer limit. The current PN532 tag has only 48 verified bytes; its full capacity is still unconfirmed. The handoff uses lossless compact encoding; its final byte count must fit the verified usable tag capacity. A smaller confirmed limit rejects oversized packets without truncating them.</p>
         <button className="button primary" disabled={busy || !destination || !draftSessions.current.has(view.id)} onClick={() => void act(async () => {
           const size = Number(capacity); if (!Number.isInteger(size) || size < 1 || size > 32768) throw Error("Enter a packet limit between 1 and 32768 bytes.");
           const session = draftSessions.current.get(view.id)!; await session.wait(); if (session.error) throw Error(session.error);
-          const result = await createCareHandoff(uid, view, destination, fields, size);
+          let result;
+          try { result = await createCareHandoff(uid, view, destination, fields, size, pendingApproval ? pendingApproval.approvalRevision : session.revision); }
+          finally { try { const pending = await readPendingCareHandoff(uid, view.id); setPendingApproval(pending?.status === "pending" ? pending : undefined); } catch { /* Do not mask a confirmed cloud result with a local read failure. */ } }
           let draftWarning = "";
-          try { await session.complete(); } catch { draftWarning = " A saved draft could not be cleared. Reload before starting another handoff; creating again is not a cleanup retry."; }
-          setPacket(result.packet); setHandoffId(result.id); setHtml(careHandoffDocument(view, result.fields, result.id, result.actorName, uid, result.recordedAt)); setNotice("Doctor-recorded handoff created. Blank details remain unknown. BLE and NFC transfer have not been confirmed. " + (result.savedLocally ? "Original handoff saved encrypted on this browser for reopening." : "The cloud handoff succeeded, but its offline copy could not be saved. Keep this page open to print or transfer it. Creating again would make a separate handoff.") + draftWarning);
-        })}>Create and approve handoff with entered details</button>
+          try { if (!result.savedLocally || session.revision !== result.approvalRevision) throw Error("Preserve draft until recovery completes"); await session.complete(); } catch { draftWarning = " The saved draft was retained because cleanup could not finish or a newer draft exists. Reload to recover the original approval and review the retained draft."; }
+          setPacket(result.packet); setHandoffId(result.id); setHtml(careHandoffDocument({ id: view.id, profile: result.profile }, result.fields, result.id, result.actorName, uid, result.recordedAt)); setNotice("Doctor-recorded handoff created. Blank details remain unknown. BLE and NFC transfer have not been confirmed. " + (result.savedLocally ? "Original handoff saved encrypted on this browser for reopening." : "The cloud handoff succeeded, but its offline copy could not be saved. Keep this page open to print or transfer it. The saved approval remains available; use the same action to confirm and recover the original.") + draftWarning);
+        })}>{pendingApproval ? "Check / retry approved handoff" : "Create and approve handoff with entered details"}</button>
       </section>}
       {html && <><iframe sandbox="" title="Handoff summary preview" srcDoc={html} style={{ width: "100%", height: 480 }} /><button className="button secondary" disabled={busy} onClick={() => void act(() => printReferralDocument(html))}>Print handoff summary / Save PDF</button></>}
       {packet && staff?.role === "doctor" && <BleHandoffPanel key={handoffId} packet={packet} />}
