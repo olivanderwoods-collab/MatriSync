@@ -1,6 +1,6 @@
 # Isolated connected-care recovery checks
 
-## Pending approval recovery (9 November; browser check still pending)
+## Pending approval recovery (completed in the browser, 10 November)
 
 The updated fixture deliberately fails the first approval after saving the real encrypted pending operation. For either historical creation step below, expect that first failure, then use the same existing button (now **Check / retry approved handoff**) to finish.
 
@@ -10,7 +10,11 @@ The updated fixture deliberately fails the first approval after saving the real 
 4. Switch to B and then to the other fixture account: A's pending/completed data must not appear.
 5. Repeat the old completed-recovery and draft-conflict checks below, accounting for the new deliberate first-attempt failure.
 
-These new browser steps have **not** passed in this environment: the browser tool reports “Local browser use is disabled in Work settings”. The older browser observations below remain dated historical evidence. Current automated storage/client tests and the real Firebase emulator journey cover failure recovery separately.
+These checks now passed in the real in-app browser on 10 November. See `docs/RECOVERY-BROWSER-2026-11-10.md` for the exact results and the completed-summary/newer-draft display bug found and fixed. The fixture uses mocked network calls; the November 9 real emulator journey remains separate evidence. Use **Inspect saved test state** to compare operation IDs, timestamps, packet hashes and saved draft revisions through the fixture UI.
+
+## Newer-draft regression (10 November)
+
+Open A in a second tab before approval. Approve in the first tab (the deliberate first-attempt failure saves a pending operation); save a newer draft in the second tab. Reload the first tab and recover the original approval explicitly. Confirm identical operation ID/time/packet hash and unchanged newer-draft revision. Reload again: **Last completed handoff** must show the identical original summary while the newer draft remains editable after refreshing access. Neither restoration automatically submits anything.
 
 ## Unfinished referral draft regression (8 November follow-up)
 

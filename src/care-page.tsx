@@ -120,7 +120,7 @@ function CareAccountPage({ uid, role, section }: { uid: string; role: string; se
     if (draft) { setFields(draft.fields); setDestination(draft.destination); setCapacity(draft.capacity); }
     if (previousSession?.error) setError(`Unsaved edits restored from this open tab: ${previousSession.error}`);
     if (approved?.status === "pending") { setPendingApproval(approved); setFields(approved.handoff.fields); setDestination(approved.handoff.recipientUid); setCapacity(String(approved.capacity)); }
-    if (saved && !draft && approved?.status !== "pending") {
+    if (saved && approved?.status !== "pending") {
       setPacket(unbase64(saved.packet)); setHandoffId(saved.id);
       setHtml(careHandoffDocument({ id: saved.caseId, profile: saved.profile }, saved.fields, saved.id, saved.actorName, saved.sourceUid, saved.recordedAt));
     }
@@ -207,7 +207,7 @@ function CareAccountPage({ uid, role, section }: { uid: string; role: string; se
           setPacket(result.packet); setHandoffId(result.id); setHtml(careHandoffDocument({ id: view.id, profile: result.profile }, result.fields, result.id, result.actorName, uid, result.recordedAt)); setNotice("Doctor-recorded handoff created. Blank details remain unknown. BLE and NFC transfer have not been confirmed. " + (result.savedLocally ? "Original handoff saved encrypted on this browser for reopening." : "The cloud handoff succeeded, but its offline copy could not be saved. Keep this page open to print or transfer it. The saved approval remains available; use the same action to confirm and recover the original.") + draftWarning);
         })}>{pendingApproval ? "Check / retry approved handoff" : "Create and approve handoff with entered details"}</button>
       </section>}
-      {role !== "mother" && html && <><iframe sandbox="" title="Handoff summary preview" srcDoc={html} style={{ width: "100%", height: 480 }} /><button className="button secondary" disabled={busy} onClick={() => void act(() => printReferralDocument(html))}>Print handoff summary / Save PDF</button></>}
+      {role !== "mother" && html && <><h3>Last completed handoff</h3><p className="record-id">Handoff ID: {handoffId}</p><p>This summary keeps the originally approved details. Any newer draft above is separate and is not included.</p><iframe sandbox="" title="Handoff summary preview" srcDoc={html} style={{ width: "100%", height: 480 }} /><button className="button secondary" disabled={busy} onClick={() => void act(() => printReferralDocument(html))}>Print handoff summary / Save PDF</button></>}
       {packet && staff?.role === "doctor" && <BleHandoffPanel key={handoffId} packet={packet} />}
     </section>}
     {role === "mother" && (section==="prescriptions"||section==="reports") && <MotherLocalCopies kind={section}/>}
