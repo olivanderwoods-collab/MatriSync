@@ -1,5 +1,5 @@
 import { CompactEncrypt, CompactSign, compactDecrypt, compactVerify, importJWK } from "jose";
-import { localSharingDevice } from "./sharing-storage";
+import { existingSharingDevice, localSharingDevice } from "./sharing-storage";
 import { checkPublicDevice, type PublicDevice } from "./sharing-crypto";
 import { base64, unbase64, seal, unseal } from "./vault-crypto";
 export const jsonBytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
@@ -26,7 +26,9 @@ export async function unwrapCare(uid: string, envelope: string) {
   return readJson(await unwrapCareBytes(uid, envelope));
 }
 export async function unwrapCareBytes(uid: string, envelope: string) {
-  const device = await localSharingDevice(uid);
+  // Reading existing ciphertext must never enroll a replacement identity.
+  const device = await existingSharingDevice(uid);
+  if (!device) throw Error("The saved device key is missing. Use the original browser with its saved data. No replacement key was created.");
   const result = await compactDecrypt(envelope, device.decryptKey, { keyManagementAlgorithms: ["ECDH-ES"], contentEncryptionAlgorithms: ["A256GCM"] });
   if (result.protectedHeader.kid !== device.keyId || result.protectedHeader.typ !== "matrisync-care+jwe") throw Error("Handoff belongs to another enrolled device.");
   return result.plaintext;

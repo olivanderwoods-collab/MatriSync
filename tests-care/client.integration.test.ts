@@ -264,6 +264,8 @@ it("preserves enrolled identities and encrypted records when browser keys are mi
     // A successful password login is not possession of the enrolled private key.
     await signOut(auth);await login(people.doctor);
     await expect(enrollCareDevice(uid)).rejects.toThrow("Use the original browser");
+    await expect(readCareCopy(uid,view.id)).rejects.toThrow("saved device key is missing");
+    await expect(loadCareProfile(uid,view.id)).rejects.toThrow("saved device key is missing");
     expect(await existingSharingDevice(uid)).toBeUndefined();
     expect((await getDocFromServer(ref)).data()).toEqual(enrolled);
     const replacement=await localSharingDevice(uid);

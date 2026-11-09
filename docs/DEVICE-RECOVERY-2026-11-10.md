@@ -1,5 +1,7 @@
 # Device identity preservation and recovery design
 
+Later 10 November continuation: read `DEVICE-MIGRATION-SPEC-2026-11-10.md` first. Missing-key care decryption now also avoids identity generation. That document specifies Candidate A migration and records newer tests/deployment; the evidence below remains the earlier enrollment-safeguard checkpoint.
+
 Development after the Health-a-thon 2026 submission date. Continue the original repository on main and preserve https://matrisync-c9de7.web.app.
 
 ## Implemented in this slice
