@@ -6,6 +6,7 @@ for (const file of assets.filter((name) => name.endsWith(".js"))) {
   const text = await readFile(`dist/assets/${file}`, "utf8");
   if (
     text.includes("matrisync-identity-command-v1") ||
+    text.includes("matrisync-isolated-recovery-contract-v1") ||
     text.includes("code-verifier-only") ||
     text.includes("matrisync-sharing-outbox-v1") ||
     text.includes("Invalid encrypted attachment manifest") ||

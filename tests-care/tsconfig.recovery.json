@@ -1,0 +1,4 @@
+{
+  "extends": "../tsconfig.json",
+  "include": ["recovery-verifier.ts", "recovery-verifier.test.ts", "../vitest.recovery.config.ts"]
+}

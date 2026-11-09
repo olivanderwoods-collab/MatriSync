@@ -1,5 +1,7 @@
 # Candidate A: original-browser recovery specification
 
+Later 10 November implementation checkpoint: `RECOVERY-VERIFIER-2026-11-10.md` records the isolated in-memory approval verifier and its actual tests. Production recovery and record transfer remain unavailable; the migration specification below is still the target beyond that limited model.
+
 Development after the Health-a-thon 2026 submission date. This is the next implementation specification for the existing app, not a deployed recovery service. It extends `DEVICE-RECOVERY-2026-11-10.md`. No new public controls, collections, rules, paid services or privileges are enabled by this document.
 
 ## Scope and authority
