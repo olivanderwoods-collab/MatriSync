@@ -13,20 +13,20 @@ describe("approved profile-only companion context", () => {
   it("rejects calling the user by the companion's name without blocking the companion introduction", () => {
     const profile = { name: "Mira Sen" };
     for (const text of [
-      "I'm here to support you, MatriSathi.",
-      "MatriSathi, tell me about your day.",
-      "Dear MatriSathi, hello.",
+      "I'm here to support you, RUHI.",
+      "RUHI, tell me about your day.",
+      "Dear RUHI, hello.",
     ])
       expect(confusesCompanionWithUser(text, profile)).toBe(true);
     expect(
       confusesCompanionWithUser(
-        "I'm MatriSathi, your offline AI companion.",
+        "I'm RUHI, your offline AI companion.",
         profile,
       ),
     ).toBe(false);
     expect(confusesCompanionWithUser("Hello, Mira!", profile)).toBe(false);
     expect(
-      confusesCompanionWithUser("MatriSathi, how are you?", { name: "MatriSathi Sen" }),
+      confusesCompanionWithUser("RUHI, how are you?", { name: "RUHI Sen" }),
     ).toBe(false);
   });
   it("addresses the saved first name without inventing one or repeating it", () => {
@@ -81,7 +81,7 @@ describe("approved profile-only companion context", () => {
     expect(conversationInstructions(context)).toContain(
       "exact read-back",
     );
-    expect(BEHAVIOR_VERSION).toBe("2026-11-07-connected-care-readback");
+    expect(BEHAVIOR_VERSION).toBe("2026-11-09-ruhi-identity");
   });
   it("refuses medicine recommendations without naming one and defers report answers", () => {
     for (const message of [

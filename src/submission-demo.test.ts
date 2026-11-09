@@ -20,7 +20,7 @@ it("builds current-data PDF and compact preview without asserting encryption, NF
  writeFileSync(".local-tools/ophelia-handoff-check.pdf",demoHandoffPdf());
 });
 it("provides labelled-script content without generative requirements and routes urgent language to human care",()=>{
- expect(scriptedCompanion("Hello",true)).toContain("MatriSathi");
+ expect(scriptedCompanion("Hello",true)).toContain("RUHI");
  expect(scriptedCompanion("Show my prescriptions",true)).toContain("six records");
  expect(scriptedCompanion("Show my reports",true)).toContain("not available");
  expect(scriptedCompanion("What is my name?",true)).toContain("Ophelia Frost");

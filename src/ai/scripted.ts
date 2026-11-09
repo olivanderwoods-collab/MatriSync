@@ -16,7 +16,7 @@ export function scriptedCompanion(input:string,demo:boolean):string|undefined {
     };
     if (facts[text]) return `DEMO / NOT FOR CLINICAL USE. ${facts[text]}`;
   }
-  if (/^(hi|hello|hey|good morning|good evening)( matrisathi)?$/.test(text)) return "Hello! I'm MatriSathi. I'm here to help you find your records and talk about your day. How are you feeling?";
+  if (/^(hi|hello|hey|good morning|good evening)( ruhi)?$/.test(text)) return "Hello! I'm RUHI. I'm here to help you find your records and talk about your day. How are you feeling?";
   if (/^(how are you|how are you doing|hello, how are you)$/.test(text)) return "I'm ready to help. I don't have feelings, but I can listen and help you find information in MatriSync. How has your day been?";
   if (/^(what is matrisync|what can you do|help)$/.test(text)) return "MatriSync organizes maternal records and referral handoffs. Open My Health for prescriptions, reports and referral details. I can help you navigate; I cannot diagnose or choose treatment.";
   if (/^(where (are|can i find) my reports|show my reports|find reports)$/.test(text)) return demo?"Open My Health → Reports. The Ophelia Frost demo lists three investigation references, but their original files and results are not available. No findings have been invented.":"Open My Health → Reports to see documents saved on this device. Uploaded originals are not transferred between facilities in this MVP.";

@@ -12,7 +12,7 @@ Live application: https://matrisync-c9de7.web.app
 - Ophelia Frost (`MAT-DEMO-001`) linked to Dr. Olivander Woods (`DOC-DEMO-001`).
 - Six read-only medication records with separate prescription/administration times, a separate pending PRBC request and a chronological 15-event timeline.
 - Referral status from the supplied fictional case; dynamic structured handoff, downloadable two-page PDF, print view and a framed 2,827-byte `.msht` demo package.
-- MatriSathi basic conversations, navigation and exact demo-fact read-back. Scripted replies are explicitly labelled **Not generative AI**. Optional local inference is a separate feature requiring a model download.
+- RUHI in the MatriSathi tab: basic conversations, navigation and exact demo-fact read-back. Scripted replies are explicitly labelled **Not generative AI**. Optional local inference is a separate feature requiring a model download.
 - All three investigation references preserve missing-data labels. The source ultrasound and blood reports for Ophelia are unavailable; no results or administering personnel were invented.
 
 ## Boundaries
