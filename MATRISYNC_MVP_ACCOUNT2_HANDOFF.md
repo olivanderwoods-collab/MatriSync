@@ -8,13 +8,13 @@ Prepared 9 November 2026, Asia/Calcutta. Read this before historical handoffs. T
 | --- | --- |
 | Source and submission repository | https://github.com/olivanderwoods-collab/MatriSync |
 | Continuing branch | `main` |
-| Latest application-code commit | `5062f19bf9543d31ce06ff7b02c06a91e5a158b4` |
-| Application tree at that commit | `d7ed462250f0a1e5050f172bf0cfa610c5f1ed6d` |
-| Application-code commit parent | `1085a62c0064940a8e1cdb73c9b7679bb7e243ae` |
+| Latest application-code commit | `49bae5b4ddcf507b5f41c4ee931c5fcc0eff31e7` |
+| Application tree at that commit | `d11522aab4659587f0702a4eeace1880285109de` |
+| Application-code commit parent | `86c3479cb5d5ff509fbc517471af7b2d55d47a94` |
 | Required live URL | **https://matrisync-c9de7.web.app** |
 | Firebase project and Hosting site | `matrisync-c9de7` |
-| Deployed shell cache | `6f27aa746ef9` |
-| Deployed main bundle | `assets/index-BLWSUBon.js` |
+| Deployed shell cache | `329f14806987` |
+| Deployed main bundle | `assets/index-fP-Y8al-.js` |
 | Latest completed feature | Stable approved-handoff retry recovery and lossless compact transfer |
 | Next software slice | Browser reload/retry and cached-update acceptance; then scoped authenticated acceptance/device-key recovery |
 
@@ -34,7 +34,7 @@ The submission demo is working and hosted. The connected-care client, permission
 | Fictional case | Ophelia Frost linked to Dr. Olivander Woods, stable IDs, six medications, separate blood request, 15-event timeline | Deterministic fixture; not real clinical activity |
 | Reports | Existing references and local upload/read-back architecture | Original Ophelia investigation files/results missing; do not fabricate |
 | Handoff/PDF | Dynamic demo summary, downloadable PDF, print view and `.msht` export | Live PDF downloaded, parsed and both pages inspected 7 Nov; summary rechecked 9 Nov |
-| MatriSathi | Scripted greetings, navigation, source-fact read-back and safety responses | Explicitly labelled not generative AI; optional local model is a separate path |
+| RUHI in the MatriSathi tab | Scripted greetings, navigation, source-fact read-back and safety responses | Explicitly labelled not generative AI; optional local model is a separate path |
 | Local records | Encrypted browser vault and prototype encrypted cloud-record support | Device/account isolation and unit/rules coverage; not a reviewed recovery system |
 | Connected care | Facility invitations, staff assignments, Doctor-created Mother profiles/access codes, append-only contributions, grants and encrypted handoffs | Real nine-account Auth/Firestore emulator journey passed; public authenticated journey not certified |
 | Completed handoff recovery | Original packet, ID, timestamp and summary snapshot saved encrypted | Reopens exact stored bytes; local-save failure after cloud success is reported without falsely claiming cloud failure |
@@ -55,7 +55,7 @@ The submission demo is working and hosted. The connected-care client, permission
 5. `docs/PUBLIC-RELEASE-2026-11-07.md` and `docs/POST-SUBMISSION-UPDATE-2026-11-08.md`.
 6. Relevant protocol/requirements documents: `docs/FINAL-REQUIREMENTS-2026-11-05.md`, `docs/SHARING-ACCESS-PLAN.md`, `docs/DESTINATION-REFERRAL-PROTOCOL.md`, `docs/ENCRYPTED-ATTACHMENT-PROTOCOL.md`, `docs/RELEASE-GATES.md`.
 
-Historical documentation is retained as evidence, not rewritten to look current. Old README test counts (116), older acceptance counts (128), old cache IDs, RUHI naming, the abandoned submission repository and earlier branch restrictions must not override this handoff's dated checkpoint. The current companion name is **MatriSathi**. Granular staff PIN/device/accepted-upload requirements in older final plans remain targets where not implemented.
+Historical documentation is retained as evidence, not rewritten to look current. Old README test counts (116), older acceptance counts (128), old cache IDs, RUHI naming, the abandoned submission repository and earlier branch restrictions must not override this handoff's dated checkpoint. Latest user naming clarification (9 November): **MatriSathi is the Mother tab; RUHI is the companion**. This supersedes earlier companion naming requirements. Granular staff PIN/device/accepted-upload requirements in older final plans remain targets where not implemented.
 
 Preserve the approved UI. Do not add tabs, sections or buttons, redesign the app, start unrelated Inventory expansion or create another deployment URL. Missing values remain missing. Do not introduce diagnoses, doses, treatment recommendations or invented report interpretation. The assistant owns builds and developer verification; do not ask the user to operate test pilots.
 
@@ -116,6 +116,8 @@ Unfinished manual referral forms now save exact fields, destination and capacity
 Wait for the saved status before leaving. Browser leave-page warnings are best effort for pending/failed saves, not a guarantee against process crashes or mobile termination. Conflicts require copying unsaved edits before reload. Browser/device-key loss is not solved. Do not describe draft persistence as an offline approval queue or exactly-once cloud delivery.
 
 ## 8. Verification and honest boundaries
+
+Latest naming-only follow-up: the user clarified that **MatriSathi is the tab and RUHI is the companion**. Companion UI, greetings and versioned inference instructions now use RUHI; routes and saved records are unchanged. All 150 unit tests, TypeScript, lint and production build passed again. Hosting-only deployment succeeded with 16 byte-equal static files and four matching HTTP route shells. Cache `329f14806987`. Browser interaction remains blocked. Evidence: `.local-tools/ruhi-{unit,lint,build,deploy}.log` and `ruhi-live-verification.json`. Previous care rules/integration results below were not rerun for this naming-only change.
 
 Current continuation checks on 9 November 2026:
 
