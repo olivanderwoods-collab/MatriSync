@@ -8,17 +8,17 @@ Prepared 9 November 2026, Asia/Calcutta. Read this before historical handoffs. T
 | --- | --- |
 | Source and submission repository | https://github.com/olivanderwoods-collab/MatriSync |
 | Continuing branch | `main` |
-| Latest application-code commit | `49bae5b4ddcf507b5f41c4ee931c5fcc0eff31e7` |
-| Application tree at that commit | `d11522aab4659587f0702a4eeace1880285109de` |
-| Application-code commit parent | `86c3479cb5d5ff509fbc517471af7b2d55d47a94` |
+| Latest application-code commit | `2b783d90aceae57591a987d4daa1b22657767084` |
+| Application tree at that commit | `346b67e9851966ecf5ebbfd7efa08b6f1b8e4d3b` |
+| Application-code commit parent | `62805e7bf63daa641e7e18250312f91b1408d01d` |
 | Required live URL | **https://matrisync-c9de7.web.app** |
 | Firebase project and Hosting site | `matrisync-c9de7` |
-| Deployed shell cache | `329f14806987` |
-| Deployed main bundle | `assets/index-fP-Y8al-.js` |
-| Latest completed feature | Stable approved-handoff retry recovery and lossless compact transfer |
-| Next software slice | Browser reload/retry and cached-update acceptance; then scoped authenticated acceptance/device-key recovery |
+| Deployed shell cache | `980d5bfdc502` |
+| Deployed main bundle | `assets/index-Dodr_BEc.js` |
+| Latest completed feature | Content-first records, local Add new flows, concise demo handoff and organized full PDF |
+| Next software slice | Approved-operation browser recovery fixture, then scoped authenticated acceptance/device-key recovery |
 
-This updated handoff is a documentation-only child of the application commit above. The supplied November 9 transfer ZIP records the **earlier** checkpoint `1085a62c0064940a8e1cdb73c9b7679bb7e243ae`, descended from `e85eac12a8790d08eaf119f85c78acc219ca6208`; it does not describe this new release. Read GitHub main and inspect later commits. Current release detail: `docs/CARE-RETRY-2026-11-09.md`.
+This updated handoff is a documentation-only child of the application commit above. The supplied November 9 transfer ZIP records the **earlier** checkpoint `1085a62c0064940a8e1cdb73c9b7679bb7e243ae`, descended from `e85eac12a8790d08eaf119f85c78acc219ca6208`; it does not describe this new release. Read GitHub main and inspect later commits. Current release detail: `docs/RECORDS-UPDATE-2026-11-09.md`; previous stable-operation/compact protocol: `docs/CARE-RETRY-2026-11-09.md`.
 
 The user explicitly selected this repository instead of `MatriSync--Health-a-thon-submission`, required continued use of the submitted web.app URL, and authorized all fixed code on main with an explicit note that it was committed **after the Health-a-thon 2026 submission date**. Preserve that notice in future commits and documentation. Do not backdate, rewrite history or force-push. Earlier instructions to preserve main without merging were superseded by this direct user decision.
 
@@ -51,7 +51,7 @@ The submission demo is working and hosted. The connected-care client, permission
 1. This handoff and `MATRISYNC_ACCOUNT2_START_PROMPT.md`.
 2. `AGENTS.md`, interpreted with the later user decisions in section 1.
 3. `docs/EMERGENCY-MVP-REQUIREMENTS-2026-11-07.md` and `docs/MatriSync-Master-Development-Guide-v2.txt`.
-4. `docs/CARE-RETRY-2026-11-09.md`, then `docs/CARE-DRAFTS-2026-11-08.md`, `docs/CARE-ACCEPTANCE-2026-11-08.md`, `docs/CARE-RECOVERY-2026-11-08.md`.
+4. `docs/RECORDS-UPDATE-2026-11-09.md`, then `docs/CARE-RETRY-2026-11-09.md`, then `docs/CARE-DRAFTS-2026-11-08.md`, `docs/CARE-ACCEPTANCE-2026-11-08.md`, `docs/CARE-RECOVERY-2026-11-08.md`.
 5. `docs/PUBLIC-RELEASE-2026-11-07.md` and `docs/POST-SUBMISSION-UPDATE-2026-11-08.md`.
 6. Relevant protocol/requirements documents: `docs/FINAL-REQUIREMENTS-2026-11-05.md`, `docs/SHARING-ACCESS-PLAN.md`, `docs/DESTINATION-REFERRAL-PROTOCOL.md`, `docs/ENCRYPTED-ATTACHMENT-PROTOCOL.md`, `docs/RELEASE-GATES.md`.
 
@@ -116,6 +116,14 @@ Unfinished manual referral forms now save exact fields, destination and capacity
 Wait for the saved status before leaving. Browser leave-page warnings are best effort for pending/failed saves, not a guarantee against process crashes or mobile termination. Conflicts require copying unsaved edits before reload. Browser/device-key loss is not solved. Do not describe draft persistence as an offline approval queue or exactly-once cloud delivery.
 
 ## 8. Verification and honest boundaries
+
+Latest record/display/export release: **155 unit tests / 34 files**, TypeScript, lint and production build passed. Hosting-only deployment succeeded at the same URL; 16 static files byte-matched and four HTTP route shells matched. Cache `980d5bfdc502`.
+
+Browser access is now available. Local browser checks passed for manual prescription saving/reload, manual multiline report, PDF upload, photo-mode options/cancel, concise preview and full-PDF download with additions. All three exported pages were parsed/rendered/visually inspected. Public cached Update now passed and retained the demo session; the updated prescription layout, Add new report options and concise preview were checked without production records. Actual camera capture, prior approved-operation browser fixture, public authenticated multi-account acceptance and physical NFC/BLE remain pending. See `docs/RECORDS-UPDATE-2026-11-09.md` for complete evidence and limits.
+
+Current UX decision: medication/report content comes before history; each section supports Add new/manual/upload/photo. Repetitive demo labels were removed inside the known profile. Guest copies remain in a separate browser-local store after exit/reset, while authenticated copies are encrypted. Manual copying does not grant prescribing authority. The short demo packet omits per-drug prescribing history (1,189 JSON bytes, 1,260 framed); the organized full PDF retains details and added copies. Existing approved connected-care packets are unchanged. The verified physical tag capacity remains 48 bytes.
+
+Historical earlier checks below retain their original dates and limits:
 
 Latest naming-only follow-up: the user clarified that **MatriSathi is the tab and RUHI is the companion**. Companion UI, greetings and versioned inference instructions now use RUHI; routes and saved records are unchanged. All 150 unit tests, TypeScript, lint and production build passed again. Hosting-only deployment succeeded with 16 byte-equal static files and four matching HTTP route shells. Cache `329f14806987`. Browser interaction remains blocked. Evidence: `.local-tools/ruhi-{unit,lint,build,deploy}.log` and `ruhi-live-verification.json`. Previous care rules/integration results below were not rerun for this naming-only change.
 
@@ -195,7 +203,7 @@ Browser fixture command: `node node_modules/vite/bin/vite.js --config tests-care
 
 The former planned stable-operation slice is **implemented**, not work to restart. Read `docs/CARE-RETRY-2026-11-09.md` and inspect the current code/tests. Do not replace the stable operation with a new UUID per retry or re-encode already approved packets. Never weaken append-only rules or automatically submit a restored draft.
 
-First complete the blocked browser checks when browser access is available: updated `tests-care/RECOVERY-CHECKS.md` reload/retry, account/patient isolation, original completed summary and newer-draft preservation. Then check the actual public app and cached Update now path. HTTP byte equality alone is not browser acceptance. The user does not need to run developer pilots.
+Browser access now works. The current record forms and public Update now have been checked; complete the earlier approved-operation browser fixture next: updated `tests-care/RECOVERY-CHECKS.md` reload/retry, account/patient isolation, original completed summary and newer-draft preservation. The current public app and cached Update now path passed during the record release; rerun after future UI releases as appropriate. HTTP byte equality alone is not browser acceptance. The user does not need to run developer pilots.
 
 Next continue scoped public authenticated acceptance and explicitly designed device/key recovery. Changed keys/revoked access can intentionally leave an uncommitted approval pending; no discard/replacement policy or cross-device recovery has been invented. Public facility verification stays deferred until authority is resolved. Accepted-upload/device/PIN requirements remain targets where not implemented.
 
