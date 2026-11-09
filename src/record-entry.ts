@@ -1,7 +1,7 @@
 export type ManualRecord = { title: string; dose: string; route: string; administeredAt: string; notes: string };
 export type RecordKind = "reports" | "prescriptions";
 export type RecordInput = { source: string; date: string; manual?: ManualRecord; file?: File };
-export type AddedRecord = { id: string; kind: RecordKind; title: string; source: string; date: string; addedAt: string; enteredBy: string; manual?: ManualRecord; fileName?: string };
+export type AddedRecord = { id: string; kind: RecordKind; title: string; source: string; date: string; addedAt: string; enteredBy: string; manual?: ManualRecord; fileName?: string; submittedByRole?: string; review?: {reviewer:string;at:string} };
 export function checkManualRecord(value: ManualRecord): ManualRecord {
   if (!value || typeof value !== "object") throw Error("Enter the record details.");
   const result = {} as ManualRecord;

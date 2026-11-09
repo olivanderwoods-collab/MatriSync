@@ -44,3 +44,10 @@ export async function seed() {
 }
 const unsupported = async () => { throw Error("Outside this isolated UI test"); };
 export const activateCareFacility = unsupported, assignCareStaff = unsupported, contributeCare = unsupported, grantCareProfile = unsupported, receiveCareHandoff = unsupported, registerCareProfile = unsupported;
+
+export const MotherLocalCopies = () => null;
+export const listMotherRecords = async () => [];
+export const approveMotherRecord = async () => {throw Error("Not part of recovery fixture");};
+export const submitMotherRecord = approveMotherRecord;
+export const createPatientPairing = approveMotherRecord;
+export const redeemPatientPairing = approveMotherRecord;

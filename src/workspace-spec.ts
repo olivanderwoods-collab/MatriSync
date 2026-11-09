@@ -33,12 +33,6 @@ export const maternalSections = [
     ["Open Report", "Download Document"],
   ),
   section(
-    "referrals",
-    "Referrals",
-    "Active and previous handoff status. This example is not a submitted referral.",
-    ["View Referral"],
-  ),
-  section(
     "follow-up",
     "Follow-ups",
     "Doctor-entered reason, required investigations and date.",
@@ -78,7 +72,7 @@ export const professionalSections = [
   ),
   section(
     "referrals",
-    "Referrals",
+    "Referral Handoff",
     "Prepare a clinical package for approval and submission to facility operations. Organizations initiate transfers.",
     ["Prepare Referral", "View Status"],
   ),

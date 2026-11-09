@@ -1,3 +1,4 @@
+import {createPatientPairing,redeemPatientPairing,submitMotherRecord,listMotherRecords,approveMotherRecord} from "../src/care-intake";
 import "fake-indexeddb/auto";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, type Auth } from "firebase/auth";
@@ -167,13 +168,13 @@ it("completes the nine-account encrypted care journey with real Auth and Firesto
   expect(motherUid).not.toBe(sending.doctor.uid);
   await expect(loadCareProfile(motherUid, full.id, "wrong-code")).rejects.toThrow();
   const mother = await loadCareProfile(motherUid, full.id, registered.code);
-  expect(mother.entries).toHaveLength(7);
+  expect(mother.entries).toHaveLength(3);
   expect(mother.entries.map(e => e.serverAt).every(Boolean)).toBe(true);
-  expect(mother.entries.find(e => e.id === handoff.id)?.fields?.reason).toBe(fields.reason);
+  expect(mother.entries.some(e => e.kind === "referral")).toBe(false);
   await expect(contributeCare(motherUid, mother, "prescription", "Forbidden Mother draft")).rejects.toThrow("staff account");
   expect(await latestCareHandoff(motherUid, full.id)).toBeUndefined();
   vi.stubGlobal("navigator", { onLine: false });
-  expect((await loadCareProfile(motherUid, full.id)).entries).toHaveLength(7);
+  expect((await loadCareProfile(motherUid, full.id)).entries).toHaveLength(3);
   vi.stubGlobal("navigator", { onLine: true });
 
   await login(source); await assignCareStaff(source.uid, sending.nurse.uid, sending.nurse.name, "nurse", false);
@@ -208,3 +209,27 @@ it("completes the nine-account encrypted care journey with real Auth and Firesto
   // case access now prevents reading entries or creating another one.
   expect((await retry()).packet).toEqual(competing[0].packet);
 });
+
+it("registers at a facility, pairs with Mother consent and approves immutable copied records",async()=>{
+ const origin=await facility("intake-origin"),destination=await facility("intake-destination"),people=await team(origin);
+ await login(origin);
+ const registered=await registerCareProfile(origin.uid,{name:"Synthetic intake patient",birthDate:"1998-05-03",sourceLocalId:crypto.randomUUID(),sourceUid:origin.uid},true);
+ await grantCareProfile(origin.uid,registered.view,people.doctor.uid);await grantCareProfile(origin.uid,registered.view,people.nurse.uid);
+ await signInWithEmailAndPassword(auth,motherLoginEmail(registered.id),registered.code);
+ const motherUid=auth.currentUser!.uid,view=await loadCareProfile(motherUid,registered.id,registered.code);
+ const pairing=await createPatientPairing(motherUid,view,destination.uid);
+ const record={id:crypto.randomUUID(),kind:"prescriptions" as const,title:"Synthetic copied record",source:"Original inspected separately",date:"2026-11-09",addedAt:new Date().toISOString(),enteredBy:motherUid,manual:{title:"Synthetic copied record",dose:"",route:"",administeredAt:"",notes:"Fictional record; no treatment advice"}};
+ const id=await submitMotherRecord(motherUid,view,record);
+ expect(await submitMotherRecord(motherUid,view,record)).toBe(id);
+ await expect(submitMotherRecord(motherUid,view,{...record,title:"Changed"})).rejects.toThrow("different version");
+ await expect(approveMotherRecord(motherUid,view.id,id,true)).rejects.toThrow("Doctor");
+ await login(origin);await expect(redeemPatientPairing(origin.uid,pairing.code)).rejects.toThrow();
+ await login(destination);const paired=await redeemPatientPairing(destination.uid,pairing.code);expect(paired.profile.name).toBe("Synthetic intake patient");expect(await listCareProfiles(destination.uid)).toContain(view.id);
+ await expect(redeemPatientPairing(destination.uid,pairing.code)).rejects.toThrow("already used");
+ await login(people.nurse);await expect(approveMotherRecord(people.nurse.uid,view.id,id,true)).rejects.toThrow("Doctor");
+ await login(people.doctor);await expect(approveMotherRecord(people.doctor.uid,view.id,id,false)).rejects.toThrow("original separately");
+ const before=await listMotherRecords(people.doctor.uid,await loadCareProfile(people.doctor.uid,view.id));expect(before[0].record).toEqual(record);expect(before[0].approved).toBeUndefined();
+ await approveMotherRecord(people.doctor.uid,view.id,id,true);await approveMotherRecord(people.doctor.uid,view.id,id,true);
+ await signInWithEmailAndPassword(auth,motherLoginEmail(registered.id),registered.code);
+ const after=await listMotherRecords(motherUid,await loadCareProfile(motherUid,view.id));expect(after).toHaveLength(1);expect(after[0].approved?.reviewerUid).toBe(people.doctor.uid);expect(after[0].record).toEqual(record);
+},60000);

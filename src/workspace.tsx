@@ -1,3 +1,4 @@
+import {DemoBasicPatient} from "./demo-intake";
 import { useState, type ReactNode } from "react";
 import { Link, Navigate, NavLink } from "react-router-dom";
 import { ArrowRight, ChevronRight, FileHeart } from "lucide-react";
@@ -451,9 +452,7 @@ function PatientDirectory({
                 placeholder="Name or patient ID"
               />
             </label>
-            <Link className="button secondary" to="/professional/patients/add">
-              Add patient
-            </Link>
+
           </div>
         ) : (
           <Actions labels={["Find Patient"]} soon={soon} />
@@ -701,6 +700,7 @@ export const legacyRoutes: Record<Role, Record<string, string>> = {
 };
 export function WorkspaceScreens(props: Props) {
   const { role, path, soon, notFound } = props;
+  if (!props.account && role !== "mother" && path.startsWith("patients/LOCAL-")) return <DemoBasicPatient id={path.split("/")[1]} role={role} section={path.split("/")[2]||"overview"}/>;
   if (!props.account && (path === "overview" || (role === "professional" && path === "more/profile") || (role !== "mother" && (path === "patients" || path.startsWith("patients/MAT-DEMO-001") || path.startsWith("referrals"))) || (role === "mother" && (path === "health" || path.startsWith("health/"))))) return <SubmissionDemoPage role={role} path={path === "health" ? "health/overview" : path} />;
   const parts = path.split("/").filter(Boolean);
   const [section = "overview", second, third, fourth] = parts;
@@ -862,22 +862,7 @@ export function WorkspaceScreens(props: Props) {
       if (third && !(second === "add" && third === "profile")) return notFound;
       if (second === "register") return redirect("patients/add");
       if (second === "consultation") return redirect("patients");
-      const label = "Add patient";
-      return (
-        <>
-          <Title
-            title={label}
-            description="Coming Soon · No patient information is entered or saved."
-          />
-          <Panel>
-            <p>
-              Detailed fields require an approved data and authorization design.
-              This is an informational preview only.
-            </p>
-            <Actions labels={[label]} soon={soon} />
-          </Panel>
-        </>
-      );
+      return redirect("patients");
     }
     if (!patients.some((p) => p.id === second) || fourth) return notFound;
     if (!third) return redirect(`patients/${second}/overview`);

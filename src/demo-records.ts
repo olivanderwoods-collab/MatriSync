@@ -8,12 +8,18 @@ async function store<T>(mode:IDBTransactionMode,work:(s:IDBObjectStore)=>IDBRequ
  return new Promise<T>((resolve,reject)=>{const tx=db.transaction("records",mode),r=work(tx.objectStore("records"));tx.oncomplete=()=>{db.close();resolve(r.result);};tx.onabort=tx.onerror=()=>{db.close();reject(Error("Could not save the local record. Existing records were kept."));};});
 }
 export async function demoRecords(){return (await store<Stored[]>("readonly",s=>s.getAll())).map(v=>v.record).sort((a,b)=>b.addedAt.localeCompare(a.addedAt));}
-export async function addDemoRecord(kind:RecordKind,input:RecordInput,enteredBy:string){
+export async function addDemoRecord(kind:RecordKind,input:RecordInput,enteredBy:string,submittedByRole="mother"){
  if(input.source.length>200 || (input.date && (!/^\d{4}-\d{2}-\d{2}$/.test(input.date) || !Number.isFinite(Date.parse(input.date)) || new Date(input.date).toISOString().slice(0,10)!==input.date)))throw Error("Check the source and date.");
  const manual=input.manual?checkManualRecord(input.manual):undefined;
  if(!manual&&!input.file)throw Error("Enter details or choose a file.");
  if(input.file)await validatedDocument(input.file);
- const record:AddedRecord={id:crypto.randomUUID(),kind,title:manual?.title||input.file!.name,source:input.source.trim(),date:input.date,addedAt:new Date().toISOString(),enteredBy,...(manual?{manual}:{}),...(input.file?{fileName:input.file.name}:{})};
+ const record:AddedRecord={id:crypto.randomUUID(),kind,title:manual?.title||input.file!.name,source:input.source.trim(),date:input.date,addedAt:new Date().toISOString(),enteredBy,submittedByRole,...(manual?{manual}:{}),...(input.file?{fileName:input.file.name}:{})};
  await store("readwrite",s=>s.add({record,...(input.file?{file:input.file}:{})}));return record;
 }
 export async function demoRecordFile(id:string){return (await store<Stored|undefined>("readonly",s=>s.get(id)))?.file;}
+
+export async function approveDemoRecord(id:string,role:string){
+ if(role!=="professional")throw Error("Only the paired Doctor can approve this demo copy.");
+ const record=await store<Stored|undefined>("readonly",s=>s.get(id));if(!record)throw Error("Record not found.");if(record.record.review)return;
+ await store("readwrite",s=>{const request=s.get(id);request.onsuccess=()=>{const current=request.result as Stored;if(!current.record.review)s.put({...current,record:{...current.record,review:{reviewer:"Dr. Olivander Woods",at:new Date().toISOString()}}});};return request;});
+}

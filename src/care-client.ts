@@ -30,7 +30,7 @@ export async function enrollCareDevice(uid: string) {
   if (!current.exists()) await setDoc(ref, { encryption: device.encryption, signing: device.signing, keyId: device.keyId });
   return device;
 }
-async function publicCareDevice(uid: string, peer: string) {
+export async function publicCareDevice(uid: string, peer: string) {
   const snapshot = await getDocFromServer(doc(await careDb(uid), "careDevices", peer));
   if (!snapshot.exists()) throw Error("The other account must enroll its browser first.");
   return snapshot.data() as PublicDevice;
@@ -71,17 +71,19 @@ export async function listCareProfiles(uid: string, mother = false) {
   return snapshots.docs.map(s => mother ? s.id : s.data().caseId as string);
 }
 export const motherLoginEmail = (id: string) => {
-  if (!/^[a-f0-9-]{36}$/.test(id.trim())) throw Error("Enter the patient ID issued by the Doctor.");
+  if (!/^[a-f0-9-]{36}$/.test(id.trim())) throw Error("Enter the patient ID issued by your care facility.");
   return `patient.${id.trim()}@patients.matrisync.invalid`;
 };
-export async function registerCareProfile(uid: string, profile: CareProfile) {
+export async function registerCareProfile(uid: string, profile: CareProfile, facilityRegistration = false) {
   profile = checkCareProfile(profile);
   for (const saved of await savedCareIds(uid)) {
     const existing = await readCareCopy(uid, saved);
     if (existing?.profile.sourceUid === uid && existing.profile.sourceLocalId === profile.sourceLocalId)
       throw Error(`This local patient is already connected: ${saved}. Open that profile; no duplicate Mother account was created.`);
   }
-  const staff = await doctor(uid), database = await careDb(uid), own = await enrollCareDevice(uid);
+  const member = facilityRegistration ? await careMembership(uid) : undefined;
+  if (facilityRegistration && !member?.facility?.enabled) throw Error("An active invited facility is required to register a patient.");
+  const staff = facilityRegistration ? {facilityId:uid} : await doctor(uid), database = await careDb(uid), own = await enrollCareDevice(uid);
   const facility = await publicCareDevice(uid, staff.facilityId);
   const id = crypto.randomUUID(), key = newCareKey(), code = `MS!${crypto.randomUUID().replaceAll("-", "")}`;
   const salt = newSalt();
@@ -97,7 +99,7 @@ export async function registerCareProfile(uid: string, profile: CareProfile) {
     created = (await authSdk.createUserWithEmailAndPassword(auth, motherLoginEmail(id), code)).user;
     const batch = writeBatch(database);
     batch.set(doc(database, "careCases", id), { creatorUid: uid, facilityId: staff.facilityId, motherUid: created.uid, motherSalt: salt, motherWrapped, encrypted: await sealCare(key, `care-profile:${id}`, profile), createdAt: serverTimestamp() });
-    for (const [recipient, device] of [[uid, own], [staff.facilityId, facility]] as const)
+    for (const [recipient, device] of (uid === staff.facilityId ? [[uid, own]] : [[uid, own], [staff.facilityId, facility]]) as [string, PublicDevice][])
       batch.set(doc(database, "careAccess", `${id}_${recipient}`), { caseId: id, uid: recipient, facilityId: staff.facilityId, grantedBy: uid, viaNfc: false, wrapped: await wrapCare({ id, uid: recipient, key }, device), createdAt: serverTimestamp() });
     await careAccount(uid); await batch.commit(); committed = true;
     const view: CareView = { id, key, profile, motherUid: created.uid, entries: [], verified: true, snapshotOnly: false, receivedAt: new Date().toISOString() };
@@ -110,7 +112,7 @@ export async function registerCareProfile(uid: string, profile: CareProfile) {
 }
 export async function loadCareProfile(uid: string, id: string, motherCode?: string) {
   if (!navigator.onLine) {
-    const copy = await readCareCopy(uid, id); if (!copy) throw Error("No saved profile exists here. Scan a handoff to view its basic offline details."); return copy;
+    const copy = await readCareCopy(uid, id); if (!copy) throw Error("No saved profile exists here. Scan a handoff to view its basic offline details."); return copy.motherUid === uid ? {...copy, entries:copy.entries.filter(e=>e.kind==="prescription"||e.kind==="laboratory")} : copy;
   }
   const database = await careDb(uid), old = await readCareCopy(uid, id);
   const snapshot = await getDocFromServer(doc(database, "careCases", id));
@@ -129,7 +131,7 @@ export async function loadCareProfile(uid: string, id: string, motherCode?: stri
     if (opened.id !== id || opened.uid !== uid) throw Error("Patient access binding differs."); key = opened.key;
   }
   const profile = checkCareProfile(await openCare(key, `care-profile:${id}`, meta.encrypted));
-  const snapshots = await getDocsFromServer(query(collection(database, "careCases", id, "entries"), orderBy("createdAt", "asc"), limit(200)));
+  const snapshots = await getDocsFromServer(query(collection(database, "careCases", id, "entries"), ...(meta.motherUid === uid ? [where("kind", "in", ["prescription", "laboratory"])] : [orderBy("createdAt", "asc")]), limit(200)));
   const entries: CareEntry[] = [];
   for (const entry of snapshots.docs) {
     const value = entry.data(), content = await openCare(key, `care-entry:${id}:${entry.id}`, value.encrypted);
@@ -137,6 +139,7 @@ export async function loadCareProfile(uid: string, id: string, motherCode?: stri
     if (typeof content.recordedAt !== "string" || !Number.isFinite(Date.parse(content.recordedAt))) throw Error("Invalid contribution timestamp.");
     entries.push({ id: entry.id, kind: value.kind, actorUid: value.actorUid, actorName: value.actorName, role: value.role, recordedAt: content.recordedAt, serverAt: value.createdAt.toDate().toISOString(), text: content.text, ...(content.fields ? { fields: content.fields } : {}) });
   }
+  entries.sort((a,b)=>a.serverAt.localeCompare(b.serverAt));
   // Do not silently label an incomplete audit trail as the full profile.
   if (snapshots.size === 200) throw Error("This profile exceeds the bounded demonstration history. No complete-profile refresh was claimed.");
   const view: CareView = { id, key, profile, motherUid: meta.motherUid, entries, verified: true, snapshotOnly: false, receivedAt: new Date().toISOString(), ...(old?.handoffId ? { handoffId: old.handoffId } : {}) };

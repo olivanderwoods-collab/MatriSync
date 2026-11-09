@@ -1033,8 +1033,8 @@ function WorkspaceBody() {
               </p>
             )}
           {!app.demo && careEnabled && path !== "care" && <p><Link className="button secondary" to={`/${r}/care`}>{r === "mother" ? "Load my linked care profile" : "Connected care · Patients, staff and handoffs"}</Link></p>}
-          {!app.demo && careEnabled && path === "care" ? (
-            <React.Suspense fallback={<p>Opening connected care…</p>}><CarePage key={`${app.user!.uid}/${r}`} uid={app.user!.uid} role={r} /></React.Suspense>
+          {r === "mother" && (path.includes("referral") || path.includes("handoff")) ? <Navigate to="/mother/health/prescriptions" replace /> : !app.demo && careEnabled && (path === "care" || (r === "organization" && section === "patients") || (r === "professional" && path === "patients/add") || (r === "mother" && ["health","health/overview","health/prescriptions","health/reports"].includes(path))) ? (
+            <React.Suspense fallback={<p>Opening connected care…</p>}><CarePage key={`${app.user!.uid}/${r}`} uid={app.user!.uid} role={r} section={path.split("/").at(-1)} /></React.Suspense>
           ) : !app.demo && sharingPilotEnabled && path === "more/sharing" ? (
             <React.Suspense
               fallback={<p role="status">Opening encrypted sharing…</p>}

@@ -1,6 +1,9 @@
+import {MotherLocalCopies} from "./records";
+import {MotherCareRecords,medicationText,medicationDisplay} from "./care-medication";
+import {createPatientPairing,redeemPatientPairing} from "./care-intake";
+import {CareRecordReview} from "./care-records-panel";
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
-import { useRecords } from "./records";
+import { Link, NavLink } from "react-router-dom";
 import { BleHandoffPanel } from "./ble-handoff-panel";
 import { allReferralFields, emptyReferralFields, missingReferralFields, type ReferralFields } from "./referral-draft";
 import { printReferralDocument, referralLabels } from "./referral-document";
@@ -25,17 +28,17 @@ function ReceivedPopup({ value, close }: { value: CareView; close: () => void })
     <button className="button primary" onClick={close}>Close and keep saved handoff</button>
   </dialog>;
 }
-export function CarePage({ uid, role }: { uid: string; role: string }) {
-  return <CareAccountPage key={`${uid}:${role}`} uid={uid} role={role} />;
+export function CarePage({ uid, role, section }: { uid: string; role: string; section?: string }) {
+  return <CareAccountPage key={`${uid}:${role}`} uid={uid} role={role} section={section} />;
 }
-function CareAccountPage({ uid, role }: { uid: string; role: string }) {
-  const { vault } = useRecords();
+function CareAccountPage({ uid, role, section }: { uid: string; role: string; section?: string }) {
   const [membership, setMembership] = useState<Awaited<ReturnType<typeof careMembership>>>({ staff: undefined, facility: undefined });
   const [ids, setIds] = useState<string[]>([]), [id, setId] = useState("");
   const [view, setView] = useState<CareView>(), [popup, setPopup] = useState<CareView>();
   const [receipts, setReceipts] = useState<CareView[]>([]);
-  const [localId, setLocalId] = useState(new URLSearchParams(location.search).get("localPatient") || "");
-  const [patients, setPatients] = useState<{ id: string; name: string }[]>([]);
+
+  const [intake,setIntake]=useState(""),[pairCode,setPairCode]=useState(""),[pairFacility,setPairFacility]=useState(""),[generatedPair,setGeneratedPair]=useState<{code:string;expiresAt:string}>();
+  const [profileTab,setProfileTab]=useState(section==="handoff"?"handoff":"profile");
   const [facilities, setFacilities] = useState<Awaited<ReturnType<typeof listCareFacilities>>>([]);
   const [destination, setDestination] = useState(""), [fields, setFields] = useState<ReferralFields>(blank);
   const [packet, setPacket] = useState<Uint8Array<ArrayBuffer>>(), [html, setHtml] = useState("");
@@ -50,7 +53,7 @@ function CareAccountPage({ uid, role }: { uid: string; role: string }) {
   function selectPatient(next: string) {
     selection.current++; setPendingApproval(undefined);
     setId(next); setView(undefined); setPopup(undefined); setReceipts([]);
-    setAccessCode(""); setRegistration(undefined); setFields(blank()); setText("");
+    setGeneratedPair(undefined); setAccessCode(""); setRegistration(undefined); setFields(blank()); setText("");
     setDestination(""); setCapacity("32768"); setPacket(undefined); setHtml(""); setHandoffId("");
     setError(""); setNotice("");
     return selection.current;
@@ -98,8 +101,8 @@ function CareAccountPage({ uid, role }: { uid: string; role: string }) {
     const member = await careMembership(uid); setMembership(member);
     if (member.staff?.enabled) setKind(contributionKinds[member.staff.role][0]);
     setIds([...new Set([...await listCareProfiles(uid, role === "mother"), ...await savedCareIds(uid)])]);
-    if (member.staff?.role === "doctor") setFacilities(await listCareFacilities(uid));
-    if (vault && await vault.openOnDevice()) setPatients(vault.data?.patients.filter(p => p.id !== "self" && p.kind !== "child") || []);
+    if (member.staff?.role === "doctor" || role === "mother") setFacilities(await listCareFacilities(uid));
+
   }
   async function open(selected = id, offline = false) {
     const code = accessCode || undefined, current = selectPatient(selected);
@@ -134,6 +137,7 @@ function CareAccountPage({ uid, role }: { uid: string; role: string }) {
   }, [view?.id, view?.snapshotOnly, busy]);
   return <>
     <h1>{role === "mother" ? "My linked care profile" : "Connected care"}</h1>
+    {role === "mother" && <nav className="tabs" aria-label="Section tabs">{["overview","prescriptions","reports"].map(section=><NavLink key={section} to={`/mother/health/${section}`}>{section==="overview"?"My profile":section==="prescriptions"?"Prescriptions":"Reports"}</NavLink>)}</nav>}
     <p className="notice">Submission prototype · Fictional records only. Manually entered records are encrypted in Firestore. Uploaded PDFs and images stay local. Staff permissions come from facility assignments, not the selected workspace.</p>
     <section className="panel"><h2>Account and browser</h2><p className="record-id">Account ID: <span data-testid="care-account-id">{uid}</span></p>
       <button className="button secondary" disabled={busy} onClick={() => void act(refresh)}>Enroll this browser / Refresh care access</button>
@@ -150,16 +154,10 @@ function CareAccountPage({ uid, role }: { uid: string; role: string }) {
       <label>Staff role<select name="role"><option value="doctor">Doctor</option><option value="nurse">Nurse</option><option value="lab">Lab technician</option></select></label>
       <label className="check-row"><input name="enabled" type="checkbox" defaultChecked />Active assignment</label><button className="button primary" disabled={busy}>Save staff permissions</button>
     </form>}
-    {staff?.role === "doctor" && <section className="panel record-form"><h2>Connect a Doctor-created Mother profile</h2>
-      <Link to="/professional/patients/add" className="button secondary">Create Mother profile locally</Link>
-      <label>Saved local Mother profile<select aria-label="Saved local Mother profile" value={localId} onChange={e => setLocalId(e.target.value)}><option value="">Choose a saved patient</option>{patients.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
-      <p>Register once to issue the Mother's separate patient ID/access code. Local report and prescription uploads will not be sent.</p>
-      <button className="button primary" disabled={busy || !localId} onClick={() => void act(async () => {
-        const patient = vault?.data?.patients.find(p => p.id === localId); if (!patient) throw Error("Open the saved local profile first.");
-        const result = await registerCareProfile(uid, { name: patient.name, birthDate: patient.birthDate, sourceLocalId: patient.id, sourceUid: uid, ...(patient.profile ? { details: patient.profile } : {}), history: patient.history });
-        selectPatient(result.id); draftSessions.current.set(result.id, new CareDraftSession(uid, result.id)); setRegistration(result); setView(result.view); setIds(current => [...new Set([...current, result.id])]); setNotice("Connected profile registered. Save the Mother credentials now; they are not placed in the handoff.");
-      })}>Register linked profile and Mother access</button>
-      {registration && <div className="notice"><strong>Save these Mother credentials now</strong><p>Patient ID: <span data-testid="mother-patient-id">{registration.id}</span></p><p>Access code: <span data-testid="mother-access-code">{registration.code}</span></p><p>The code is shown for this session only. It never grants a staff role.</p></div>}
+    {role === "organization" && membership.facility?.enabled && <section className="panel"><h2>Add patient</h2><div className="action-row"><button className="button secondary" onClick={()=>setIntake("manual")}>Add patient manually</button><button className="button secondary" onClick={()=>setIntake("pair")}>Load with Mother's pairing code</button><button className="button secondary" onClick={()=>setIntake("nfc")}>Connect MatriSync Device / Scan NFC</button></div>
+    {intake==="manual"&&<form className="record-form" onSubmit={e=>{e.preventDefault();const form=new FormData(e.currentTarget);void act(async()=>{const result=await registerCareProfile(uid,{name:String(form.get("name")),birthDate:String(form.get("birthDate")),sourceLocalId:crypto.randomUUID(),sourceUid:uid},true);selectPatient(result.id);setRegistration(result);setView(result.view);setIds(existing=>[...new Set([...existing,result.id])]);});}}><label>Mother name<input name="name" required maxLength={120}/></label><label>Date of birth<input name="birthDate" type="date"/></label><button className="button primary" disabled={busy}>Register patient</button></form>}
+    {intake==="pair"&&<form className="record-form" onSubmit={e=>{e.preventDefault();void act(async()=>{const full=await redeemPatientPairing(uid,pairCode);selectPatient(full.id);setView(full);setIds(existing=>[...new Set([...existing,full.id])]);setPairCode("");setNotice("Mother-approved profile paired. Assign the patient to the care team below.");});}}><label>Mother-generated pairing code<input value={pairCode} onChange={e=>setPairCode(e.target.value)} autoComplete="off" required/></label><button className="button primary" disabled={busy}>Load paired profile</button></form>}
+    {registration&&<div className="notice"><strong>Mother login credentials</strong><p>Patient ID: {registration.id}</p><p>Access code: {registration.code}</p><p>Keep these for the Mother. They are separate from the one-use pairing code.</p></div>}
     </section>}
     <section className="panel record-form"><h2>Open a saved or assigned profile</h2>
       <label>Connected patient<select aria-label="Connected patient" disabled={busy} value={id} onChange={e => selectPatient(e.target.value)}><option value="">Choose a patient reference</option>{ids.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
@@ -167,7 +165,7 @@ function CareAccountPage({ uid, role }: { uid: string; role: string }) {
       <button className="button secondary" disabled={busy || !id} onClick={() => void act(() => open())}>Load / Refresh full profile</button>
       <button className="text-link" disabled={busy} onClick={() => void act(async () => { const saved = await savedCareIds(uid); setIds(existing => [...new Set([...existing, ...saved])]); if (id) await open(id, true); })}>Open saved offline copies</button>
     </section>
-    {role === "organization" && <BleHandoffPanel onRead={async bytes => {
+    {role === "organization" && intake === "nfc" && <BleHandoffPanel onRead={async bytes => {
       const started = selection.current, value = await receiveCareHandoff(uid, bytes);
       if (started !== selection.current) return;
       const current = selectPatient(value.id); setPopup(value); setView(value); setIds(existing => [...new Set([...existing, value.id])]);
@@ -177,15 +175,20 @@ function CareAccountPage({ uid, role }: { uid: string; role: string }) {
     {view && <section className="panel" aria-label="Connected care profile"><h2>{view.profile.name}</h2><p className="record-id">Patient ID: {view.id}</p>
       <p>{view.snapshotOnly ? "Basic handoff snapshot · Full profile unavailable" : "Authorized saved full profile"} · {view.verified ? "Checked online when saved; this copy may be out of date" : "Source and current authority not checked online"}</p>
       <p>Date of birth: {view.profile.birthDate || "Not recorded"}</p>
-      {view.profile.details && <details><summary>Original manually entered profile</summary><p>Snapshot at registration. Later contributions are listed separately below.</p><dl>{Object.entries(view.profile.details).map(([key, value]) => <div className="care-fact" key={key}><dt>{key.replace(/([A-Z])/g, " $1")}</dt><dd>{String(value || "Not recorded")}</dd></div>)}</dl><p className="preserve-lines">{view.profile.history || "No profile notes recorded."}</p></details>}
-      {view.profile.sourceUid === uid && <Link className="button secondary" to={`/professional/patients/${view.profile.sourceLocalId}/overview`}>Open local profile, reports and prescriptions</Link>}
-      <h3>Contribution history</h3>{view.entries.length === 0 && <p>No contributions recorded yet.</p>}
-      {view.entries.map(entry => <article key={entry.id} className="local-document"><h4>{entry.kind} · {entry.actorName}</h4><p className="small">{entry.role} · {entry.actorUid}<br />Device-recorded: {entry.recordedAt}<br />Server-recorded: {entry.serverAt || "Not available in this handoff snapshot"}</p><p className="preserve-lines">{entry.text}</p>{entry.fields && <Facts fields={entry.fields} />}</article>)}
-      {receipts.length > 0 && <details><summary>Saved handoff receipts ({receipts.length})</summary>{receipts.map(receipt => <article key={receipt.handoffId}><p>{receipt.handoffId} · First received {receipt.receivedAt} · {receipt.verified ? `Checked online ${receipt.verifiedAt || "previously (time not recorded)"}` : "Captured offline; source authority was not checked at receipt"}</p><button className="text-link" onClick={() => setPopup(receipt)}>Reopen handoff</button></article>)}</details>}
+      {role !== "mother" && <nav className="tabs" aria-label="Patient profile sections"><button className="text-link" aria-pressed={profileTab==="profile"} onClick={()=>setProfileTab("profile")}>Profile</button><button className="text-link" aria-pressed={profileTab==="handoff"} onClick={()=>setProfileTab("handoff")}>Referral Handoff</button></nav>}
+      {role === "mother" && <section className="record-form"><h3>Pair with a facility</h3><label>Receiving facility<select value={pairFacility} onChange={e=>setPairFacility(e.target.value)}><option value="">Refresh care access, then choose a facility</option>{facilities.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select></label><button className="button secondary" disabled={busy||!pairFacility||view.snapshotOnly} onClick={()=>void act(async()=>setGeneratedPair(await createPatientPairing(uid,view,pairFacility)))}>Generate pairing code</button>{generatedPair&&<p className="preserve-lines">{generatedPair.code}<br/>One use · Expires {generatedPair.expiresAt}</p>}</section>}
+      {role !== "mother" && profileTab === "profile" && view.profile.details && <details><summary>Original manually entered profile</summary><p>Snapshot at registration. Later contributions are listed separately below.</p><dl>{Object.entries(view.profile.details).map(([key, value]) => <div className="care-fact" key={key}><dt>{key.replace(/([A-Z])/g, " $1")}</dt><dd>{String(value || "Not recorded")}</dd></div>)}</dl><p className="preserve-lines">{view.profile.history || "No profile notes recorded."}</p></details>}
+      {role === "professional" && view.profile.sourceUid === uid && <Link className="button secondary" to={`/professional/patients/${view.profile.sourceLocalId}/overview`}>Open local profile, reports and prescriptions</Link>}
+      {role !== "mother" && <><h3>{profileTab==="handoff"?"Referral Handoff":"Contribution history"}</h3>{view.entries.length === 0 && <p>No contributions recorded yet.</p>}
+      {view.entries.filter(entry=>profileTab==="handoff"?entry.kind==="referral":entry.kind!=="referral").map(entry => <article key={entry.id} className="local-document"><h4>{entry.kind} · {entry.actorName}</h4><p className="small">{entry.role} · {entry.actorUid}<br />Device-recorded: {entry.recordedAt}<br />Server-recorded: {entry.serverAt || "Not available in this handoff snapshot"}</p><p className="preserve-lines">{medicationDisplay(entry.text)}</p>{entry.fields && <Facts fields={entry.fields} />}</article>)}
+      {profileTab === "handoff" && receipts.length > 0 && <details><summary>Saved handoff receipts ({receipts.length})</summary>{receipts.map(receipt => <article key={receipt.handoffId}><p>{receipt.handoffId} · First received {receipt.receivedAt} · {receipt.verified ? `Checked online ${receipt.verifiedAt || "previously (time not recorded)"}` : "Captured offline; source authority was not checked at receipt"}</p><button className="text-link" onClick={() => setPopup(receipt)}>Reopen handoff</button></article>)}</details>}
+      </>}
+      {role === "mother" && <MotherCareRecords entries={view.entries} section={section}/>}
+      {!view.snapshotOnly && <CareRecordReview key={`${uid}/${view.id}`} uid={uid} view={view} mother={role==="mother"} doctor={staff?.role==="doctor"} onlyKind={section==="reports"?"reports":section==="prescriptions"?"prescriptions":undefined}/>}
       {membership.facility?.enabled && !view.snapshotOnly && <form className="record-form" onSubmit={e => { e.preventDefault(); const data = new FormData(e.currentTarget); void act(async () => { await grantCareProfile(uid, view, String(data.get("staff"))); setNotice("Case assigned to the selected enrolled staff account."); }); }}><label>Assign this patient to staff account ID<input name="staff" required /></label><button className="button secondary" disabled={busy}>Assign patient to staff</button></form>}
-      {staff && !view.snapshotOnly && <form className="record-form" onSubmit={e => { e.preventDefault(); void act(async () => { await contributeCare(uid, view, kind, text); setText(""); await open(view.id); setNotice("Contribution saved with your identity, assigned role and server timestamp. Earlier entries are unchanged."); }); }}>
+      {staff && !view.snapshotOnly && <form className="record-form" onSubmit={e => { e.preventDefault(); const data=new FormData(e.currentTarget); void act(async () => { const content=kind==="prescription"?medicationText({name:String(data.get("medicine")),dose:String(data.get("dose")),route:String(data.get("route")),timing:String(data.get("timing")),from:String(data.get("from")),until:String(data.get("until"))}):text; await contributeCare(uid, view, kind, content); setText(""); await open(view.id); setNotice("Contribution saved with your identity, assigned role and server timestamp. Earlier entries are unchanged."); }); }}>
         <h3>Add your contribution</h3><label>Contribution type<select value={kind} onChange={e => setKind(e.target.value as ContributionKind)}>{contributionKinds[staff.role].filter(k => k !== "referral").map(k => <option key={k} value={k}>{k}</option>)}</select></label>
-        <label>Recorded contribution<textarea value={text} onChange={e => setText(e.target.value)} maxLength={8000} rows={5} required /></label><button className="button primary" disabled={busy}>Save contribution</button>
+        {kind==="prescription"?<><label>Medication name<input name="medicine" required maxLength={200}/></label>{["dose","route","timing","from","until"].map(field=><label key={field}>{field[0].toUpperCase()+field.slice(1)}<input name={field} maxLength={200}/></label>)}</>:<label>Recorded contribution<textarea value={text} onChange={e => setText(e.target.value)} maxLength={8000} rows={5} required /></label>}<button className="button primary" disabled={busy}>Save contribution</button>
       </form>}
       {(staff?.role === "doctor" || (role === "professional" && pendingApproval)) && !view.snapshotOnly && <section aria-label="Manual care handoff" className="record-form"><h3>Create referral handoff</h3>
         <p>Manually enter the details you intend to hand over. Nothing is inferred from documents or missing values.</p>
@@ -204,10 +207,11 @@ function CareAccountPage({ uid, role }: { uid: string; role: string }) {
           setPacket(result.packet); setHandoffId(result.id); setHtml(careHandoffDocument({ id: view.id, profile: result.profile }, result.fields, result.id, result.actorName, uid, result.recordedAt)); setNotice("Doctor-recorded handoff created. Blank details remain unknown. BLE and NFC transfer have not been confirmed. " + (result.savedLocally ? "Original handoff saved encrypted on this browser for reopening." : "The cloud handoff succeeded, but its offline copy could not be saved. Keep this page open to print or transfer it. The saved approval remains available; use the same action to confirm and recover the original.") + draftWarning);
         })}>{pendingApproval ? "Check / retry approved handoff" : "Create and approve handoff with entered details"}</button>
       </section>}
-      {html && <><iframe sandbox="" title="Handoff summary preview" srcDoc={html} style={{ width: "100%", height: 480 }} /><button className="button secondary" disabled={busy} onClick={() => void act(() => printReferralDocument(html))}>Print handoff summary / Save PDF</button></>}
+      {role !== "mother" && html && <><iframe sandbox="" title="Handoff summary preview" srcDoc={html} style={{ width: "100%", height: 480 }} /><button className="button secondary" disabled={busy} onClick={() => void act(() => printReferralDocument(html))}>Print handoff summary / Save PDF</button></>}
       {packet && staff?.role === "doctor" && <BleHandoffPanel key={handoffId} packet={packet} />}
     </section>}
+    {role === "mother" && (section==="prescriptions"||section==="reports") && <MotherLocalCopies kind={section}/>}
     {error && <p role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}{busy && <p role="status">Working…</p>}
-    {popup && <ReceivedPopup value={popup} close={() => setPopup(undefined)} />}
+    {role !== "mother" && popup && <ReceivedPopup value={popup} close={() => setPopup(undefined)} />}
   </>;
 }

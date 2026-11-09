@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 import { expect, it } from "vitest";
-import { addDemoRecord, demoRecords, demoRecordFile } from "./demo-records";
+import { addDemoRecord, approveDemoRecord, demoRecords, demoRecordFile } from "./demo-records";
 import { checkManualRecord } from "./record-entry";
 import { RecordVault } from "./record-vault";
 import { readVault } from "./vault-storage";
@@ -45,4 +45,13 @@ it("separates the concise transfer from complete content-first PDF history",()=>
 it("exports multiline copied records without flattening lines or omitting content",()=>{
  const d=submissionDemoCase([{id:"test",kind:"reports",title:"Copied report",source:"Test source",date:"",addedAt:"2026-11-09",enteredBy:"Test user",manual:{...manual,notes:"First line\nSecond line"}}]);
  const pdf=new TextDecoder().decode(demoHandoffPdf(d));expect(pdf).toContain("(First line)");expect(pdf).toContain("(Second line)");
+});
+
+it("keeps the exact Guest copy and original intact through repeated approval",async()=>{
+ const file=new File(["%PDF-1.7\nSynthetic unchanged original"],"approval.pdf",{type:"application/pdf"});
+ const record=await addDemoRecord("reports",{file,source:"Local original",date:""},"Mother");
+ await expect(approveDemoRecord(record.id,"mother")).rejects.toThrow("Doctor");
+ await approveDemoRecord(record.id,"professional");const approved=(await demoRecords()).find(r=>r.id===record.id)!;
+ expect(approved.review?.reviewer).toBe("Dr. Olivander Woods");expect({...approved,review:undefined}).toEqual({...record,review:undefined});
+ await approveDemoRecord(record.id,"professional");expect((await demoRecords()).find(r=>r.id===record.id)).toEqual(approved);expect(await (await demoRecordFile(record.id))!.text()).toBe(await file.text());
 });

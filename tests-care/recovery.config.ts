@@ -6,6 +6,7 @@ export default defineConfig({
   esbuild: { jsx: "automatic" },
   optimizeDeps: { entries: ["tests-care/recovery-fixture.html"] },
   plugins: [{ name: "isolated-care-fixture", enforce: "pre", resolveId(source, importer) {
+    if (importer?.includes("/src/") && source === "./care-intake") return mock;
     if ((importer?.endsWith("/src/care-page.tsx") && ["./care-client", "./records"].includes(source)) || (importer?.endsWith("/src/care-storage.ts") && source === "./auth")) return mock;
   } }],
   server: { host: "127.0.0.1", port: 4181, strictPort: true },

@@ -212,7 +212,7 @@ export function Companion({
           const { savedCareIds, readCareCopy } = await import("../care-storage");
           for (const id of await savedCareIds(profileAccount)) {
             const copy = await readCareCopy(profileAccount, id);
-            if (copy?.motherUid === profileAccount) { linked = copy; break; }
+            if (copy?.motherUid === profileAccount) { linked = {...copy,entries:copy.entries.filter(e=>e.kind!=="referral")}; break; }
           }
         }
         setMessages(items => [...items, { role: "user" as const, text }, { role: "assistant" as const, text: careFactAnswer(text, linked)!, label: "Recorded care detail · Exact read-back · Not AI-generated" }].slice(-40));

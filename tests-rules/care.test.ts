@@ -70,3 +70,51 @@ it("binds new case and initial encrypted key grants to the creating Doctor's fac
   await assertSucceeds(batch.commit());
   await assertFails(setDoc(doc(client("nurse"), "careCases", crypto.randomUUID()), { creatorUid: "nurse", facilityId: "facility", motherUid: "new-mother", motherSalt: "s".repeat(24), motherWrapped: "encrypted", encrypted: "encrypted", createdAt: serverTimestamp() }));
 });
+
+it("lets an active facility register and assign a patient without prescribing", async()=>{
+ const id=crypto.randomUUID(),db=client("facility"),batch=writeBatch(db);
+ batch.set(doc(db,"careCases",id),{creatorUid:"facility",facilityId:"facility",motherUid:"new-mother",motherSalt:"s".repeat(24),motherWrapped:"encrypted",encrypted:"encrypted",createdAt:serverTimestamp()});
+ batch.set(doc(db,"careAccess",`${id}_facility`),{...grant("facility"),caseId:id,grantedBy:"facility"});
+ await assertSucceeds(batch.commit());
+ await assertFails(setDoc(doc(db,"careCases",id,"entries",crypto.randomUUID()),entry("facility","doctor","prescription")));
+});
+it("requires a Mother-authorized, unexpired, one-use facility pairing transaction",async()=>{
+ const pairId=crypto.randomUUID(),m=client("mother"),r=client("receiving"),ref=doc(m,"carePairings",pairId);
+ const pair={caseId,motherUid:"mother",facilityUid:"receiving",wrapped:"encrypted",createdAt:serverTimestamp(),expiresAt:Timestamp.fromMillis(Date.now()+60000),used:false};
+ await assertFails(setDoc(doc(client("outsider"),"carePairings",pairId),pair));
+ await assertFails(setDoc(ref,{...pair,motherUid:"outsider"}));
+ await assertFails(setDoc(ref,{...pair,expiresAt:Timestamp.fromMillis(Date.now()-60000)}));
+ await assertSucceeds(setDoc(ref,pair));
+ await assertFails(getDoc(doc(client("facility"),"carePairings",pairId)));
+ const access={...grant("receiving"),grantedBy:"receiving",pairingId:pairId};
+ await assertFails(setDoc(doc(r,"careAccess",`${caseId}_receiving`),access));
+ await assertFails(updateDoc(doc(r,"carePairings",pairId),{used:true,usedAt:serverTimestamp()}));
+ const batch=writeBatch(r);batch.set(doc(r,"careAccess",`${caseId}_receiving`),access);batch.update(doc(r,"carePairings",pairId),{used:true,usedAt:serverTimestamp()});await assertSucceeds(batch.commit());
+ await assertFails(updateDoc(doc(r,"carePairings",pairId),{used:true,usedAt:serverTimestamp()}));
+ await assertFails(updateDoc(ref,{wrapped:"replacement"}));
+});
+it("keeps Mother-submitted records immutable and approval exclusive to an assigned active Doctor",async()=>{
+ const id="a".repeat(32),path=["careCases",caseId,"records",id],record={ownerUid:"mother",kind:"prescriptions",encrypted:"encrypted copy",createdAt:serverTimestamp()};
+ const ref=(uid:string)=>doc(client(uid),path[0],...path.slice(1));
+ for(const uid of ["nurse","doctor","outsider","facility"])await assertFails(setDoc(ref(uid),{...record,ownerUid:uid}));
+ await assertSucceeds(setDoc(ref("mother"),record));
+ const review=(uid:string,confirmed=true)=>({reviewerUid:uid,reviewerName:uid,originalReviewed:confirmed,approvedAt:serverTimestamp()});
+ const reviewRef=(uid:string)=>doc(client(uid),path[0],...path.slice(1),"reviews","final");
+ for(const uid of ["mother","nurse","lab","facility","outsider"])await assertFails(setDoc(reviewRef(uid),review(uid)));
+ await assertFails(setDoc(reviewRef("doctor"),review("doctor",false)));
+ await env.withSecurityRulesDisabled(c=>updateDoc(doc(c.firestore(),"careStaff","doctor"),{enabled:false}));
+ await assertFails(setDoc(reviewRef("doctor"),review("doctor")));
+ await env.withSecurityRulesDisabled(c=>updateDoc(doc(c.firestore(),"careStaff","doctor"),{enabled:true}));
+ await assertSucceeds(setDoc(reviewRef("doctor"),review("doctor")));
+ await assertSucceeds(getDoc(reviewRef("mother")));
+ for(const uid of ["mother","doctor","facility"]){await assertFails(updateDoc(ref(uid),{encrypted:"changed"}));await assertFails(deleteDoc(ref(uid)));await assertFails(deleteDoc(reviewRef(uid)));await assertFails(updateDoc(reviewRef(uid),{reviewerName:"changed"}));}
+});
+it("allows Mother prescription/report queries but denies clinical notes and referral histories",async()=>{
+ const d=client("doctor"),m=client("mother"),rx=crypto.randomUUID(),referral=crypto.randomUUID();
+ await setDoc(doc(d,"careCases",caseId,"entries",rx),entry("doctor","doctor","prescription"));
+ await setDoc(doc(d,"careCases",caseId,"entries",referral),entry("doctor","doctor","referral"));
+ await assertSucceeds(getDoc(doc(m,"careCases",caseId,"entries",rx)));
+ await assertFails(getDoc(doc(m,"careCases",caseId,"entries",referral)));
+ await assertFails(getDocs(query(collection(m,"careCases",caseId,"entries"),limit(200))));
+ const visible=await assertSucceeds(getDocs(query(collection(m,"careCases",caseId,"entries"),where("kind","in",["prescription","laboratory"]),limit(200))));expect(visible.size).toBe(1);
+});

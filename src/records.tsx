@@ -17,7 +17,7 @@ import type { MotherProfile } from "./records-model";
 import { AddRecord, ManualFacts } from "./record-entry-form";
 import { ReferralDrafts } from "./referral-drafts";
 import { PatientSummaryPanel } from "./patient-summary-panel";
-import { ProfileLinkPreview, TestAssignments } from "./workflow-tests";
+import { TestAssignments } from "./workflow-tests";
 
 type RecordsContext = {
   vault?: RecordVault;
@@ -567,73 +567,16 @@ function PatientForm({
     </form>
   );
 }
-export function Documents({patient,kind}:{patient:Patient;kind:LocalDocument["kind"]}) {
+export function Documents({patient,kind,simple=false,readOnly=false}:{patient:Patient;kind:LocalDocument["kind"];simple?:boolean;readOnly?:boolean}) {
   const {vault,refresh}=useContext(Context); const [error,setError]=useState("");
   const files=vault!.data!.documents.filter(d=>d.patientId===patient.id&&d.kind===kind).slice().sort((a,b)=>b.addedAt.localeCompare(a.addedAt));
   async function download(id:string){try{setError("");const {bytes,doc}=await vault!.document(id);const url=URL.createObjectURL(new Blob([bytes],{type:"application/octet-stream"}));const a=document.createElement("a");a.href=url;a.download=doc.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(e){setError(message(e));}}
-  return <section className="panel"><div className="panel-heading"><h2>{kind==="reports"?"Reports":"Medications and prescription documents"}</h2><AddRecord kind={kind} onSave={async value=>{if(value.manual)await vault!.addManualDocument(patient.id,kind,value.manual,value.source,value.date);else await vault!.addDocument(patient.id,kind,value.file!,value.source,value.date);refresh();}}/></div>
+  return <section className="panel"><div className="panel-heading"><h2>{kind==="reports"?"Reports":"Medications and prescription documents"}</h2>{!readOnly&&<AddRecord kind={kind} onSave={async value=>{if(value.manual)await vault!.addManualDocument(patient.id,kind,value.manual,value.source,value.date);else await vault!.addDocument(patient.id,kind,value.file!,value.source,value.date);refresh();}}/>}</div>
     <p className="small muted">Encrypted on this device · Files are not transferred</p>
     {!files.length&&<p>No records saved.</p>}
-    <div className="document-list">{files.map(d=><article className="local-document" key={d.id}><div><h3>{d.manual?.title||d.name}</h3>{d.manual&&<p className="small">Manually copied record · Source not independently verified</p>}{d.manual?(kind==="prescriptions"?<ManualFacts value={d.manual}/>:<p className="preserve-lines">{d.manual.notes||"No findings entered"}</p>):<p>Uploaded document · Contents not extracted</p>}<p>{d.reportDate||"Date not supplied"} · {d.source||"Source not supplied"}</p></div><button className="button secondary" onClick={()=>void download(d.id)}>Download copy</button></article>)}</div>
-    <h3>{kind==="reports"?"Report history":"Prescription history"}</h3><ol>{files.map(d=><li key={d.id}>{d.addedAt} · {d.manual?.title||d.name} · Added by {d.enteredBy||"Account holder (identity not recorded)"} · {d.manual?"Manually copied record":"Uploaded copy"}</li>)}</ol>{error&&<p role="alert">{error}</p>}
+    <div className="document-list">{files.map(d=><article className="local-document" key={d.id}><div><h3>{d.manual?.title||d.name}</h3>{d.manual&&<p className="small">Manually copied record · Source not independently verified</p>}{d.manual?(kind==="prescriptions"?(simple?<p>Dose: {d.manual.dose||"Not recorded"} · Timing: {d.manual.administeredAt||"Not recorded"}</p>:<ManualFacts value={d.manual}/>):<p className="preserve-lines">{d.manual.notes||"No findings entered"}</p>):<p>Uploaded document · Contents not extracted</p>}<p>{d.reportDate||"Date not supplied"} · {d.source||"Source not supplied"}</p></div><button className="button secondary" onClick={()=>void download(d.id)}>Download copy</button></article>)}</div>
+    {!simple&&<><h3>{kind==="reports"?"Report history":"Prescription history"}</h3><ol>{files.map(d=><li key={d.id}>{d.addedAt} · {d.manual?.title||d.name} · Added by {d.enteredBy||"Account holder (identity not recorded)"} · {d.manual?"Manually copied record":"Uploaded copy"}</li>)}</ol></>}{error&&<p role="alert">{error}</p>}
   </section>;
-}
-function PatientAdd() {
-  const [choice, setChoice] = useState("");
-  const navigate = useNavigate();
-  return (
-    <>
-      <div
-        className="action-row patient-add-options"
-        role="group"
-        aria-label="Add patient options"
-      >
-        <button
-          className="button secondary"
-          aria-pressed={choice === "create"}
-          onClick={() => setChoice("create")}
-        >
-          Create patient profile
-        </button>
-        <button
-          className="button secondary"
-          aria-pressed={choice === "load"}
-          onClick={() => setChoice("load")}
-        >
-          Load profile
-        </button>
-        <button
-          className="button secondary"
-          aria-pressed={choice === "band"}
-          onClick={() => setChoice("band")}
-        >
-          Sync NFC Band
-        </button>
-      </div>
-      {choice === "create" && (
-        <MotherRecordForm
-          clinician
-          onSaved={(id) =>
-            navigate(`/professional/patients/${id}/overview`, { replace: true })
-          }
-        />
-      )}
-      {choice === "load" && <ProfileLinkPreview role="professional" />}
-      {choice === "band" && (
-        <section className="panel">
-          <h2>Sync NFC Band</h2>
-          <p>
-            The MatriSync device will read the compact encrypted handoff over
-            Bluetooth. Full profile retrieval requires authorized sharing. The
-            device protocol and secure sharing are not connected yet.
-          </p>
-          <button className="button secondary" disabled>
-            Connect MatriSync device
-          </button>
-        </section>
-      )}
-    </>
-  );
 }
 function RecordContent({ path, self }: { path: string; self: boolean }) {
   const { vault } = useContext(Context);
@@ -668,7 +611,7 @@ function RecordContent({ path, self }: { path: string; self: boolean }) {
       {self ? (
         patient ? (
           id === "reports" || id === "prescriptions" ? (
-            <Documents key={id} patient={patient} kind={id} />
+            <Documents key={id} patient={patient} kind={id} simple />
           ) : (
             <section className="panel">
               <h2>
@@ -693,9 +636,7 @@ function RecordContent({ path, self }: { path: string; self: boolean }) {
                 placeholder="Name or patient ID"
               />
             </label>
-            <Link className="button secondary" to="/professional/patients/add">
-              Add patient
-            </Link>
+
           </div>
           <section className="panel">
             <div className="patient-directory-grid">
@@ -744,7 +685,7 @@ function RecordContent({ path, self }: { path: string; self: boolean }) {
       ) : id === "add" &&
         !extra &&
         (tab === "overview" || tab === "profile") ? (
-        <PatientAdd />
+        <section className="panel"><p>Patient registration and pairing are managed by your facility.</p><Link to="/professional/care">Open assigned care profiles</Link></section>
       ) : !patient || extra ? (
         <p>No record is available at this address.</p>
       ) : ["vitals", "visits", "history", "medications"].includes(tab) ? (
@@ -873,4 +814,9 @@ export function RecordsHome() {
       </section>
     </>
   );
+}
+
+export function MotherLocalCopies({kind}:{kind:LocalDocument["kind"]}){
+ const {vault}=useRecords(), patient=vault?.data?.patients.find(p=>p.id==="self");
+ return <details><summary>Original copies saved on this device</summary><VaultGate>{patient?<Documents patient={patient} kind={kind} simple readOnly/>:<p>No local original copies saved.</p>}</VaultGate></details>;
 }

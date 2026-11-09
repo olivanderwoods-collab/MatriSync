@@ -55,14 +55,16 @@ service cloud.firestore {
     }
     function isValidCareAccess(d, id) {
       return d.keys().hasAll(['caseId','uid','facilityId','grantedBy','viaNfc','wrapped','createdAt'])
-        && d.keys().hasOnly(['caseId','uid','facilityId','grantedBy','viaNfc','wrapped','createdAt'])
+        && d.keys().hasOnly(['caseId','uid','facilityId','grantedBy','viaNfc','wrapped','createdAt','pairingId'])
         && d.caseId is string && d.caseId.matches('[a-f0-9-]{36}') && boundedString(d.uid,128)
         && boundedString(d.facilityId,128) && d.grantedBy == request.auth.uid && d.viaNfc is bool
         && id == accessId(d.caseId,d.uid) && boundedString(d.wrapped,8000) && d.createdAt == request.time;
     }
     function mayGrantCare(d) {
       let parent = getAfter(/databases/$(database)/documents/careCases/$(d.caseId)).data;
-      return (careDoctor() && parent.creatorUid == request.auth.uid && parent.facilityId == staff(request.auth.uid).facilityId && !d.viaNfc
+      return (facility(request.auth.uid) && parent.creatorUid == request.auth.uid && parent.facilityId == request.auth.uid && d.uid == request.auth.uid && d.facilityId == request.auth.uid && !d.viaNfc)
+        || ('pairingId' in d && validPairingGrant(d))
+        || (careDoctor() && parent.creatorUid == request.auth.uid && parent.facilityId == staff(request.auth.uid).facilityId && !d.viaNfc
           && d.facilityId == staff(request.auth.uid).facilityId && d.uid in [request.auth.uid,staff(request.auth.uid).facilityId])
         || (careDoctor() && careAssigned(d.caseId) && d.viaNfc && d.uid == d.facilityId && facility(d.uid))
         || (facility(request.auth.uid) && careAssigned(d.caseId) && !d.viaNfc
@@ -117,14 +119,48 @@ service cloud.firestore {
     match /careCases/{id} {
       allow get: if careReader(id);
       allow list: if careSigned() && resource.data.motherUid == request.auth.uid && request.query.limit <= 50;
-      allow create: if careDoctor() && id.matches('[a-f0-9-]{36}') && isValidCareProfile(request.resource.data)
+      allow create: if careSigned() && (careDoctor() || facility(request.auth.uid)) && id.matches('[a-f0-9-]{36}') && isValidCareProfile(request.resource.data)
         && request.resource.data.creatorUid == request.auth.uid && request.resource.data.motherUid != request.auth.uid
-        && request.resource.data.facilityId == staff(request.auth.uid).facilityId;
+        && ((facility(request.auth.uid) && request.resource.data.facilityId == request.auth.uid) || (careDoctor() && request.resource.data.facilityId == staff(request.auth.uid).facilityId));
       match /entries/{entryId} {
-        allow get: if careReader(id);
-        allow list: if careReader(id) && request.query.limit <= 200;
+        allow get: if careReader(id) && (careAssigned(id) || resource.data.kind in ['prescription','laboratory']);
+        allow list: if careReader(id) && (careAssigned(id) || resource.data.kind in ['prescription','laboratory']) && request.query.limit <= 200;
         allow create: if careSigned() && activeStaff(request.auth.uid) && careAssigned(id)
           && entryId.matches('[a-f0-9-]{36}') && isValidCareEntry(request.resource.data);
+      }
+    }
+    function validPairingGrant(d) {
+      let p = get(/databases/$(database)/documents/carePairings/$(d.pairingId)).data;
+      return facility(request.auth.uid) && p.facilityUid == request.auth.uid && p.caseId == d.caseId && !p.used && p.expiresAt > request.time
+        && d.uid == request.auth.uid && d.facilityId == request.auth.uid && !d.viaNfc
+        && getAfter(/databases/$(database)/documents/carePairings/$(d.pairingId)).data.used == true;
+    }
+    match /carePairings/{pairId} {
+      allow get: if careSigned() && request.auth.uid in [resource.data.motherUid,resource.data.facilityUid];
+      allow create: if careSigned() && pairId.matches('[a-f0-9-]{36}')
+        && request.resource.data.keys().hasOnly(['caseId','motherUid','facilityUid','wrapped','createdAt','expiresAt','used'])
+        && get(/databases/$(database)/documents/careCases/$(request.resource.data.caseId)).data.motherUid == request.auth.uid
+        && request.resource.data.motherUid == request.auth.uid && facility(request.resource.data.facilityUid)
+        && boundedString(request.resource.data.wrapped,8000) && request.resource.data.createdAt == request.time && request.resource.data.used == false
+        && request.resource.data.expiresAt > request.time && request.resource.data.expiresAt <= request.time + duration.value(31,'m');
+      allow update: if careSigned() && facility(request.auth.uid) && resource.data.facilityUid == request.auth.uid && !resource.data.used && resource.data.expiresAt > request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used','usedAt']) && request.resource.data.used == true && request.resource.data.usedAt == request.time
+        && getAfter(/databases/$(database)/documents/careAccess/$(accessId(resource.data.caseId,request.auth.uid))).data.uid == request.auth.uid;
+    }
+    match /careCases/{caseId}/records/{recordId} {
+      allow get: if careReader(caseId);
+      allow list: if careReader(caseId) && request.query.limit <= 100;
+      allow create: if careSigned() && get(/databases/$(database)/documents/careCases/$(caseId)).data.motherUid == request.auth.uid
+        && recordId.matches('[a-f0-9]{32}') && request.resource.data.keys().hasAll(['ownerUid','kind','encrypted','createdAt'])
+        && request.resource.data.keys().hasOnly(['ownerUid','kind','encrypted','createdAt']) && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.kind in ['prescriptions','reports'] && encryptedString(request.resource.data.encrypted) && request.resource.data.createdAt == request.time;
+      match /reviews/{reviewId} {
+        allow get: if careReader(caseId);
+        allow create: if reviewId == 'final' && careDoctor() && careAssigned(caseId)
+          && exists(/databases/$(database)/documents/careCases/$(caseId)/records/$(recordId))
+          && request.resource.data.keys().hasAll(['reviewerUid','reviewerName','approvedAt','originalReviewed']) && request.resource.data.keys().hasOnly(['reviewerUid','reviewerName','approvedAt','originalReviewed'])
+          && request.resource.data.reviewerUid == request.auth.uid && request.resource.data.reviewerName == staff(request.auth.uid).name
+          && request.resource.data.approvedAt == request.time && request.resource.data.originalReviewed == true;
       }
     }
     match /careAccess/{id} {
