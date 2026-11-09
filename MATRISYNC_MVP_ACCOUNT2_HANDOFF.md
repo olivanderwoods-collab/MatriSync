@@ -8,17 +8,17 @@ Prepared 10 November 2026, Asia/Calcutta. Read this before historical handoffs. 
 | --- | --- |
 | Source and submission repository | https://github.com/olivanderwoods-collab/MatriSync |
 | Continuing branch | `main` |
-| Latest application-code commit | `0f8a01c0dbfb0784b5cfad2a413cd6b52571eec9` |
-| Application tree at that commit | `289ff44766772ef51fe15bdb19603c620e14443f` |
-| Application-code commit parent | `d4f05ab936535d1d082dc229e1be729e9820153a` |
+| Latest application-code commit | `299d45780921de84e6e3b4a72ed5b22d6c19eced` |
+| Application tree at that commit | `403830c7c8d7f9ea14a443c1f0eba603163dfed0` |
+| Application-code commit parent | `81e784d718998685f65e692c0ba9bdcfd5931282` |
 | Required live URL | **https://matrisync-c9de7.web.app** |
 | Firebase project and Hosting site | `matrisync-c9de7` |
-| Deployed shell cache | `b2f7eec259b7` |
-| Deployed main bundle | `assets/index-CWp9UB9n.js` |
-| Latest completed feature | Completed summary restored alongside newer drafts; approved-operation browser recovery acceptance complete |
-| Next software slice | Scoped authenticated acceptance and explicit device/key recovery design |
+| Deployed shell cache | `14fc6ef7e26b` |
+| Deployed main bundle | `assets/index-DQjq_1rx.js` |
+| Latest completed feature | Device enrollment preserves identities when keys are missing; recovery design recorded |
+| Next software slice | Prepared device browser acceptance, then Candidate A migration specification |
 
-This updated handoff is a documentation-only child of the application commit above. The supplied November 9 transfer ZIP records the **earlier** checkpoint `1085a62c0064940a8e1cdb73c9b7679bb7e243ae`, descended from `e85eac12a8790d08eaf119f85c78acc219ca6208`; it does not describe this new release. Read GitHub main and inspect later commits. Current release detail: `docs/RECOVERY-BROWSER-2026-11-10.md`; prior intake/review release: `docs/INTAKE-REVIEW-2026-11-09.md`; prior record release: `docs/RECORDS-UPDATE-2026-11-09.md`; previous stable-operation/compact protocol: `docs/CARE-RETRY-2026-11-09.md`.
+This updated handoff is a documentation-only child of the application commit above. The supplied November 9 transfer ZIP records the **earlier** checkpoint `1085a62c0064940a8e1cdb73c9b7679bb7e243ae`, descended from `e85eac12a8790d08eaf119f85c78acc219ca6208`; it does not describe this new release. Read GitHub main and inspect later commits. Current release detail: `docs/DEVICE-RECOVERY-2026-11-10.md`; prior browser recovery release: `docs/RECOVERY-BROWSER-2026-11-10.md`; prior intake/review release: `docs/INTAKE-REVIEW-2026-11-09.md`; prior record release: `docs/RECORDS-UPDATE-2026-11-09.md`; previous stable-operation/compact protocol: `docs/CARE-RETRY-2026-11-09.md`.
 
 The user explicitly selected this repository instead of `MatriSync--Health-a-thon-submission`, required continued use of the submitted web.app URL, and authorized all fixed code on main with an explicit note that it was committed **after the Health-a-thon 2026 submission date**. Preserve that notice in future commits and documentation. Do not backdate, rewrite history or force-push. Earlier instructions to preserve main without merging were superseded by this direct user decision.
 
@@ -51,7 +51,7 @@ The submission demo is working and hosted. The connected-care client, permission
 1. This handoff and `MATRISYNC_ACCOUNT2_START_PROMPT.md`.
 2. `AGENTS.md`, interpreted with the later user decisions in section 1.
 3. `docs/EMERGENCY-MVP-REQUIREMENTS-2026-11-07.md` and `docs/MatriSync-Master-Development-Guide-v2.txt`.
-4. `docs/RECOVERY-BROWSER-2026-11-10.md`, then `docs/INTAKE-REVIEW-2026-11-09.md`, then `docs/RECORDS-UPDATE-2026-11-09.md`, then `docs/CARE-RETRY-2026-11-09.md`, then `docs/CARE-DRAFTS-2026-11-08.md`, `docs/CARE-ACCEPTANCE-2026-11-08.md`, `docs/CARE-RECOVERY-2026-11-08.md`.
+4. `docs/DEVICE-RECOVERY-2026-11-10.md`, then `docs/RECOVERY-BROWSER-2026-11-10.md`, then `docs/INTAKE-REVIEW-2026-11-09.md`, then `docs/RECORDS-UPDATE-2026-11-09.md`, then `docs/CARE-RETRY-2026-11-09.md`, then `docs/CARE-DRAFTS-2026-11-08.md`, `docs/CARE-ACCEPTANCE-2026-11-08.md`, `docs/CARE-RECOVERY-2026-11-08.md`.
 5. `docs/PUBLIC-RELEASE-2026-11-07.md` and `docs/POST-SUBMISSION-UPDATE-2026-11-08.md`.
 6. Relevant protocol/requirements documents: `docs/FINAL-REQUIREMENTS-2026-11-05.md`, `docs/SHARING-ACCESS-PLAN.md`, `docs/DESTINATION-REFERRAL-PROTOCOL.md`, `docs/ENCRYPTED-ATTACHMENT-PROTOCOL.md`, `docs/RELEASE-GATES.md`.
 
@@ -117,7 +117,11 @@ Wait for the saved status before leaving. Browser leave-page warnings are best e
 
 ## 8. Verification and honest boundaries
 
-Latest recovery release (10 November): **157 unit tests / 35 files**, TypeScript, lint and production build passed. Completed browser checks cover uncertain approval reload/retry with identical ID/time/packet hash, no automatic send, original summary equality, newer-draft preservation, two-tab conflict, clean draft cleanup, patient/account isolation and retained receipt details. Fixed the discovered bug that hid a completed summary when a newer draft existed. The completed summary is now explicitly labelled and remains printable alongside that draft. No protocol/rule changes; the November 9 emulator/rules results below were not rerun for this UI fix.
+Latest device safeguard (10 November): **161 unit tests / 35 files**, **14 current care/record rules tests**, **three real Auth/Firestore emulator journeys**, TypeScript, lint and production build passed. New acceptance proves missing/different keys cannot replace enrollment and that the original key still reads the preserved records. No production rules or identities changed. Hosting-only release cache `14fc6ef7e26b`, bundle `assets/index-DQjq_1rx.js`; 16 static files and four route shells matched the tested build. Browser access was disabled in this run: the prepared enrollment fixture, rendered public app and cached Update now were **not verified for this release**. See `docs/DEVICE-RECOVERY-2026-11-10.md` for the exact implementation, candidate recovery protocol, evidence and next steps.
+
+The following browser evidence describes earlier releases, not a browser pass for the device safeguard.
+
+Earlier recovery display release (10 November): **157 unit tests / 35 files**, TypeScript, lint and production build passed. Completed browser checks cover uncertain approval reload/retry with identical ID/time/packet hash, no automatic send, original summary equality, newer-draft preservation, two-tab conflict, clean draft cleanup, patient/account isolation and retained receipt details. Fixed the discovered bug that hid a completed summary when a newer draft existed. The completed summary is now explicitly labelled and remains printable alongside that draft. No protocol/rule changes; the November 9 emulator/rules results below were not rerun for this UI fix.
 
 Hosting-only deployment used the same site: cache `b2f7eec259b7`, main asset `assets/index-CWp9UB9n.js`. Sixteen static files byte-matched and four public route shells matched. Real public Update now retained the Organization Guest session and loaded the new bundle without captured console errors. Read `docs/RECOVERY-BROWSER-2026-11-10.md` for detailed evidence and remaining boundaries.
 
@@ -219,7 +223,7 @@ The former planned stable-operation slice is **implemented**, not work to restar
 
 The approved-operation browser fixture is complete as of 10 November; do not repeat it as unfinished work. Read `docs/RECOVERY-BROWSER-2026-11-10.md` for the fixed completed-summary/newer-draft bug and accepted failure cases. Rerun relevant browser checks after future changes, including public Update now for a new release. HTTP byte equality alone is not browser acceptance. The user does not need to run developer pilots.
 
-Next continue scoped public authenticated acceptance and explicitly designed device/key recovery. Changed keys/revoked access can intentionally leave an uncommitted approval pending; no discard/replacement policy or cross-device recovery has been invented. Public facility verification stays deferred until authority is resolved. Mother-submitted copy review is now implemented with original-review attestation and immutable approval. Cross-device files, unlinked local-profile publishing and granular device/PIN requirements remain separate targets.
+Next complete the prepared device browser fixture and retained-client Update now check when browser access is available. Then specify Candidate A's device-epoch migration, approval UX and recovery scope before implementing transfer, as documented in `docs/DEVICE-RECOVERY-2026-11-10.md`. Scoped public authenticated acceptance requires an already-authorized identity/invitation scope. Changed keys/revoked access can intentionally leave an uncommitted approval pending; no discard/replacement policy or cross-device recovery has been invented. Public facility verification stays deferred until authority is resolved. Mother-submitted copy review is now implemented with original-review attestation and immutable approval. Cross-device files, unlinked local-profile publishing and granular device/PIN requirements remain separate targets.
 
 The latest user asked to minimize NFC handoffs: lossless compact connected-care transfer is now implemented, with a 53% reduction on the recorded synthetic sample. It still exceeds the only verified 48 tag bytes. Inspect full usable tag capacity and obtain the current bridge source/protocol before any separate hardware work; no firmware flashing is authorized in this slice.
 
