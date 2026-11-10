@@ -11,3 +11,5 @@ export {sourceIdentity,sourceChoices,reviewSourceSelection,captureSourceSelectio
 export type {SourceChoice} from "./recovery-source";
 export {validateImportRecord} from "./recovery-import-records";
 export type {ImportKind} from "./recovery-import-records";
+export {BrowserImportDatabase,BrowserExportDatabase} from "./recovery-indexeddb";
+export type {BrowserStoreBinding,BrowserStoreFault} from "./recovery-indexeddb";

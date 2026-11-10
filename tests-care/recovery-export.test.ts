@@ -1,4 +1,5 @@
 import {ImportDatabase,ExportDatabase} from "./recovery-databases";
+import {BrowserImportDatabase,BrowserExportDatabase} from "./recovery-indexeddb";
 import "fake-indexeddb/auto";
 import {IDBFactory} from "fake-indexeddb";
 import {beforeAll,afterAll,describe,expect,it,vi} from "vitest";
@@ -61,6 +62,28 @@ async function fixture(status:"approved"|"pending"|"rejected"="approved"){
 async function transfer(f:Awaited<ReturnType<typeof fixture>>){const p=await f.exporter().prepare(f.uid,f.id,f.choices);await f.receiver.begin(f.uid,p.manifestEnvelope);for(const o of p.objects)await f.receiver.stage(f.uid,f.id,o.envelope);await f.receiver.finish(f.uid,f.id);return p;}
 
 describe("read-only source export and actual care-storage compatibility",()=>{
+  it("uses encrypted browser stores for actual source export, reload and quarantined import",async()=>{
+    const f=await fixture(),before=await f.snapshot(),binding={uid:f.uid,deviceKeyId:f.source.keyId,storeId:crypto.randomUUID()};
+    const authority=()=>({enabled:f.state.enabled,cases:f.state.cases,device:{encryption:f.source.encryption,signing:f.source.signing,keyId:f.source.keyId}});
+    await new BrowserExportDatabase(binding).initialize();
+    const lost=new IsolatedRecoveryExport({store:new BrowserExportDatabase(binding,{fault:p=>{if(p==="after-commit")throw Error("Lost export response");}}),verifier:f.verifier,authority});
+    await expect(lost.prepare(f.uid,f.id,f.choices)).rejects.toThrow("Lost export response");
+    const exporter=()=>new IsolatedRecoveryExport({store:new BrowserExportDatabase(binding),verifier:f.verifier,authority});
+    const p=await exporter().prepare(f.uid,f.id,f.choices);expect(await exporter().prepare(f.uid,f.id,f.choices)).toEqual(p);
+    const destination={...binding,deviceKeyId:f.target.keyId};await new BrowserImportDatabase(destination).initialize();
+    const receiver=()=>new IsolatedRecoveryImport({uid:f.uid,target:f.target,store:new BrowserImportDatabase(destination),verifier:f.verifier,authority,clock:()=>f.state.now});
+    await receiver().begin(f.uid,p.manifestEnvelope);for(const item of p.objects)await receiver().stage(f.uid,f.id,item.envelope);
+    const receipt=await receiver().finish(f.uid,f.id),ack=await receiver().acknowledge(f.uid,f.id);
+    expect(await receiver().finish(f.uid,f.id)).toEqual(receipt);expect(await receiver().acknowledge(f.uid,f.id)).toBe(ack);
+    for(const d of p.manifest.objects){const actual=await receiver().read(f.uid,d.sourceId);expect(actual?.bytes).toEqual(await unwrapCareBytes(f.uid,before[d.sourceId]));expect(actual?.quarantined).toBe(d.kind==="pending");}
+    expect(await f.snapshot()).toEqual(before);expect(await existingSharingDevice(f.uid)).toEqual(f.source);
+  });
+  it("rolls back a browser export if source account changes after its write request",async()=>{
+    const f=await fixture(),before=await f.snapshot(),binding={uid:f.uid,deviceKeyId:f.source.keyId,storeId:crypto.randomUUID()};await new BrowserExportDatabase(binding).initialize();
+    const exporter=new IsolatedRecoveryExport({store:new BrowserExportDatabase(binding,{fault:p=>{if(p==="after-write")auth.currentUser={uid:"foreign",isAnonymous:false};}}),verifier:f.verifier,authority:()=>({enabled:true,cases:[f.caseId],device:f.source})});
+    await expect(exporter.prepare(f.uid,f.id,f.choices)).rejects.toThrow("account changed");expect(await new BrowserExportDatabase(binding).transaction(async rows=>rows.size)).toBe(0);
+    auth.currentUser={uid:f.uid,isAnonymous:false};expect(await f.snapshot()).toEqual(before);
+  });
   it("round trips actual writer output byte-for-byte without changing source stores",async()=>{
     const f=await fixture(),before=await f.snapshot(),p=await transfer(f);
     for(const d of p.manifest.objects){const expected=await unwrapCareBytes(f.uid,before[d.sourceId]),actual=await f.receiver.read(f.uid,d.sourceId);expect(actual?.bytes).toEqual(expected);expect(actual?.quarantined).toBe(d.kind==="pending");expect(d.sha256).toBe(await rawDigest(expected));}
