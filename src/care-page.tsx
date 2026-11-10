@@ -1,4 +1,5 @@
 import {MotherLocalCopies} from "./records";
+import { CompactHandoffReview } from "./nfc/compact-review";
 import {MotherCareRecords,medicationText,medicationDisplay} from "./care-medication";
 import {createPatientPairing,redeemPatientPairing} from "./care-intake";
 import {CareRecordReview} from "./care-records-panel";
@@ -206,6 +207,7 @@ function CareAccountPage({ uid, role, section }: { uid: string; role: string; se
           try { if (!result.savedLocally || session.revision !== result.approvalRevision) throw Error("Preserve draft until recovery completes"); await session.complete(); } catch { draftWarning = " The saved draft was retained because cleanup could not finish or a newer draft exists. Reload to recover the original approval and review the retained draft."; }
           setPacket(result.packet); setHandoffId(result.id); setHtml(careHandoffDocument({ id: view.id, profile: result.profile }, result.fields, result.id, result.actorName, uid, result.recordedAt)); setNotice("Doctor-recorded handoff created. Blank details remain unknown. BLE and NFC transfer have not been confirmed. " + (result.savedLocally ? "Original handoff saved encrypted on this browser for reopening." : "The cloud handoff succeeded, but its offline copy could not be saved. Keep this page open to print or transfer it. The saved approval remains available; use the same action to confirm and recover the original.") + draftWarning);
         })}>{pendingApproval ? "Check / retry approved handoff" : "Create and approve handoff with entered details"}</button>
+        {role === "professional" && staff?.role === "doctor" && <CompactHandoffReview key={`${uid}:${view.id}`} patientId={view.id} patientName={view.profile.name} professionalId={uid} sendingFacilityId={staff.facilityId} fields={fields} disabled={busy || !!pendingApproval || !draftSessions.current.has(view.id)} />}
       </section>}
       {role !== "mother" && html && <><h3>Last completed handoff</h3><p className="record-id">Handoff ID: {handoffId}</p><p>This summary keeps the originally approved details. Any newer draft above is separate and is not included.</p><iframe sandbox="" title="Handoff summary preview" srcDoc={html} style={{ width: "100%", height: 480 }} /><button className="button secondary" disabled={busy} onClick={() => void act(() => printReferralDocument(html))}>Print handoff summary / Save PDF</button></>}
       {packet && staff?.role === "doctor" && <BleHandoffPanel key={handoffId} packet={packet} />}
