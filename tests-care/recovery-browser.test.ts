@@ -64,7 +64,7 @@ describe("isolated recovery browser boundary",()=>{
     expect(fetch).not.toHaveBeenCalled();
     for(const name of ["ImportDatabase","ExportDatabase","IsolatedRecoveryVerifier","EmulatorRecoveryBoundary","emulatorAccount","initialize"])expect(name in browser).toBe(false);
   });
-  it.each(["node:sqlite","fs","./tests-care/recovery-databases","./tests-care/recovery-emulator","./tests-care/recovery-verifier","./tests-care/recovery-import-worker"])("rejects even an unused import of %s",async path=>{
+  it.each(["node:sqlite","fs","./tests-care/recovery-databases","./tests-care/recovery-emulator","./tests-care/recovery-verifier","./tests-care/recovery-transport","./tests-care/recovery-import-worker"])("rejects even an unused import of %s",async path=>{
     await expect(build({...buildOptions,stdin:{contents:`import ${JSON.stringify(path)}; export const harmless=1;`,resolveDir:process.cwd(),loader:"ts"}})).rejects.toThrow("Privileged dependency is forbidden");
   });
   it("rejects a nested privileged dependency",async()=>{

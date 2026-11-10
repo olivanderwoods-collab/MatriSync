@@ -3,7 +3,7 @@
 import {createCipheriv,createDecipheriv,randomBytes} from "node:crypto";
 import {decodeJwt,decodeProtectedHeader} from "jose";
 import {IsolatedRecoveryVerifier,RECOVERY_DOMAIN,type Authority,type RecoveryStore,type Stored,type RecoveryOffer,type Decision,type ClosedDecision,type RecoveryOutcome} from "./recovery-verifier";
-import type {PublicDevice} from "../src/sharing-crypto";
+import {checkPublicDevice,publicPoint,type PublicDevice} from "../src/sharing-crypto";
 
 const project="demo-matrisync",database=`projects/${project}/databases/(default)`;
 const root=`http://127.0.0.1:8086/v1/${database}/documents`;
@@ -142,4 +142,30 @@ export class EmulatorRecoveryBoundary {
   approve(token:string,value:unknown){return this.execute(token,"approve",value);}
   close(token:string,value:unknown){return this.execute(token,"close",value);}
   reconcile(token:string,id:string){return this.execute(token,"reconcile",id);}
+  async inspect(token:string,id:string){
+    if(typeof id!=="string"||!uuid.test(id))throw Error("Invalid recovery operation.");
+    const uid=await emulatorAccount(token),{transaction}=await rpc("beginTransaction",{options:{readWrite:{}}});
+    try{
+      const get:Reader=async path=>{
+        const entries=await rpc("batchGet",{documents:[`${database}/documents/${path}`],transaction});
+        if(entries[0]?.missing)return undefined;
+        if(!entries[0]?.found)throw Error("Invalid recovery inspection read.");
+        return decode({mapValue:{fields:entries[0].found.fields}}) as Record<string,unknown>;
+      };
+      const state=await get(`isolatedRecovery/${uid}`);
+      if(state?.version!==1||Object.keys(state).sort().join()!=="envelope,version")throw Error("Recovery state unavailable.");
+      const record=this.open(uid,state.envelope).get(id),decision=record?.decision;
+      if(!record||!decision||decision.uid!==uid)throw Error("An approved recovery operation is required.");
+      const current=await authority(get,uid,decision.cases);
+      if(!current?.enabled||!decision.cases.every(c=>current.cases.includes(c)))throw Error("Current recovery access is unavailable.");
+      await checkPublicDevice(current.device);
+      current.device={encryption:publicPoint(current.device.encryption),signing:publicPoint(current.device.signing),keyId:current.device.keyId};
+      if(JSON.stringify(current.device)!==JSON.stringify(record.original))throw Error("Original recovery identity changed.");
+      if(await emulatorAccount(token)!==uid)throw Error("Recovery account changed.");
+      await rpc("commit",{transaction,writes:[]});
+      // A current read snapshot, NOT a lease, new grant or an atomic permission
+      // guarantee for a later transaction in another service/browser.
+      return structuredClone({uid,decision,authority:current});
+    }catch(error){await rpc("rollback",{transaction}).catch(()=>undefined);throw error;}
+  }
 }

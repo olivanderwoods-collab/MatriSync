@@ -13,3 +13,5 @@ export {validateImportRecord} from "./recovery-import-records";
 export type {ImportKind} from "./recovery-import-records";
 export {BrowserImportDatabase,BrowserExportDatabase} from "./recovery-indexeddb";
 export type {BrowserStoreBinding,BrowserStoreFault} from "./recovery-indexeddb";
+export {LoopbackRecoveryClient} from "./recovery-remote";
+export type {RecoveryInspection} from "./recovery-remote";
