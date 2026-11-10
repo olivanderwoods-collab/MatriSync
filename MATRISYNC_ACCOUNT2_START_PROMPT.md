@@ -1,5 +1,7 @@
 # Paste this into the other Codex account
 
+LATEST — 11 November 2026: read `docs/NFC-APPROVAL-2026-11-11.md` first. Source `fa50c0c05307cba805300898a1d74771cf09b2a3` is deployed at the unchanged URL, cache `66a999f0a90a`, bundle `assets/index-DMm-nUcH.js`. Durable Doctor compact-selection approval is implemented: encrypted signed source/exclusions/exact binary, digests, immutable history and atomic head conflict checks; reload never sends or regenerates an approval. 213 app tests, types/lint/build, real Edge synthetic-account reload/conflict checks, public cached Update now and byte-equal assets passed. No new emulator/rules/hardware acceptance. Next: isolated Section C generation/commit recovery tests for interrupted writes and reviewed per-referral keys/receiver/logger authorization, before physical integration. Preserve unfinished local recovery work. The 10 November entry below is historical; its durable-approval NEXT is now completed.
+
 LATEST OVERRIDE — 10 November 2026: continue the user-requested Clinical Handoff Dictionary, NFC Compression & Encryption plan. Read `docs/NFC-DICTIONARY-2026-11-10.md` before recovery history. Source commit `6684cb69fa585341c0b55d9d4c56e9d434690432` is deployed at the same URL, cache `17fa637114f8`, bundle `assets/index-6ox-d6U0.js`. 202 app tests, types/lint/build, real Edge review controls and cached Update now, plus 16 byte-equal live files/four routes passed. The new Doctor preview is connected; new AES/travel/reconstruction modules are prototypes, not a production NFC send/receive flow. Only 48 physical bytes are verified. No clinical terms, offline key provisioning, Section C recovery descriptor, actual MatriVitals logger or physical writer are approved/complete. Next: durable explicit compact-selection approval with source provenance, then reviewed key/grant/freshness protocol before bridge integration. Preserve unfinished local recovery-journey files described in the root handoff; they were not published. Browser access now works. The earlier recovery-fixture NEXT paragraph below is deferred history.
 
 Continue development of my existing MatriSync application from the recorded checkpoint. Do not rebuild it or repeat the original investigation.
@@ -9,10 +11,10 @@ Read `MATRISYNC_MVP_ACCOUNT2_HANDOFF.md` first. The supplied transfer ZIP record
 Repository: https://github.com/olivanderwoods-collab/MatriSync
 Branch for continued work/publication: `main`
 Latest isolated verifier/test commit: `78c6a89466f9685926e9a094d9d33dfcf350cacd`
-Latest tested application-code commit: `6684cb69fa585341c0b55d9d4c56e9d434690432`
+Latest tested application-code commit: `fa50c0c05307cba805300898a1d74771cf09b2a3`
 Required app URL: https://matrisync-c9de7.web.app
 Firebase project/site: `matrisync-c9de7`
-Current deployed cache: `17fa637114f8`
+Current deployed cache: `66a999f0a90a`
 
 Clone GitHub into a fresh folder if needed. Verify main contains the application commit above and inspect any later commits. Do not reset my existing local checkout: its local Git HEAD is stale because source was published through the connected GitHub app. Do not use an older source ZIP as the current code. My earlier instruction to publish all fixed code to main supersedes the old no-main-merge guidance. Keep an explicit note in future commits that this development is after the Health-a-thon 2026 submission date. Preserve history; no force pushes or backdating. Do not switch to the abandoned MatriSync--Health-a-thon-submission repository or change my submitted URL.
 

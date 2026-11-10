@@ -1,10 +1,10 @@
 # MatriSync: current development handoff
 
-Prepared 10 November 2026, Asia/Calcutta. Read this before historical handoffs. This document describes completed work and remaining boundaries; it is not a claim of clinical or production readiness.
+Prepared 11 November 2026, Asia/Calcutta. Read this before historical handoffs. This document describes completed work and remaining boundaries; it is not a claim of clinical or production readiness.
 
-Latest priority: the user's Clinical Handoff Dictionary, NFC Compression & Encryption plan. Read `docs/NFC-DICTIONARY-2026-11-10.md` before the recovery history below. Its phase/status report supersedes the earlier recovery-fixture NEXT instruction. The source release is `6684cb69fa585341c0b55d9d4c56e9d434690432`; this document's commit is a documentation-only child. The earlier ZIP is historical.
+Latest priority: the user's Clinical Handoff Dictionary, NFC Compression & Encryption plan. Read `docs/NFC-APPROVAL-2026-11-11.md`, then `docs/NFC-DICTIONARY-2026-11-10.md` before recovery history. Durable compact approval is implemented; do not redo it. Source release `fa50c0c05307cba805300898a1d74771cf09b2a3`; this document's commit is a documentation-only child. The earlier ZIP is historical.
 
-Current evidence: **202 application tests (36 new NFC), TypeScript, full lint, production build, real Edge component review checks, Hosting-only deployment, actual cached Update now, and 16 byte-equal live files plus four route shells passed**. New main bundle `assets/index-6ox-d6U0.js`, shell cache `17fa637114f8`. No new emulator/rules run or physical hardware acceptance is claimed. Only the Doctor preparation preview is connected to the public workflow; the new crypto/travel/reconstruction modules remain protocol prototypes pending authorized keys and hardware integration. Browser access resumed. No AI service, billing, rules or firmware change.
+Current evidence: **213 application tests (11 new approval), TypeScript, full lint, production build, real Edge encrypted reload/conflict checks, Hosting-only deployment, actual cached Update now, and 16 byte-equal live files plus four route shells passed**. Main bundle `assets/index-DMm-nUcH.js`, cache `66a999f0a90a`. Doctor compact approvals now persist signed/encrypted locally and reopen their original source/exclusions/binary separately from newer edits. No cloud/NFC send occurs. Browser fixture uses synthetic Auth with real IndexedDB/crypto; final canonical source-digest revision passed automated tests after those browser checks. No new emulator/rules run, public authenticated authority or physical hardware acceptance is claimed. AES section/travel/reconstruction modules remain prototypes pending authorized keys/hardware. No AI service, billing, rules or firmware change.
 
 Preserve the five unfinished local recovery files: `scripts/recovery-journey.mjs`, `tests-care/recovery-journey.ts`, `tests-care/recovery-journey-page.ts`, `tests-care/recovery-transport.ts`, `tests-care/recovery-transport.integration.ts`. These are not in the NFC release. Earlier focused controller/HTTP tests passed, but the runner/full two-browser journey was not accepted or published. Do not mistake the next account's absence of these local edits for their completion.
 
@@ -15,15 +15,15 @@ Preserve the five unfinished local recovery files: `scripts/recovery-journey.mjs
 | Source and submission repository | https://github.com/olivanderwoods-collab/MatriSync |
 | Continuing branch | `main` |
 | Latest isolated verifier/test commit | `78c6a89466f9685926e9a094d9d33dfcf350cacd` |
-| Latest application-code commit | `6684cb69fa585341c0b55d9d4c56e9d434690432` |
-| Repository tree at that commit | `ab7d130ee2e2916e2d214acc1d7ed5b8718d32a0` |
-| Application-code commit parent | `5cd625a9505aa1c79ac01210fe0a3e5775abd58d` |
+| Latest application-code commit | `fa50c0c05307cba805300898a1d74771cf09b2a3` |
+| Repository tree at that commit | `90e22938262ec2397ad5bb44b0366d0f45c9f53b` |
+| Application-code commit parent | `f8160cbf6bf7b44d79418752cb8ae38b5dab6d8e` |
 | Required live URL | **https://matrisync-c9de7.web.app** |
 | Firebase project and Hosting site | `matrisync-c9de7` |
-| Deployed shell cache | `17fa637114f8` |
-| Deployed main bundle | `assets/index-6ox-d6U0.js` |
-| Latest completed feature | NFC dictionary/binary foundation and Doctor preparation preview; 202 application checks |
-| Next software slice | Durable explicit compact approval/source provenance; reviewed key and freshness protocol |
+| Deployed shell cache | `66a999f0a90a` |
+| Deployed main bundle | `assets/index-DMm-nUcH.js` |
+| Latest completed feature | Durable compact approval/source provenance; 213 application checks |
+| Next software slice | Isolated Section C interrupted-write generation model; key/grant/freshness specification |
 
 This handoff is a documentation-only child of the NFC application-code commit above. The public app was redeployed for this NFC preview. The supplied November 9 ZIP and the following recovery history are older checkpoints; consult the new NFC document first.
 
