@@ -1,5 +1,7 @@
 # Isolated recovery cancellation and rejection
 
+Later 10 November continuation: read `RECOVERY-IMPORT-2026-11-10.md` first. The isolated manifest receiver, encrypted staging, atomic publication and acknowledgement now pass 139 recovery tests. Next is a read-only source selection/export adapter and actual legacy-format compatibility fixtures; no production recovery is enabled.
+
 Development after the Health-a-thon 2026 submission date. Original repository/main; submitted URL remains https://matrisync-c9de7.web.app. Read this before `RECOVERY-DURABILITY-2026-11-10.md`.
 
 ## Implemented contract
