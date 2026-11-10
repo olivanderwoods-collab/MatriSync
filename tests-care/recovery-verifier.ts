@@ -33,7 +33,11 @@ export type RecoveryOffer = {request:RecoveryRequest; digest:string; challengeEn
 export type Authority = {enabled:boolean; device:PublicDevice; cases:readonly string[]};
 export type Approval = {id:string; cases:string[]; possession:string; approval:string};
 export type Decision = {version:1; status:"approved"; id:string; uid:string; requestDigest:string; scopeDigest:string; cases:string[]; decidedAt:number; epoch:{keyId:string; parentKeyId:string; device:PublicDevice}};
-export type Stored = {offer:RecoveryOffer; nonce:string; original:PublicDevice; input:string; decision?:Decision; proofs?:Approval};
+export type ClosureStatus = "cancelled"|"rejected";
+export type Closure = {id:string;status:ClosureStatus;proof:string};
+export type ClosedDecision = {version:1;status:ClosureStatus;id:string;uid:string;requestDigest:string;oldKeyId:string;newKeyId:string;decidedAt:number;proofDigest:string};
+export type RecoveryOutcome = Decision|ClosedDecision;
+export type Stored = {offer:RecoveryOffer; nonce:string; original:PublicDevice; input:string; decision?:Decision; proofs?:Approval; closure?:ClosedDecision; closureProof?:Closure};
 
 export interface RecoveryStore {
   transaction<T>(work:(records:Map<string,Stored>)=>Promise<T>,beforeCommit?:()=>void):Promise<T>;
@@ -74,6 +78,10 @@ export async function approvalClaims(offer: RecoveryOffer, cases: string[], poss
   const r=offer.request;
   return [RECOVERY_DOMAIN,"approve",r.id,r.uid,offer.digest,r.oldKeyId,r.newDevice.keyId,r.expiresAt,scope(cases),await digest(possession)];
 }
+export function closureClaims(offer:RecoveryOffer,status:ClosureStatus) {
+  const r=offer.request;
+  return [RECOVERY_DOMAIN,"close",1,r.id,r.uid,offer.digest,r.oldKeyId,r.newDevice.keyId,r.expiresAt,status];
+}
 async function verify(token: string, device: PublicDevice, purpose: string, expected: unknown) {
   if(typeof token!=="string" || token.length>8192) throw Error("Invalid recovery proof.");
   const result=await compactVerify(token,await importJWK(device.signing,"ES256"),{algorithms:["ES256"]});
@@ -104,7 +112,7 @@ export class IsolatedRecoveryVerifier {
     if(authUid!==parsed.uid) throw Error("Recovery account differs.");
     return this.store.transaction(async(records)=>{
       const old=records.get(parsed.id),canonical=JSON.stringify(parsed);
-      if(old){if(old.input!==canonical)throw Error("Recovery operation conflicts.");this.live(old);return structuredClone(old.offer);}
+      if(old){if(old.input!==canonical)throw Error("Recovery operation conflicts.");if(old.closure)throw Error(`Recovery request is ${old.closure.status}.`);this.live(old);return structuredClone(old.offer);}
       const authority=this.authority(authUid,parsed.oldKeyId);
       await checkPublicDevice(authority.device);await checkPublicDevice(parsed.newDevice);
       if(parsed.oldKeyId===parsed.newDevice.keyId) throw Error("Recovery requires a different device.");
@@ -126,6 +134,7 @@ export class IsolatedRecoveryVerifier {
     const result=await this.store.transaction(async(records)=>{
       const record=records.get(submitted.id);
       if(!record || record.offer.request.uid!==authUid) throw Error("Recovery request unavailable for this account.");
+      if(record.closure)throw Error(`Recovery request is ${record.closure.status}.`);
       if(record.decision){
         if(JSON.stringify(record.proofs)!==JSON.stringify(submitted)) throw Error("Completed recovery operation conflicts.");
         return structuredClone(record.decision); // Original receipt, not fresh authority.
@@ -154,11 +163,43 @@ export class IsolatedRecoveryVerifier {
     if(committed)this.options.fault?.("after-commit");
     return result;
   }
-  async reconcile(authUid:string,id:string):Promise<Decision|undefined> {
+  async close(authUid:string,value:unknown):Promise<ClosedDecision> {
+    bounded(value,16384);exact(value,["id","status","proof"]);
+    if(typeof value.id!=="string"||!uuid.test(value.id)||(value.status!=="cancelled"&&value.status!=="rejected")||typeof value.proof!=="string"||value.proof.length>8192)throw Error("Invalid recovery closure.");
+    const submitted:Closure={id:value.id,status:value.status,proof:value.proof};
+    let committed=false,recheck:(()=>void)|undefined;
+    const result=await this.store.transaction(async records=>{
+      const record=records.get(submitted.id);
+      if(!record||record.offer.request.uid!==authUid)throw Error("Recovery request unavailable for this account.");
+      if(record.decision)throw Error("Approved recovery cannot be closed or revoked by this operation.");
+      if(record.closure){
+        if(JSON.stringify(record.closureProof)!==JSON.stringify(submitted))throw Error("Completed recovery closure conflicts.");
+        return structuredClone(record.closure);
+      }
+      const r=record.offer.request;
+      this.live(record);
+      await verify(submitted.proof,record.original,submitted.status,closureClaims(record.offer,submitted.status));
+      const proofDigest=await digest(submitted.proof);
+      this.options.fault?.("before-commit");
+      // Closing requires the original enrolled identity, never just a signed-in
+      // account or the target device. No case grant or new epoch is created.
+      recheck=()=>{
+        const current=this.authority(authUid,r.oldKeyId);this.live(record);
+        if(JSON.stringify(current.device)!==JSON.stringify(record.original))throw Error("Recovery original identity changed before closure.");
+      };
+      recheck();
+      const closure:ClosedDecision={version:1,status:submitted.status,id:r.id,uid:authUid,requestDigest:record.offer.digest,oldKeyId:r.oldKeyId,newKeyId:r.newDevice.keyId,decidedAt:this.live(record),proofDigest};
+      records.set(r.id,{...record,closure,closureProof:submitted});committed=true;
+      return structuredClone(closure);
+    },()=>recheck?.());
+    if(committed)this.options.fault?.("after-commit");
+    return result;
+  }
+  async reconcile(authUid:string,id:string):Promise<RecoveryOutcome|undefined> {
     return this.store.transaction(async(records)=>{
       const record=records.get(id);
       if(!record || record.offer.request.uid!==authUid) throw Error("Recovery request unavailable for this account.");
-      return structuredClone(record.decision);
+      return structuredClone(record.decision??record.closure);
     });
   }
   counts(){return this.store.transaction(async records=>({requests:records.size,decisions:[...records.values()].filter(r=>r.decision).length}));}

@@ -7,7 +7,7 @@ import {randomBytes} from "node:crypto";
 import {DatabaseSync} from "node:sqlite";
 import {CompactSign,compactDecrypt} from "jose";
 import {newSharingDevice,type SharingDevice} from "../src/sharing-crypto";
-import {IsolatedRecoveryVerifier,RECOVERY_DOMAIN,approvalClaims,bytes,possessionClaims,type Approval,type RecoveryOffer} from "./recovery-verifier";
+import {IsolatedRecoveryVerifier,RECOVERY_DOMAIN,approvalClaims,closureClaims,bytes,possessionClaims,type Approval,type ClosureStatus,type RecoveryOffer} from "./recovery-verifier";
 import {SqliteRecoveryStore,type StoragePoint} from "./recovery-sqlite";
 import type {WorkerInput} from "./recovery-worker";
 
@@ -37,8 +37,10 @@ async function fixture(){
     return {id:current.request.id,cases:[caseId],possession,approval:await sign(original,"approval",await approvalClaims(current,[caseId],possession))} satisfies Approval;
   };
   const approval=await makeApproval(offer);
-  const job=(action:WorkerInput["action"],crash?:StoragePoint):WorkerInput=>({path,keyHex:key.toString("hex"),storeId,uid,now:state.now,authority:state.authority,action,approval,request,crash});
-  return {path,key,storeId,store,uid,state,reopen,verifier,request,offer,nonce,approval,job,makeApproval};
+  const makeClosure=async(status:ClosureStatus="cancelled")=>({id:request.id,status,proof:await new CompactSign(bytes(closureClaims(offer,status))).setProtectedHeader({alg:"ES256",typ:`${RECOVERY_DOMAIN}:${status}`,kid:original.keyId}).sign(original.signKey)});
+  const closure=await makeClosure();
+  const job=(action:WorkerInput["action"],crash?:StoragePoint):WorkerInput=>({path,keyHex:key.toString("hex"),storeId,uid,now:state.now,authority:state.authority,action,approval,closure,request,crash});
+  return {path,key,storeId,store,uid,state,reopen,verifier,request,offer,nonce,approval,job,makeApproval,makeClosure,closure};
 }
 function child(job:WorkerInput,ready:()=>Promise<void>=async()=>{}){
   return new Promise<{code:number|null;response?:{ok:boolean;result?:unknown;error?:string}}>((resolveResult,reject)=>{
@@ -156,11 +158,12 @@ describe("isolated encrypted durable recovery",()=>{
     expect(await f.reopen().request(f.uid,f.request)).toEqual(f.offer);
   });
   it("fails closed on corruption, missing state and unsupported versions",async()=>{
-    for(const mutation of ["corrupt","missing","version"]){
+    for(const mutation of ["corrupt","missing","version","legacy-version"]){
       const f=await fixture(),db=new DatabaseSync(f.path);
       if(mutation==="corrupt")db.prepare("UPDATE recovery SET envelope=?").run(randomBytes(100));
       if(mutation==="missing")db.exec("DELETE FROM recovery");
       if(mutation==="version")db.exec("PRAGMA user_version=99");
+      if(mutation==="legacy-version")db.exec("PRAGMA user_version=1");
       db.close();const before=readFileSync(f.path);
       await expect(f.reopen().request(f.uid,f.request)).rejects.toThrow();
       expect(readFileSync(f.path)).toEqual(before);
@@ -185,3 +188,71 @@ describe("isolated encrypted durable recovery",()=>{
   });
 });
 
+
+
+describe("durable recovery cancellation and rejection",()=>{
+  it.each(["cancelled","rejected"] as const)("preserves exact %s receipts across restart, expiry and revocation",async status=>{
+    const f=await fixture(),closure=await f.makeClosure(status),receipt=await f.reopen().close(f.uid,closure);
+    expect((await child(f.job("reconcile"))).response).toEqual({ok:true,result:receipt});
+    f.state.now+=900000;f.state.authority.enabled=false;
+    expect((await child({...f.job("close"),closure})).response).toEqual({ok:true,result:receipt});
+    expect((await child(f.job("approve"))).response?.ok).toBe(false);
+    expect(await f.reopen().counts()).toEqual({requests:1,decisions:0});
+  });
+  it.each(["cancelled","rejected"] as const)("rolls back an interrupted %s write, leaving the original operation approvable",async status=>{
+    const f=await fixture(),closure=await f.makeClosure(status);
+    await expect(f.reopen(point=>{if(point==="after-write")throw Error("Interrupted closure");}).close(f.uid,closure)).rejects.toThrow("Interrupted closure");
+    expect(await f.reopen().reconcile(f.uid,f.request.id)).toBeUndefined();
+    expect((await f.reopen().approve(f.uid,f.approval)).status).toBe("approved");
+  });
+  it.each([
+    ["cancelled","after-write"],["cancelled","after-commit"],["rejected","after-write"],["rejected","after-commit"],
+  ] as const)("reconciles process termination for %s %s",async(status,point)=>{
+    const f=await fixture(),closure=await f.makeClosure(status);
+    expect((await child({...f.job("close",point),closure})).code).toBe(73);
+    const prior=await f.reopen().reconcile(f.uid,f.request.id);
+    expect(Boolean(prior)).toBe(point==="after-commit");
+    const receipt=await f.reopen().close(f.uid,closure);
+    if(prior)expect(receipt).toEqual(prior);
+    expect(receipt.status).toBe(status);
+    await expect(f.reopen().approve(f.uid,f.approval)).rejects.toThrow(status);
+  });
+  it("returns one closure receipt to eight coordinated processes",async()=>{
+    const f=await fixture(),results=await simultaneous(Array.from({length:8},()=>f.job("close")));
+    expect(results.every(r=>r.code===0&&r.response?.ok)).toBe(true);
+    for(const result of results)expect(result.response).toEqual(results[0].response);
+    expect((await f.reopen().reconcile(f.uid,f.request.id))?.status).toBe("cancelled");
+  });
+  it.each(["cancelled","rejected"] as const)("allows exactly one committed outcome in an approval/%s process race",async status=>{
+    const f=await fixture(),closure=await f.makeClosure(status);
+    const results=await simultaneous([f.job("approve"),{...f.job("close"),closure}]);
+    expect(results.filter(r=>r.response?.ok)).toHaveLength(1);
+    const receipt=await f.reopen().reconcile(f.uid,f.request.id);
+    expect(receipt).toEqual(results.find(r=>r.response?.ok)?.response?.result);
+    expect(["approved",status]).toContain(receipt?.status);
+    expect((await f.reopen().counts()).decisions).toBe(receipt?.status==="approved"?1:0);
+    const retry=receipt?.status==="approved"?await f.reopen().approve(f.uid,f.approval):await f.reopen().close(f.uid,closure);
+    expect(retry).toEqual(receipt);
+  });
+  it("allows only one terminal result in a cancellation/rejection process race",async()=>{
+    const f=await fixture(),closure=await f.makeClosure("rejected");
+    const results=await simultaneous([f.job("close"),{...f.job("close"),closure}]);
+    expect(results.filter(r=>r.response?.ok)).toHaveLength(1);
+    expect(await f.reopen().reconcile(f.uid,f.request.id)).toEqual(results.find(r=>r.response?.ok)?.response?.result);
+    expect((await f.reopen().counts()).decisions).toBe(0);
+  });
+  it.each(["membership","identity","expiry"])("rolls back closure if %s changes after writing but before commit",async change=>{
+    const f=await fixture();
+    const verifier=f.reopen(point=>{if(point!=="after-write")return;if(change==="membership")f.state.authority.enabled=false;if(change==="identity")f.state.authority.device=f.request.newDevice;if(change==="expiry")f.state.now+=600000;});
+    await expect(verifier.close(f.uid,f.closure)).rejects.toThrow();
+    expect(await f.reopen().reconcile(f.uid,f.request.id)).toBeUndefined();
+  });
+  it("uses a new store version that old readers reject instead of ignoring closure state",async()=>{
+    const f=await fixture();await f.verifier.close(f.uid,f.closure);
+    const db=new DatabaseSync(f.path);
+    try{expect(db.prepare("PRAGMA user_version").get()?.user_version).toBe(2);}finally{db.close();}
+    const data=readFileSync(f.path);
+    expect(data.includes(Buffer.from(f.closure.proof))).toBe(false);
+    expect(data.includes(Buffer.from(f.uid))).toBe(false);
+  });
+});

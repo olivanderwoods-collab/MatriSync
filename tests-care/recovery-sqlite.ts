@@ -15,7 +15,7 @@ export class SqliteRecoveryStore implements RecoveryStore {
     const wait=options.lockWaitMs??5000;
     if(!Number.isSafeInteger(wait)||wait<0||wait>30000)throw Error("Invalid lock wait.");
     this.key=Buffer.from(key);
-    this.aad=Buffer.from(`${RECOVERY_DOMAIN}:sqlite-v1:${storeId}`);
+    this.aad=Buffer.from(`${RECOVERY_DOMAIN}:sqlite-v2:${storeId}`);
   }
   // Creation is explicit and exclusive. Reopening never initializes missing state.
   initialize() {
@@ -23,7 +23,7 @@ export class SqliteRecoveryStore implements RecoveryStore {
     const db=new DatabaseSync(this.path);
     try {
       db.exec("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; BEGIN IMMEDIATE");
-      db.exec("CREATE TABLE recovery (id INTEGER PRIMARY KEY CHECK(id=1), envelope BLOB NOT NULL) STRICT; PRAGMA user_version=1");
+      db.exec("CREATE TABLE recovery (id INTEGER PRIMARY KEY CHECK(id=1), envelope BLOB NOT NULL) STRICT; PRAGMA user_version=2");
       db.prepare("INSERT INTO recovery VALUES (1,?)").run(this.seal("[]"));
       db.exec("COMMIT");
     } finally {db.close();}
@@ -63,7 +63,7 @@ export class SqliteRecoveryStore implements RecoveryStore {
       // exclusive commit lock. Retry that phase as well as BEGIN and COMMIT.
       await waitForLock(()=>db.exec("PRAGMA busy_timeout=0; PRAGMA synchronous=FULL"));
       await waitForLock(()=>{db.exec("BEGIN IMMEDIATE");active=true;});
-      if(db.prepare("PRAGMA user_version").get()?.user_version!==1)throw Error("Unsupported isolated store version.");
+      if(db.prepare("PRAGMA user_version").get()?.user_version!==2)throw Error("Unsupported isolated store version.");
       const row=db.prepare("SELECT envelope FROM recovery WHERE id=1").get();
       if(!row)throw Error("Isolated store state missing; refusing to reset.");
       const records=this.open(row.envelope),before=JSON.stringify([...records]);

@@ -1,5 +1,7 @@
 # Isolated recovery durability and browser acceptance
 
+Later 10 November continuation: read `RECOVERY-CLOSURE-2026-11-10.md` first. Signed cancellation/rejection and transaction races are now implemented in isolation (92 recovery tests). SQLite storage advances to v2 and refuses v1 without modification; no migration or public service is enabled. The next slice is authenticated manifest staging/import, not another durability investigation.
+
 Development after the Health-a-thon 2026 submission date. Original repository/main; submitted URL remains https://matrisync-c9de7.web.app. Read this before the earlier `RECOVERY-VERIFIER-2026-11-10.md` checkpoint.
 
 ## Implemented scope
