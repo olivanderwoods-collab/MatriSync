@@ -1,24 +1,15 @@
 // Isolated exporter. Source access is read-only; prepared packages are durably
 // saved in a separate encrypted store so retries never regenerate signatures.
 import {checkPublicDevice,type PublicDevice} from "../src/sharing-crypto";
-import {type Authority,type IsolatedRecoveryVerifier,digest} from "./recovery-verifier";
-import {EncryptedRecoveryDatabase,type StoragePoint} from "./recovery-sqlite";
-import {IMPORT_DOMAIN,rawDigest,sealImportManifest,sealImportObject,type Manifest} from "./recovery-import";
+import {type Authority,type RecoveryReconciler,type RecoveryTransactionStore,digest} from "./recovery-protocol";
+import {rawDigest,sealImportManifest,sealImportObject,type Manifest} from "./recovery-import";
 import {sourceChoices,sourceIdentity,sourceSession,captureSourceSelection} from "./recovery-source";
 import {uuidPattern} from "./recovery-import-records";
 
 export type ExportPackage={id:string;uid:string;selection:string;decisionDigest:string;manifest:Manifest;manifestEnvelope:string;objects:{id:string;envelope:string}[]};
-export class ExportDatabase extends EncryptedRecoveryDatabase<ExportPackage>{
-  constructor(path:string,key:Uint8Array,storeId:string,options:{fault?:(point:StoragePoint)=>void;lockWaitMs?:number}={}){
-    super(path,key,storeId,{version:1,purpose:`${IMPORT_DOMAIN}:export-sqlite-v1`,limit:32*1024*1024,decode:value=>{
-      if(!Array.isArray(value)||value.some(row=>!Array.isArray(row)||row.length!==2||typeof row[0]!=="string"||!row[1]||row[1].id!==row[0])||new Set(value.map(row=>row[0])).size!==value.length)throw Error("Invalid isolated export state.");
-      return new Map(value);
-    }},options);
-  }
-}
 const pub=(v:PublicDevice)=>({encryption:v.encryption,signing:v.signing,keyId:v.keyId});
 export class IsolatedRecoveryExport{
-  constructor(private readonly options:{store:ExportDatabase;verifier:Pick<IsolatedRecoveryVerifier,"reconcile">;authority:(uid:string)=>Authority|undefined}){}
+  constructor(private readonly options:{store:RecoveryTransactionStore<ExportPackage>;verifier:RecoveryReconciler;authority:(uid:string)=>Authority|undefined}){}
   async prepare(uid:string,id:string,value:unknown):Promise<ExportPackage>{
     if(!uuidPattern.test(id))throw Error("Invalid recovery operation.");
     const choices=sourceChoices(value),selection=JSON.stringify(choices),session=await sourceSession(uid);

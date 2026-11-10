@@ -1,3 +1,4 @@
+import {ImportDatabase} from "./recovery-databases";
 import {afterAll,beforeAll,describe,expect,it} from "vitest";
 import {CompactEncrypt,CompactSign,compactDecrypt,compactVerify,generateKeyPair,exportJWK,importJWK,base64url} from "jose";
 import {randomBytes} from "node:crypto";
@@ -9,7 +10,7 @@ import {newSharingDevice,deviceFingerprint,publicPoint,type SharingDevice} from 
 import {emptyReferralFields} from "../src/referral-draft";
 import {IsolatedRecoveryVerifier,RECOVERY_DOMAIN,approvalClaims,closureClaims,bytes,digest,possessionClaims} from "./recovery-verifier";
 import {SqliteRecoveryStore,type StoragePoint} from "./recovery-sqlite";
-import {IMPORT_DOMAIN,IMPORT_LIMIT,ImportDatabase,IsolatedRecoveryImport,manifestClaims,rawDigest,sealImportManifest,sealImportObject,verifyImportAcknowledgement,type Manifest,type Descriptor,type ImportRow} from "./recovery-import";
+import {IMPORT_DOMAIN,IMPORT_LIMIT,IsolatedRecoveryImport,manifestClaims,rawDigest,sealImportManifest,sealImportObject,verifyImportAcknowledgement,type Manifest,type Descriptor,type ImportRow} from "./recovery-import";
 import type {ImportJob} from "./recovery-import-worker";
 
 const root=resolve(".local-tools");let dir:string,worker:string;

@@ -2,15 +2,12 @@
 // The auth UID and authority adapter are trusted test inputs, NOT authentication.
 import {CompactEncrypt, compactVerify, importJWK} from "jose";
 import {checkPublicDevice, type PublicDevice} from "../src/sharing-crypto";
+import {RECOVERY_DOMAIN,bytes,digest,scope,requestClaims,possessionClaims,approvalClaims,closureClaims,type RecoveryInput,type RecoveryOffer,type RecoveryRequest,type Authority,type Approval,type Decision,type Closure,type ClosedDecision,type RecoveryOutcome} from "./recovery-protocol";
+// Retain the existing server/test import API; browser code uses protocol directly.
+export * from "./recovery-protocol";
 
-export const RECOVERY_DOMAIN = "matrisync-isolated-recovery-contract-v1";
-const encoder = new TextEncoder();
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const fingerprint = /^[a-f0-9]{64}$/;
-export const bytes = (value: unknown) => encoder.encode(JSON.stringify(value));
-export async function digest(value: unknown) {
-  return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes(value))), x=>x.toString(16).padStart(2,"0")).join("");
-}
 function exact(value: unknown, fields: string[]): asserts value is Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length !== fields.length || !fields.every(k=>Object.hasOwn(value,k))) throw Error("Unsupported recovery schema.");
 }
@@ -27,16 +24,6 @@ function publicDevice(value: unknown): PublicDevice {
   const point=(key: Record<string,unknown>)=>({kty:"EC",crv:"P-256",x:key.x as string,y:key.y as string});
   return {encryption:point(value.encryption as Record<string,unknown>),signing:point(value.signing as Record<string,unknown>),keyId:value.keyId};
 }
-export type RecoveryInput = {version:1; id:string; uid:string; oldKeyId:string; newDevice:PublicDevice};
-export type RecoveryRequest = RecoveryInput & {createdAt:number; expiresAt:number; challenge:string};
-export type RecoveryOffer = {request:RecoveryRequest; digest:string; challengeEnvelope:string};
-export type Authority = {enabled:boolean; device:PublicDevice; cases:readonly string[]};
-export type Approval = {id:string; cases:string[]; possession:string; approval:string};
-export type Decision = {version:1; status:"approved"; id:string; uid:string; requestDigest:string; scopeDigest:string; cases:string[]; decidedAt:number; epoch:{keyId:string; parentKeyId:string; device:PublicDevice}};
-export type ClosureStatus = "cancelled"|"rejected";
-export type Closure = {id:string;status:ClosureStatus;proof:string};
-export type ClosedDecision = {version:1;status:ClosureStatus;id:string;uid:string;requestDigest:string;oldKeyId:string;newKeyId:string;decidedAt:number;proofDigest:string};
-export type RecoveryOutcome = Decision|ClosedDecision;
 export type Stored = {offer:RecoveryOffer; nonce:string; original:PublicDevice; input:string; decision?:Decision; proofs?:Approval; closure?:ClosedDecision; closureProof?:Closure};
 
 export interface RecoveryStore {
@@ -61,26 +48,6 @@ function input(value: unknown): RecoveryInput {
   bounded(value,16384); exact(value,["version","id","uid","oldKeyId","newDevice"]);
   if(value.version!==1 || typeof value.id!=="string" || !uuid.test(value.id) || typeof value.uid!=="string" || !/^[A-Za-z0-9_-]{1,128}$/.test(value.uid) || typeof value.oldKeyId!=="string" || !fingerprint.test(value.oldKeyId)) throw Error("Invalid recovery request.");
   return {version:1,id:value.id,uid:value.uid,oldKeyId:value.oldKeyId,newDevice:publicDevice(value.newDevice)};
-}
-function scope(value: unknown): string[] {
-  if(!Array.isArray(value) || value.length<1 || value.length>100 || !value.every(id=>typeof id==="string" && uuid.test(id)) || new Set(value).size!==value.length) throw Error("Invalid recovery scope.");
-  return [...value].sort();
-}
-export function requestClaims(r: RecoveryRequest) {
-  const point=(p:PublicDevice["encryption"])=>[p.kty,p.crv,p.x,p.y];
-  return [RECOVERY_DOMAIN,"request",r.version,r.id,r.uid,r.oldKeyId,[r.newDevice.keyId,point(r.newDevice.encryption),point(r.newDevice.signing)],r.createdAt,r.expiresAt,r.challenge];
-}
-export function possessionClaims(offer: RecoveryOffer, nonce: string) {
-  const r=offer.request;
-  return [RECOVERY_DOMAIN,"possession",r.id,r.uid,offer.digest,r.oldKeyId,r.newDevice.keyId,r.expiresAt,nonce];
-}
-export async function approvalClaims(offer: RecoveryOffer, cases: string[], possession: string) {
-  const r=offer.request;
-  return [RECOVERY_DOMAIN,"approve",r.id,r.uid,offer.digest,r.oldKeyId,r.newDevice.keyId,r.expiresAt,scope(cases),await digest(possession)];
-}
-export function closureClaims(offer:RecoveryOffer,status:ClosureStatus) {
-  const r=offer.request;
-  return [RECOVERY_DOMAIN,"close",1,r.id,r.uid,offer.digest,r.oldKeyId,r.newDevice.keyId,r.expiresAt,status];
 }
 async function verify(token: string, device: PublicDevice, purpose: string, expected: unknown) {
   if(typeof token!=="string" || token.length>8192) throw Error("Invalid recovery proof.");

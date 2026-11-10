@@ -1,8 +1,7 @@
 // Isolated receiver model. No app store, cloud writes, clinical permissions or sends.
 import {CompactEncrypt,CompactSign,compactDecrypt,compactVerify,importJWK,base64url} from "jose";
 import {checkPublicDevice,type SharingDevice,type PublicDevice} from "../src/sharing-crypto";
-import {RECOVERY_DOMAIN,bytes,digest,type Authority,type Decision,type IsolatedRecoveryVerifier} from "./recovery-verifier";
-import {EncryptedRecoveryDatabase,type StoragePoint} from "./recovery-sqlite";
+import {RECOVERY_DOMAIN,bytes,digest,type Authority,type Decision,type RecoveryReconciler,type RecoveryTransactionStore} from "./recovery-protocol";
 import {object,uuidPattern,hashPattern,uidPattern,validateImportRecord,type ImportKind} from "./recovery-import-records";
 
 export const IMPORT_DOMAIN=`${RECOVERY_DOMAIN}:import-v1`;
@@ -13,14 +12,6 @@ export type ImportReceipt={version:1;id:string;uid:string;targetKeyId:string;man
 type Session={id:string;type:"session";manifest:Manifest;digest:string;proof:string;objects:Record<string,string>;receipt?:ImportReceipt;ack?:string};
 export type ImportedRecord={id:string;type:"record";uid:string;targetKeyId:string;descriptor:Descriptor;encoded:string;quarantined:boolean};
 export type ImportRow=Session|ImportedRecord;
-export class ImportDatabase extends EncryptedRecoveryDatabase<ImportRow>{
-  constructor(path:string,key:Uint8Array,storeId:string,options:{fault?:(point:StoragePoint)=>void;lockWaitMs?:number}={}){
-    super(path,key,storeId,{version:1,purpose:`${IMPORT_DOMAIN}:sqlite-v1`,limit:32*1024*1024,decode:value=>{
-      if(!Array.isArray(value)||value.some(row=>!Array.isArray(row)||row.length!==2||typeof row[0]!=="string"||!row[1]||row[1].id!==row[0]||!["session","record"].includes(row[1].type))||new Set(value.map(row=>row[0])).size!==value.length)throw Error("Invalid isolated import state.");
-      return new Map(value);
-    }},options);
-  }
-}
 function bounded(value:unknown,max:number){if(bytes(value).length>max)throw Error("Recovery import size limit exceeded.");}
 export async function rawDigest(value:Uint8Array){return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",value.slice())),v=>v.toString(16).padStart(2,"0")).join("");}
 export function manifestClaims(m:Manifest){return [IMPORT_DOMAIN,"manifest",m.version,m.id,m.uid,m.requestDigest,m.decisionDigest,m.sourceKeyId,m.targetKeyId,[...m.cases].sort(),[...m.objects].sort((a,b)=>a.id.localeCompare(b.id)).map(o=>[o.id,o.caseId,o.kind,o.sourceId,o.length,o.sha256])];}
@@ -62,7 +53,7 @@ export async function verifyImportAcknowledgement(token:string,m:Manifest,receip
 
 export class IsolatedRecoveryImport {
   private target:SharingDevice;
-  constructor(private readonly options:{uid:string;target:SharingDevice;store:ImportDatabase;verifier:Pick<IsolatedRecoveryVerifier,"reconcile">;authority:(uid:string)=>Authority|undefined;clock:()=>number}){this.target=structuredClone(options.target);}
+  constructor(private readonly options:{uid:string;target:SharingDevice;store:RecoveryTransactionStore<ImportRow>;verifier:RecoveryReconciler;authority:(uid:string)=>Authority|undefined;clock:()=>number}){this.target=structuredClone(options.target);}
   private account(uid:string){if(uid!==this.options.uid||!uidPattern.test(uid))throw Error("Import account differs.");}
   private sessionId(uid:string,id:string){return `session:${uid}:${this.target.keyId}:${id}`;}
   private slot(uid:string,sourceId:string){return `record:${uid}:${this.target.keyId}:${sourceId}`;}

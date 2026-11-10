@@ -1,0 +1,60 @@
+{
+  "baseline": "68436156c88b46df7f5c6d0e25f9d3c1cfacaaea",
+  "note": "Synthetic wire-format fixture captured from the pre-separation commit; public points are placeholders, not usable devices.",
+  "offer": {
+    "request": {
+      "version": 1,
+      "id": "11111111-1111-4111-8111-111111111111",
+      "uid": "synthetic-wire-account",
+      "oldKeyId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "newDevice": {
+        "keyId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "encryption": {
+          "kty": "EC",
+          "crv": "P-256",
+          "x": "ccccccccccccccccccccccccccccccccccccccccccc",
+          "y": "ddddddddddddddddddddddddddddddddddddddddddd"
+        },
+        "signing": {
+          "kty": "EC",
+          "crv": "P-256",
+          "x": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "y": "fffffffffffffffffffffffffffffffffffffffffff"
+        }
+      },
+      "createdAt": 1794268800000,
+      "expiresAt": 1794269400000,
+      "challenge": "1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    "digest": "918982ca68134fc16798f658e3b3eec65f5208094a1170a2c8673e7e1e4626e0",
+    "challengeEnvelope": "synthetic-envelope"
+  },
+  "nonce": "2222222222222222222222222222222222222222222222222222222222222222",
+  "possession": "synthetic-original-possession-proof",
+  "cases": [
+    "33333333-3333-4333-8333-333333333333",
+    "22222222-2222-4222-8222-222222222222"
+  ],
+  "expected": {
+    "request": {
+      "json": "[\"matrisync-isolated-recovery-contract-v1\",\"request\",1,\"11111111-1111-4111-8111-111111111111\",\"synthetic-wire-account\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",[\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",[\"EC\",\"P-256\",\"ccccccccccccccccccccccccccccccccccccccccccc\",\"ddddddddddddddddddddddddddddddddddddddddddd\"],[\"EC\",\"P-256\",\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"fffffffffffffffffffffffffffffffffffffffffff\"]],1794268800000,1794269400000,\"1111111111111111111111111111111111111111111111111111111111111111\"]",
+      "sha256": "918982ca68134fc16798f658e3b3eec65f5208094a1170a2c8673e7e1e4626e0"
+    },
+    "possession": {
+      "json": "[\"matrisync-isolated-recovery-contract-v1\",\"possession\",\"11111111-1111-4111-8111-111111111111\",\"synthetic-wire-account\",\"918982ca68134fc16798f658e3b3eec65f5208094a1170a2c8673e7e1e4626e0\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",1794269400000,\"2222222222222222222222222222222222222222222222222222222222222222\"]",
+      "sha256": "61341bc67858884b619f5ed5945ccb13c346245f2e7d5736ec366d016db535ef"
+    },
+    "approval": {
+      "json": "[\"matrisync-isolated-recovery-contract-v1\",\"approve\",\"11111111-1111-4111-8111-111111111111\",\"synthetic-wire-account\",\"918982ca68134fc16798f658e3b3eec65f5208094a1170a2c8673e7e1e4626e0\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",1794269400000,[\"22222222-2222-4222-8222-222222222222\",\"33333333-3333-4333-8333-333333333333\"],\"a5f4a42ee59317baf2f9206fa1222bdd286282142a7c816103c42be900a8325b\"]",
+      "sha256": "a5741603f02c00ec6937d785e4a715a5a8c9163311b246c8083fcfd4fb77399b"
+    },
+    "cancelled": {
+      "json": "[\"matrisync-isolated-recovery-contract-v1\",\"close\",1,\"11111111-1111-4111-8111-111111111111\",\"synthetic-wire-account\",\"918982ca68134fc16798f658e3b3eec65f5208094a1170a2c8673e7e1e4626e0\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",1794269400000,\"cancelled\"]",
+      "sha256": "5be90fb7f6060767c6289c10230d33b94b6f60195c78644d55a566c2f777a3b8"
+    },
+    "rejected": {
+      "json": "[\"matrisync-isolated-recovery-contract-v1\",\"close\",1,\"11111111-1111-4111-8111-111111111111\",\"synthetic-wire-account\",\"918982ca68134fc16798f658e3b3eec65f5208094a1170a2c8673e7e1e4626e0\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",1794269400000,\"rejected\"]",
+      "sha256": "2872e9c0fcdb7a28c0ecca201769aafd979767d0511b20742b7654175e1a9337"
+    }
+  }
+}

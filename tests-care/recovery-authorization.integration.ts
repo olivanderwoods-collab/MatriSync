@@ -170,8 +170,16 @@ describe("real local Auth and Firestore recovery authorization boundary",()=>{
   it("serializes competing approvals without duplicate decisions",async()=>{
     const f=await fixture();const other=new EmulatorRecoveryBoundary(f.key);
     const results=await Promise.allSettled([f.boundary.approve(f.token,f.approval),other.approve(f.token,f.approval)]);
-    expect(results.some(r=>r.status==="fulfilled")).toBe(true);
-    const receipt=await other.reconcile(f.token,f.input.id);
+    // Firestore can abort BOTH competing read/write transactions on lock
+    // timeout. This boundary intentionally does not replay them automatically.
+    for(const result of results)if(result.status==="rejected")expect(String(result.reason)).toContain("(ABORTED)");
+    let receipt=await other.reconcile(f.token,f.input.id);
+    if(!receipt){
+      expect(results.every(r=>r.status==="rejected")).toBe(true);
+      receipt=await f.boundary.approve(f.token,f.approval); // Explicit same-proof retry after authoritative reconciliation.
+    }
+    expect(receipt.status).toBe("approved");
+    for(const result of results)if(result.status==="fulfilled")expect(result.value).toEqual(receipt);
     expect(await f.boundary.approve(f.token,f.approval)).toEqual(receipt);
     expect(await other.approve(f.token,f.approval)).toEqual(receipt);
   });

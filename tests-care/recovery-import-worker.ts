@@ -1,6 +1,7 @@
+import {ImportDatabase} from "./recovery-databases";
 // Synthetic child process only; private test keys arrive by IPC, never logs/argv.
 import {importJWK,type JWK} from "jose";
-import {ImportDatabase,IsolatedRecoveryImport} from "./recovery-import";
+import {IsolatedRecoveryImport} from "./recovery-import";
 import {IsolatedRecoveryVerifier,type Authority} from "./recovery-verifier";
 import {SqliteRecoveryStore,type StoragePoint} from "./recovery-sqlite";
 import type {PublicDevice} from "../src/sharing-crypto";

@@ -1,3 +1,4 @@
+import {ImportDatabase,ExportDatabase} from "./recovery-databases";
 import "fake-indexeddb/auto";
 import {IDBFactory} from "fake-indexeddb";
 import {beforeAll,afterAll,describe,expect,it,vi} from "vitest";
@@ -14,9 +15,9 @@ import {frameHandoff} from "../src/handoff-frame";
 import {base64} from "../src/vault-crypto";
 import type {CareView} from "../src/care-model";
 import {IsolatedRecoveryVerifier,RECOVERY_DOMAIN,bytes,approvalClaims,closureClaims,possessionClaims} from "./recovery-verifier";
-import {ExportDatabase,IsolatedRecoveryExport} from "./recovery-export";
+import {IsolatedRecoveryExport} from "./recovery-export";
 import {reviewSourceSelection,sourceSession} from "./recovery-source";
-import {ImportDatabase,IsolatedRecoveryImport,rawDigest} from "./recovery-import";
+import {IsolatedRecoveryImport,rawDigest} from "./recovery-import";
 import type {StoragePoint} from "./recovery-sqlite";
 
 const auth=vi.hoisted(()=>({currentUser:{uid:"",isAnonymous:false}}));
