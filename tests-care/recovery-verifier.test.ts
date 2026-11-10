@@ -28,7 +28,7 @@ async function fixture(){
 async function rejected(f:Awaited<ReturnType<typeof fixture>>,submitted:unknown=f.submitted){
   await expect(f.verifier.approve(f.uid,submitted)).rejects.toThrow();
   expect(await f.verifier.reconcile(f.uid,f.input.id)).toBeUndefined();
-  expect(f.verifier.counts().decisions).toBe(0);
+  expect((await await f.verifier.counts()).decisions).toBe(0);
 }
 
 describe("isolated original-device recovery verifier",()=>{
@@ -43,7 +43,7 @@ describe("isolated original-device recovery verifier",()=>{
     expect(result).toMatchObject({id:f.input.id,uid:f.uid,status:"approved",cases:[f.caseId],requestDigest:f.offer.digest,scopeDigest:await digest([f.caseId]),epoch:{keyId:f.target.keyId,parentKeyId:f.original.keyId}});
     expect(f.original.decryptKey.extractable).toBe(false);expect(f.target.signKey.extractable).toBe(false);
     expect(f.state.device).toEqual(publicOnly(f.original));
-    expect(f.verifier.counts()).toEqual({requests:1,decisions:1});
+    expect(await f.verifier.counts()).toEqual({requests:1,decisions:1});
   });
   it("does not treat sign-in or possession by the new browser as original approval",async()=>{
     const f=await fixture();
@@ -66,7 +66,7 @@ describe("isolated original-device recovery verifier",()=>{
     await expect(f.verifier.request("foreign",f.input)).rejects.toThrow("account");
     await expect(f.verifier.approve("foreign",f.submitted)).rejects.toThrow("account");
     await expect(f.verifier.reconcile("foreign",f.input.id)).rejects.toThrow("account");
-    expect(f.verifier.counts()).toEqual({requests:1,decisions:0});
+    expect(await f.verifier.counts()).toEqual({requests:1,decisions:0});
   });
   it("rejects scope substitution, duplicates, unknown fields and excess size",async()=>{
     const f=await fixture();
@@ -98,7 +98,7 @@ describe("isolated original-device recovery verifier",()=>{
     results[0].cases.push(crypto.randomUUID());results[0].epoch.device.keyId="changed";
     expect((await f.verifier.reconcile(f.uid,f.input.id))?.cases).toEqual([f.caseId]);
     expect((await f.verifier.reconcile(f.uid,f.input.id))?.epoch.keyId).toBe(f.target.keyId);
-    expect(f.verifier.counts().decisions).toBe(1);
+    expect((await await f.verifier.counts()).decisions).toBe(1);
   });
   it("reconciles a lost response without another approval or changed time",async()=>{
     const f=await fixture();
@@ -107,7 +107,7 @@ describe("isolated original-device recovery verifier",()=>{
     const receipt=await f.verifier.reconcile(f.uid,f.input.id);
     f.state.now+=900000;f.state.enabled=false;
     expect(await f.verifier.approve(f.uid,f.submitted)).toEqual(receipt);
-    expect(f.verifier.counts().decisions).toBe(1);
+    expect((await await f.verifier.counts()).decisions).toBe(1);
     await expect(f.verifier.approve(f.uid,{...f.submitted,cases:[crypto.randomUUID()]})).rejects.toThrow("conflicts");
   });
   it("keeps a pre-commit failure pending and retries the original request",async()=>{
@@ -121,12 +121,12 @@ describe("isolated original-device recovery verifier",()=>{
     const bad=[{...f.input,version:2},{...f.input,extra:true},{...f.input,newDevice:{...publicOnly(f.target),decryptKey:"private"}},{...f.input,newDevice:{...publicOnly(f.target),encryption:{...f.target.encryption,d:"private"}}},{...f.input,id:crypto.randomUUID(),newDevice:{...publicOnly(f.target),keyId:"0".repeat(64)}}];
     for(const value of bad)await expect(f.verifier.request(f.uid,value)).rejects.toThrow();
     await expect(f.verifier.request(f.uid,{...f.input,newDevice:publicOnly(f.stranger)})).rejects.toThrow("conflicts");
-    expect(f.verifier.counts()).toEqual({requests:1,decisions:0});
+    expect(await f.verifier.counts()).toEqual({requests:1,decisions:0});
   });
   it("does not accept proof replay into another operation",async()=>{
     const f=await fixture(),second=await f.verifier.request(f.uid,{...f.input,id:crypto.randomUUID()});
     await expect(f.verifier.approve(f.uid,{...f.submitted,id:second.request.id})).rejects.toThrow();
-    expect(f.verifier.counts().decisions).toBe(0);
+    expect((await await f.verifier.counts()).decisions).toBe(0);
   });
   it("binds original approval to the exact new-device possession proof",async()=>{
     const f=await fixture();
@@ -151,7 +151,7 @@ describe("isolated original-device recovery verifier",()=>{
       f.state.now=now;
       await expect(f.verifier.request(f.uid,{...f.input,id:crypto.randomUUID()})).rejects.toThrow("clock");
     }
-    expect(f.verifier.counts()).toEqual({requests:1,decisions:0});
+    expect(await f.verifier.counts()).toEqual({requests:1,decisions:0});
   });
   it("does not create a second epoch for one target using another valid operation",async()=>{
     const f=await fixture();await f.verifier.approve(f.uid,f.submitted);
@@ -161,7 +161,7 @@ describe("isolated original-device recovery verifier",()=>{
     const possession=await sign(f.target,"possession",possessionClaims(second,nonce));
     await expect(f.verifier.approve(f.uid,{id:second.request.id,cases:[f.caseId],possession,approval:await sign(f.original,"approval",await approvalClaims(second,[f.caseId],possession))})).rejects.toThrow("already approved");
     expect(await f.verifier.reconcile(f.uid,second.request.id)).toBeUndefined();
-    expect(f.verifier.counts().decisions).toBe(1);
+    expect((await await f.verifier.counts()).decisions).toBe(1);
   });
   it("does not let callers mutate a request while queued or after returning it",async()=>{
     const f=await fixture(),next={...f.input,id:crypto.randomUUID()};

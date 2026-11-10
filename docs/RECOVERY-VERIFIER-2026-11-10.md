@@ -1,5 +1,7 @@
 # Isolated recovery approval verifier
 
+Later 10 November continuation: read `RECOVERY-DURABILITY-2026-11-10.md` first. The transaction adapter and restart/crash/concurrent-process checks are now implemented in isolation; 48 recovery tests passed. The previously blocked device browser and public cached Update now checks also passed. The in-memory-only limitation and browser blocker below describe this earlier checkpoint.
+
 Development after the Health-a-thon 2026 submission date. Original repository/main; submitted URL remains https://matrisync-c9de7.web.app.
 
 ## Implemented scope

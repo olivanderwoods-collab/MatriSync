@@ -1,4 +1,4 @@
-// Isolated contract model only: no HTTP server, Firebase, disk or care grants.
+// Isolated contract model only: no HTTP server, Firebase or care grants.
 // The auth UID and authority adapter are trusted test inputs, NOT authentication.
 import {CompactEncrypt, compactVerify, importJWK} from "jose";
 import {checkPublicDevice, type PublicDevice} from "../src/sharing-crypto";
@@ -33,7 +33,25 @@ export type RecoveryOffer = {request:RecoveryRequest; digest:string; challengeEn
 export type Authority = {enabled:boolean; device:PublicDevice; cases:readonly string[]};
 export type Approval = {id:string; cases:string[]; possession:string; approval:string};
 export type Decision = {version:1; status:"approved"; id:string; uid:string; requestDigest:string; scopeDigest:string; cases:string[]; decidedAt:number; epoch:{keyId:string; parentKeyId:string; device:PublicDevice}};
-type Stored = {offer:RecoveryOffer; nonce:string; original:PublicDevice; input:string; decision?:Decision; proofs?:Approval};
+export type Stored = {offer:RecoveryOffer; nonce:string; original:PublicDevice; input:string; decision?:Decision; proofs?:Approval};
+
+export interface RecoveryStore {
+  transaction<T>(work:(records:Map<string,Stored>)=>Promise<T>,beforeCommit?:()=>void):Promise<T>;
+}
+export class MemoryRecoveryStore implements RecoveryStore {
+  private records=new Map<string,Stored>();
+  private queue:Promise<unknown>=Promise.resolve();
+  transaction<T>(work:(records:Map<string,Stored>)=>Promise<T>,beforeCommit?:()=>void):Promise<T> {
+    const task=this.queue.then(async()=>{
+      const draft=structuredClone(this.records);
+      const result=await work(draft);
+      beforeCommit?.();
+      this.records=structuredClone(draft);
+      return result;
+    });
+    this.queue=task.catch(()=>undefined);return task;
+  }
+}
 
 function input(value: unknown): RecoveryInput {
   bounded(value,16384); exact(value,["version","id","uid","oldKeyId","newDevice"]);
@@ -64,12 +82,8 @@ async function verify(token: string, device: PublicDevice, purpose: string, expe
 }
 
 export class IsolatedRecoveryVerifier {
-  private records=new Map<string,Stored>();
-  private queue:Promise<unknown>=Promise.resolve();
-  constructor(private readonly options:{clock:()=>number; authority:(uid:string)=>Authority|undefined; fault?:(point:"before-commit"|"after-commit")=>void}) {}
-  private atomic<T>(work:()=>Promise<T>):Promise<T> {
-    const task=this.queue.then(work); this.queue=task.catch(()=>undefined); return task;
-  }
+  private store:RecoveryStore;
+  constructor(private readonly options:{clock:()=>number; authority:(uid:string)=>Authority|undefined; fault?:(point:"before-commit"|"after-commit")=>void; store?:RecoveryStore}) {this.store=options.store??new MemoryRecoveryStore();}
   private authority(uid:string,oldKeyId:string):Authority {
     const value=this.options.authority(uid);
     if(!value?.enabled || value.device.keyId!==oldKeyId) throw Error("Recovery authority unavailable or changed.");
@@ -88,8 +102,8 @@ export class IsolatedRecoveryVerifier {
   async request(authUid:string,value:unknown):Promise<RecoveryOffer> {
     const parsed=input(value); // Clone/validate before queuing; caller cannot mutate it.
     if(authUid!==parsed.uid) throw Error("Recovery account differs.");
-    return this.atomic(async()=>{
-      const old=this.records.get(parsed.id),canonical=JSON.stringify(parsed);
+    return this.store.transaction(async(records)=>{
+      const old=records.get(parsed.id),canonical=JSON.stringify(parsed);
       if(old){if(old.input!==canonical)throw Error("Recovery operation conflicts.");this.live(old);return structuredClone(old.offer);}
       const authority=this.authority(authUid,parsed.oldKeyId);
       await checkPublicDevice(authority.device);await checkPublicDevice(parsed.newDevice);
@@ -99,7 +113,7 @@ export class IsolatedRecoveryVerifier {
       const requestDigest=await digest(requestClaims(request)),nonce=random();
       const challengeEnvelope=await new CompactEncrypt(bytes([RECOVERY_DOMAIN,"challenge",request.id,requestDigest,nonce])).setProtectedHeader({alg:"ECDH-ES",enc:"A256GCM",typ:`${RECOVERY_DOMAIN}:challenge`,kid:parsed.newDevice.keyId}).encrypt(await importJWK(parsed.newDevice.encryption,"ECDH-ES"));
       const offer={request,digest:requestDigest,challengeEnvelope};
-      this.records.set(parsed.id,{offer,nonce,original:authority.device,input:canonical});
+      records.set(parsed.id,{offer,nonce,original:authority.device,input:canonical});
       return structuredClone(offer);
     });
   }
@@ -107,8 +121,10 @@ export class IsolatedRecoveryVerifier {
     bounded(value,32768);exact(value,["id","cases","possession","approval"]);
     if(typeof value.id!=="string" || !uuid.test(value.id) || typeof value.possession!=="string" || typeof value.approval!=="string") throw Error("Invalid recovery approval.");
     const submitted:Approval={id:value.id,cases:scope(value.cases),possession:value.possession,approval:value.approval};
-    return this.atomic(async()=>{
-      const record=this.records.get(submitted.id);
+    let committed=false;
+    let recheck:(()=>void)|undefined;
+    const result=await this.store.transaction(async(records)=>{
+      const record=records.get(submitted.id);
       if(!record || record.offer.request.uid!==authUid) throw Error("Recovery request unavailable for this account.");
       if(record.decision){
         if(JSON.stringify(record.proofs)!==JSON.stringify(submitted)) throw Error("Completed recovery operation conflicts.");
@@ -123,20 +139,27 @@ export class IsolatedRecoveryVerifier {
       // No awaits between this authoritative read and the single aggregate write.
       const authority=this.authority(authUid,r.oldKeyId),decidedAt=this.live(record);
       if(JSON.stringify(authority.device)!==JSON.stringify(record.original) || !submitted.cases.every(id=>authority.cases.includes(id))) throw Error("Recovery scope or original identity is no longer authorized.");
-      if([...this.records.values()].some(item=>item.decision?.uid===authUid && item.decision.epoch.keyId===r.newDevice.keyId)) throw Error("Target device already approved by another operation.");
+      if([...records.values()].some(item=>item.decision?.uid===authUid && item.decision.epoch.keyId===r.newDevice.keyId)) throw Error("Target device already approved by another operation.");
       const decision:Decision={version:1,status:"approved",id:r.id,uid:authUid,requestDigest:record.offer.digest,scopeDigest,cases:submitted.cases,decidedAt,epoch:{keyId:r.newDevice.keyId,parentKeyId:r.oldKeyId,device:r.newDevice}};
+      recheck=()=>{
+        const latest=this.authority(authUid,r.oldKeyId);this.live(record);
+        if(JSON.stringify(latest.device)!==JSON.stringify(record.original)||!submitted.cases.every(id=>latest.cases.includes(id)))throw Error("Recovery authority changed before durable commit.");
+      };
       // Decision + epoch are one value, so the model cannot expose half a commit.
-      this.records.set(r.id,{...record,decision,proofs:submitted});
-      this.options.fault?.("after-commit");
+      records.set(r.id,{...record,decision,proofs:submitted});
+      committed=true;
       return structuredClone(decision);
-    });
+    },()=>recheck?.());
+    // Only a successfully committed store transaction may simulate response loss.
+    if(committed)this.options.fault?.("after-commit");
+    return result;
   }
   async reconcile(authUid:string,id:string):Promise<Decision|undefined> {
-    return this.atomic(async()=>{
-      const record=this.records.get(id);
+    return this.store.transaction(async(records)=>{
+      const record=records.get(id);
       if(!record || record.offer.request.uid!==authUid) throw Error("Recovery request unavailable for this account.");
       return structuredClone(record.decision);
     });
   }
-  counts(){return {requests:this.records.size,decisions:[...this.records.values()].filter(r=>r.decision).length};}
+  counts(){return this.store.transaction(async records=>({requests:records.size,decisions:[...records.values()].filter(r=>r.decision).length}));}
 }
