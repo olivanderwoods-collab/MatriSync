@@ -1,0 +1,9 @@
+// Explicit isolated test server: synthetic Auth alias never enters the app build.
+import {build} from 'esbuild';
+import {createServer} from 'node:http';
+import {readFile,mkdir} from 'node:fs/promises';
+import {resolve} from 'node:path';
+const dir=resolve('.local-tools/nfc-approval-browser');await mkdir(dir,{recursive:true});
+await build({entryPoints:['tests-care/nfc-approval-page.tsx'],bundle:true,format:'esm',platform:'browser',outfile:resolve(dir,'fixture.js'),jsx:'automatic',define:{'import.meta.env':'{}'},plugins:[{name:'isolated-synthetic-auth',setup(b){b.onResolve({filter:/^\.\.?\/auth$/},args=>args.importer.endsWith('care-storage.ts')?{path:resolve('tests-care/nfc-approval-auth.ts')}:undefined);}}]});
+const assets=new Map([['/',{type:'text/html',data:Buffer.from('<!doctype html><html><head><meta charset="utf-8"><title>MatriSync local approval fixture</title><link rel="stylesheet" href="/fixture.css"></head><body><div id="root"></div><script type="module" src="/fixture.js"></script></body></html>')}],['/fixture.js',{type:'text/javascript',data:await readFile(resolve(dir,'fixture.js'))}],['/fixture.css',{type:'text/css',data:await readFile(resolve(dir,'fixture.css'))}]]);
+createServer((req,res)=>{if(req.method!=='GET'||req.headers.host!=='127.0.0.1:4189'||(req.headers.origin&&req.headers.origin!=='http://127.0.0.1:4189')){res.writeHead(403).end();return;}const asset=assets.get(req.url);if(!asset){res.writeHead(404).end();return;}res.writeHead(200,{'Content-Type':asset.type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'none'; base-uri 'none'; frame-ancestors 'none'"}).end(asset.data);}).listen(4189,'127.0.0.1',()=>console.log('Synthetic NFC approval fixture: http://127.0.0.1:4189/'));
