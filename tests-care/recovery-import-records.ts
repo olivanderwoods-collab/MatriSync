@@ -69,6 +69,10 @@ export async function validateImportRecord(kind:ImportKind,raw:Uint8Array,uid:st
     identifier(entry.id);if(ids.has(entry.id as string))throw Error("Duplicate recovered contribution.");ids.add(entry.id as string);
     const kinds:Record<string,string[]>={doctor:["clinical-note","prescription","referral"],nurse:["observation","administration"],lab:["laboratory"]};
     if(typeof entry.role!=="string"||typeof entry.kind!=="string"||!kinds[entry.role]?.includes(entry.kind)||typeof entry.actorUid!=="string"||!uidPattern.test(entry.actorUid))throw Error("Invalid recovered contribution identity.");
-    string(entry.actorName,120);string(entry.text);time(entry.recordedAt);time(entry.serverAt);if(entry.fields!==undefined)fields(entry.fields);
+    string(entry.actorName,120);string(entry.text);time(entry.recordedAt);
+    // receiveCareHandoff stores an explicitly unknown server timestamp for the
+    // original referral snapshot. Preserve it; never synthesize a timestamp.
+    if(!(entry.serverAt===""&&value.snapshotOnly===true&&entry.kind==="referral"&&entry.id===value.handoffId))time(entry.serverAt);
+    if(entry.fields!==undefined)fields(entry.fields);
   }
 }

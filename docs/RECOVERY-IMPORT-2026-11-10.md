@@ -1,5 +1,7 @@
 # Isolated authenticated recovery import
 
+Later 10 November continuation: read `RECOVERY-EXPORT-2026-11-10.md` first. Read-only source selection/export and actual care-storage compatibility fixtures now pass 168 recovery tests. Received referral snapshots preserve their legitimately unknown server timestamps. The next slice is emulator-only authenticated verifier authorization; public recovery remains unavailable.
+
 Development after the Health-a-thon 2026 submission date. Original repository/main; submitted URL remains https://matrisync-c9de7.web.app. Read this before `RECOVERY-CLOSURE-2026-11-10.md` and older recovery checkpoints.
 
 ## Implemented scope
