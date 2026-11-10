@@ -1,4 +1,4 @@
 {
   "extends": "../tsconfig.json",
-  "include": ["recovery-*.ts", "../vitest.recovery.config.ts"]
+  "include": ["recovery-*.ts", "../vitest.recovery.config.ts", "../vitest.recovery-emulator.config.ts"]
 }
