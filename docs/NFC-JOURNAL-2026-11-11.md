@@ -2,6 +2,8 @@
 
 Development after the Health-a-thon 2026 submission date.
 
+Later continuation on the same date: the signed completion/receiver freshness candidate is implemented/tested in isolation; read `NFC-AUTHORITY-2026-11-11.md` first. It records 55 NFC tests, measured authorization overhead and unresolved atomic closure, production custody, offline freshness and hardware boundaries. The signature-NEXT below describes this earlier checkpoint.
+
 Read this before `NFC-COMMIT-2026-11-11.md`. The next software slice from that handoff is implemented in isolation. No production app, clinical record, firmware, rule, account or tag is changed. The five unfinished local recovery files remain separate and unpublished.
 
 ## Retained operation and explicit recovery

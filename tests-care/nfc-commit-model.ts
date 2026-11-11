@@ -63,6 +63,12 @@ async function pinnedPacket(image:TagImage,layout:MemoryLayout,pin:ExpectedSecti
   return packet;
 }
 
+// Checks ciphertext against an independently trusted pin, without exposing data
+// or implying possession of the section's decryption key.
+export async function checkPinnedSection(image:TagImage,layoutInput:MemoryLayout,expected:ExpectedSection){
+  await pinnedPacket(image,checkedLayout(layoutInput),copyExpected(expected));
+}
+
 export async function inspectCommit(image:TagImage,layoutInput:MemoryLayout,expected?:ExpectedSection,key?:CryptoKey):Promise<ReadResult>{
   // No tag-derived generation may silently supply freshness or authorization.
   if(!expected)return{status:"unverified",reason:"Expected referral and generation are unavailable. Tag data cannot establish freshness."};
