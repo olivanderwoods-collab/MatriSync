@@ -9,6 +9,9 @@ export type TagImage = ReadonlyMap<number, Uint8Array>;
 export type ExpectedSection = { context: SectionContext; packetDigest: string };
 export type ReadResult = { status: "current"; packet: Uint8Array; value: unknown } | { status: "unverified" | "unavailable" | "not-current"; reason: string };
 export type WriteStep = { phase: "invalidate" | "payload" | "descriptor" | "commit"; block: number; bytes: Uint8Array };
+export type CommitSnapshot = { version: 1; layout: MemoryLayout; before: [number, number[]][]; packet: number[]; expected: { context: Omit<SectionContext,"binding"> & {binding:number[]}; packetDigest:string }; previous: CommitSnapshot["expected"] | null; original: CommitSnapshot["expected"] | null };
+const storedPin=(e:ExpectedSection):CommitSnapshot["expected"]=>({...e,context:{...e.context,binding:[...e.context.binding]}});
+const loadedPin=(e:CommitSnapshot["expected"]):ExpectedSection=>({...e,context:{...e.context,binding:new Uint8Array(e.context.binding)}});
 const copyContext = (c: SectionContext): SectionContext => ({...c,binding:c.binding.slice()});
 const copyExpected = (e: ExpectedSection): ExpectedSection => ({context:copyContext(e.context),packetDigest:e.packetDigest});
 const hex = (b: Uint8Array) => Array.from(b,n=>n.toString(16).padStart(2,"0")).join("");
@@ -70,15 +73,17 @@ export async function inspectCommit(image:TagImage,layoutInput:MemoryLayout,expe
   }catch(e){return{status:e instanceof GenerationMismatch?"not-current":"unavailable",reason:e instanceof Error?e.message:"Section could not be verified."};}
 }
 
-// In-memory immutable approved operation. Durable encrypted custody and device
-// exclusivity are intentionally NOT provided by this isolated model.
+// Immutable approved operation. The separate Node journal retains snapshots;
+// this model itself provides neither persistence nor device exclusivity.
 export class PendingTagCommit {
   readonly #layout:MemoryLayout;
   readonly #before:Map<number,Uint8Array>;
   readonly #expected:ExpectedSection;
   readonly #steps:WriteStep[];
   readonly #after:Map<number,Uint8Array>;
-  private constructor(layout:MemoryLayout,before:Map<number,Uint8Array>,expected:ExpectedSection,steps:WriteStep[]){
+  readonly #snapshot:CommitSnapshot;
+  private constructor(layout:MemoryLayout,before:Map<number,Uint8Array>,expected:ExpectedSection,steps:WriteStep[],snapshot:CommitSnapshot){
+    this.#snapshot=structuredClone(snapshot);
     this.#layout=layout;this.#before=before;this.#expected=expected;this.#steps=steps;
     this.#after=imageCopy(before,layout);for(const step of steps)this.#after.set(step.block,step.bytes.slice());
   }
@@ -103,7 +108,17 @@ export class PendingTagCommit {
     }
     const desc=descriptor(expected,packet.length),blocks=slot(layout,context.section);
     const steps:WriteStep[]=[{phase:"invalidate",block:blocks[2],bytes:new Uint8Array(16)},...payload.map(w=>({phase:"payload" as const,block:w.block,bytes:w.data})),{phase:"descriptor",block:blocks[0],bytes:desc.slice(0,16)},{phase:"descriptor",block:blocks[1],bytes:desc.slice(16,32)},{phase:"commit",block:blocks[2],bytes:desc.slice(32)}];
-    return new PendingTagCommit(layout,before,expected,steps);
+    return new PendingTagCommit(layout,before,expected,steps,{version:1,layout,before:[...before].map(([n,b])=>[n,[...b]]),packet:[...packet],expected:storedPin(expected),previous:previous?storedPin(previous):null,original:original?storedPin(original):null});
+  }
+  snapshot(){return structuredClone(this.#snapshot);}
+  // Revalidate the retained original operation; never re-encrypt, write or advance.
+  static async restore(value:CommitSnapshot,key:CryptoKey){
+    const s=structuredClone(value);
+    const bytes=(v:unknown):v is number[]=>Array.isArray(v)&&v.every(n=>Number.isInteger(n)&&n>=0&&n<=255);
+    if(s?.version!==1||!bytes(s.packet)||!Array.isArray(s.before)||s.before.some(e=>!Array.isArray(e)||e.length!==2||!Number.isInteger(e[0])||!bytes(e[1])||e[1].length!==16)||new Set(s.before.map(e=>e[0])).size!==s.before.length||[s.expected,s.previous,s.original].some(p=>p!==null&&(!p||!bytes(p.context?.binding)||p.context.binding.length!==16)))throw Error("Invalid pending operation snapshot.");
+    const restored=await PendingTagCommit.prepare({layout:s.layout,before:new Map(s.before.map(([n,b])=>[n,new Uint8Array(b)])),packet:new Uint8Array(s.packet),context:loadedPin(s.expected).context,key,previous:s.previous?loadedPin(s.previous):undefined,original:s.original?loadedPin(s.original):undefined});
+    if(JSON.stringify(restored.snapshot())!==JSON.stringify(s))throw Error("Pending operation snapshot differs from validated original bytes or expectations.");
+    return restored;
   }
   expected(){return copyExpected(this.#expected);}
   steps(){return this.#steps.map(s=>({...s,bytes:s.bytes.slice()}));}
@@ -131,7 +146,7 @@ export class PendingTagCommit {
     }
     if(!reachable&&!equalImage(read,this.#after,this.#layout.blocks))throw Error("Read-back is not a recognized interruption of this exact operation. Do not overwrite; reconcile authority and tag state.");
     // No re-encryption, new nonce, sequence increment or clinical changes.
-    return new PendingTagCommit(this.#layout,read,this.#expected,this.#steps.map(s=>({...s,bytes:s.bytes.slice()})));
+    return new PendingTagCommit(this.#layout,read,this.#expected,this.#steps.map(s=>({...s,bytes:s.bytes.slice()})),this.#snapshot);
   }
   begin(){return new CommitReadbackSession(this.#layout,this.#before,this.#steps);}
 }

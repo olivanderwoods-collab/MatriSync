@@ -2,6 +2,8 @@
 
 Prepared 11 November 2026, Asia/Calcutta. Read this before historical handoffs. This document describes completed work and remaining boundaries; it is not a claim of clinical or production readiness.
 
+LATEST — durable journal continuation: read `docs/NFC-JOURNAL-2026-11-11.md` first. Isolated encrypted SQLite journal and exact validated model snapshots are implemented. Original packets/nonces/context/trusted pins/layout/baseline survive process restart; completion evidence is immutable; competing head advances refuse; restore never sends or re-encrypts. **31 NFC tests (14 existing + 17 new), 213 application tests, strict model/app types, full lint, documented production build and 16 byte-equal live assets/four HTTP route shells passed.** Both NFC suites exercise related 833 interruption boundaries. Fresh-process B recovery needs no A decryption key. No Hosting deployment, rendered-browser, emulator or hardware acceptance was performed for this isolated change. Application remains `fa50c0c`, cache `66a999f0a90a`. NEXT: signed logger completion, independently trusted receiver freshness and measured signature/key-envelope/grant overhead. The previous journal-NEXT below is historical. Local serialization is not physical device ownership; production authority/custody and rollback protection remain unresolved.
+
 Latest continuation: read `docs/NFC-COMMIT-2026-11-11.md` first, then the approval/dictionary history below. Isolated NFC source `9dffa2b34861166962f31f8d93b9bfb69a22a147` implements the Section C interruption model and documents the proposed key/authority contract. **14 model tests (833 interrupted-write boundaries), 213 app tests, model/app TypeScript, lint, production build and 16 byte-equal live files/four HTTP route shells passed.** The app remains at `fa50c0c05307cba805300898a1d74771cf09b2a3`, cache `66a999f0a90a`; this test-only slice was not deployed. No new rendered-browser, emulator or hardware check is claimed. Next: isolated encrypted durable pending-operation journal and restart/conflict tests; pending operations must never auto-send. Section C is only a software model until physical memory/protocol evidence and offline key/freshness authorization are complete.
 
 Latest priority: the user's Clinical Handoff Dictionary, NFC Compression & Encryption plan. Read `docs/NFC-APPROVAL-2026-11-11.md`, then `docs/NFC-DICTIONARY-2026-11-10.md` before recovery history. Durable compact approval is implemented; do not redo it. Source release `fa50c0c05307cba805300898a1d74771cf09b2a3`; this document's commit is a documentation-only child. The earlier ZIP is historical.
@@ -25,8 +27,8 @@ Preserve the five unfinished local recovery files: `scripts/recovery-journey.mjs
 | Firebase project and Hosting site | `matrisync-c9de7` |
 | Deployed shell cache | `66a999f0a90a` |
 | Deployed main bundle | `assets/index-DMm-nUcH.js` |
-| Latest completed feature | Isolated Section C interruption model; 14 model + 213 application checks |
-| Next software slice | Isolated encrypted durable operation journal; restart/conflict acceptance |
+| Latest completed feature | Isolated encrypted durable NFC operation journal; 31 NFC + 213 application checks |
+| Next software slice | Signed logger completion, trusted receiver freshness, measured authorization overhead |
 
 This handoff is a documentation-only child of the NFC application-code commit above. The public app was redeployed for this NFC preview. The supplied November 9 ZIP and the following recovery history are older checkpoints; consult the new NFC document first.
 

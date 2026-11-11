@@ -2,6 +2,8 @@
 
 Development after the Health-a-thon 2026 submission date.
 
+Later continuation on the same date: the durable operation journal described as NEXT below is now implemented/tested in isolation. Read `NFC-JOURNAL-2026-11-11.md` first for exact persistence, 31 NFC tests and remaining authorization/hardware limits. The memory-only statements below describe this earlier checkpoint.
+
 Read before `NFC-APPROVAL-2026-11-11.md`. This slice is an isolated software model in `tests-care/nfc-commit-model.ts`, not a public application feature or device driver. Existing clinical source, records, approvals, firmware, BLE behavior and public UI are unchanged. The five unfinished recovery-journey files remain separate local work.
 
 ## Implemented contract
