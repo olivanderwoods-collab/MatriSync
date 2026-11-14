@@ -1,5 +1,7 @@
 # Atomic NFC logger closure and retained receiver evidence
 
+Later continuation: `NFC-DRIVER-2026-11-14.md` adds the isolated journal v3 write-lease guard, synthetic transport and actual child-process authority-ledger crash tests. Its next-step and verification checkpoint supersede the closure-only next step below.
+
 14 November 2026, Asia/Calcutta. Development after the Health-a-thon 2026 submission date.
 
 Read this before `NFC-AUTHORITY-2026-11-11.md`. The attached November 11 continuation described an older checkpoint: the active checkout and remote main already contained journal `adf9eb1` and authority `3e14346078ac22535115099f2dc25a878fd62f84`. This slice continues those implementations. All new functionality remains isolated Node/SQLite code under `tests-care`; it is not a production receiver, endpoint or hardware driver.

@@ -9,6 +9,7 @@ for (const file of assets.filter((name) => name.endsWith(".js"))) {
     text.includes("matrisync-isolated-recovery-contract-v1") ||
     text.includes("matrisync-isolated-nfc-journal-") ||
     text.includes("matrisync-isolated-nfc-receiver-v1") ||
+    text.includes("Synthetic gateway rejected a stale fence.") ||
     text.includes("matrisync-isolated-nfc-authority-v1") ||
     text.includes("Operation ID conflicts with immutable original.") ||
     text.includes("code-verifier-only") ||

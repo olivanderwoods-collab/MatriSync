@@ -14,7 +14,9 @@ import type {StoragePoint} from "./recovery-sqlite";
 export const layout=memoryLayout({model:"classic-1k",verifiedDataBlocks:Array.from({length:63},(_,i)=>i+1).filter(b=>b%4!==3),reservedBlocks:[]});
 const publicOnly=(d:PublicDevice):PublicDevice=>({keyId:d.keyId,encryption:d.encryption,signing:d.signing});
 export async function closureFixture(dir:string,closed=false){
-  const [authority,receiver]=await Promise.all([newSharingDevice(),newSharingDevice()]);
+  const [baseAuthority,receiver]=await Promise.all([newSharingDevice(),newSharingDevice()]);
+  const authSig=await generateKeyPair("ES256",{extractable:true}),authorityJwk=await exportJWK(authSig.privateKey),authSigning=publicPoint(await exportJWK(authSig.publicKey));
+  const authority={...baseAuthority,signing:authSigning,signKey:await importJWK(authorityJwk,"ES256",{extractable:false}) as CryptoKey};authority.keyId=await deviceFingerprint(authority.encryption,authSigning);
   const sig=await generateKeyPair("ES256",{extractable:true}),loggerJwk=await exportJWK(sig.privateKey),signing=publicPoint(await exportJWK(sig.publicKey));
   const logger={...await newSharingDevice(),signing,signKey:await importJWK(loggerJwk,"ES256",{extractable:false}) as CryptoKey};logger.keyId=await deviceFingerprint(logger.encryption,signing);
   const scope={uid:"SYN-AUTH-OWNER",patientId:"SYN-AUTH-P",referralId:"SYN-AUTH-R"},grantId=crypto.randomUUID(),now=1794390000000;
@@ -36,5 +38,5 @@ export async function closureFixture(dir:string,closed=false){
   const inspect=(session:ReceiverChallenge,freshness?:string)=>session.inspect({grantToken,completion,freshness,now:state.now,image:b.finalImage(),layout,sectionKey:bKey});
   const finalize=()=>issuer().finalize(logger.keyId,grantToken,completion);
   const fresh=(session:ReceiverChallenge)=>issuer().freshness(receiver.keyId,grantToken,completion,session.nonce);
-  return{authority,logger,loggerJwk,receiver,scope,grantId,now,aRaw,bRaw,aKey,bKey,a,b,context,grant,grantToken,trust,envelopes,journal,journalPath,key,id,loggerPath,authorityPath,loggerLedger,authorityLedger,state,issuer,sign,completion,commitment,challenge,inspect,finalize,fresh};
+  return{authority,authorityJwk,logger,loggerJwk,receiver,scope,grantId,now,aRaw,bRaw,aKey,bKey,a,b,context,grant,grantToken,trust,envelopes,journal,journalPath,key,id,loggerPath,authorityPath,loggerLedger,authorityLedger,state,issuer,sign,completion,commitment,challenge,inspect,finalize,fresh};
 }
