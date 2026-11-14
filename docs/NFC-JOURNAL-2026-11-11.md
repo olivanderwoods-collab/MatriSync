@@ -1,5 +1,7 @@
 # Durable NFC operation journal — 11 November 2026
 
+Later continuation: `NFC-CLOSURE-2026-11-14.md` supersedes this checkpoint's separate logger-ledger transaction and memory-only receiver history. Atomic journal v2 closure and encrypted historical receiver evidence are now tested in isolation; production authority and physical ownership remain unresolved.
+
 Development after the Health-a-thon 2026 submission date.
 
 Later continuation on the same date: the signed completion/receiver freshness candidate is implemented/tested in isolation; read `NFC-AUTHORITY-2026-11-11.md` first. It records 55 NFC tests, measured authorization overhead and unresolved atomic closure, production custody, offline freshness and hardware boundaries. The signature-NEXT below describes this earlier checkpoint.

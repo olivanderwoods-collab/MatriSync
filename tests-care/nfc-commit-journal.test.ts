@@ -170,7 +170,7 @@ describe("isolated encrypted NFC operation journal",()=>{
     for(const mutation of ["cycle","missing-operation","missing-completion","conflicting-evidence"]){
       const f=await fixture();await f.journal.save(f.scope,"op-a",f.a,null);await f.journal.complete(f.scope,"op-a",f.a.finalImage(),f.key);await f.journal.save(f.scope,"op-b",f.b,"op-a");
       // Privileged corruption fixture deliberately knows the synthetic storage key.
-      const unsafe=new EncryptedRecoveryDatabase<Record<string,unknown>>(f.path,f.storageKey,f.storeId,{version:1,purpose:"matrisync-isolated-nfc-journal-v1",limit:8*1024*1024,decode:v=>new Map(v as [string,Record<string,unknown>][])});
+      const unsafe=new EncryptedRecoveryDatabase<Record<string,unknown>>(f.path,f.storageKey,f.storeId,{version:2,purpose:"matrisync-isolated-nfc-journal-v2",limit:8*1024*1024,decode:v=>new Map(v as [string,Record<string,unknown>][])});
       await unsafe.transaction(async rows=>{
         for(const [key,row] of rows){
           if(mutation==="cycle"&&row.kind==="operation"&&row.id==="op-b")row.previousId="op-b";

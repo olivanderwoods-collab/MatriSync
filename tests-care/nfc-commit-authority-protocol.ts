@@ -63,7 +63,8 @@ export async function verifyGrant(token:string,trustInput:Trust){
 // Provisioning candidate helper. Input raw material belongs only to a synthetic
 // authorized issuer fixture. No existing non-extractable device key is exported.
 export async function sealKeyEnvelope(grantId:string,scope:JournalScope,role:KeyEnvelopePin["role"],section:"a"|"b",recipient:PublicDevice,rawInput:Uint8Array){
-  const raw=rawInput.slice(),device=structuredClone(recipient),s=structuredClone(scope);
+  // Buffer.slice() aliases its caller; always own the bytes we later wipe.
+  const raw=new Uint8Array(rawInput),device=structuredClone(recipient),s=structuredClone(scope);
   if(!ident(grantId)||![s.uid,s.patientId,s.referralId].every(ident)||raw.length!==32||(role==="logger"&&section!=="b")||!["logger","receiver"].includes(role)||!["a","b"].includes(section))throw Error("Invalid section key grant.");
   try{
     await checkPublicDevice(device);

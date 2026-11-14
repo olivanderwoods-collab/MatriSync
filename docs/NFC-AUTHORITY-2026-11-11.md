@@ -1,5 +1,7 @@
 # Signed NFC completion and receiver freshness — 11 November 2026
 
+Later continuation: `NFC-CLOSURE-2026-11-14.md` supersedes this checkpoint's separate logger-ledger transaction and memory-only receiver history. Atomic journal v2 closure and encrypted historical receiver evidence are now tested in isolation; production authority and physical ownership remain unresolved.
+
 Development after the Health-a-thon 2026 submission date.
 
 Read before `NFC-JOURNAL-2026-11-11.md`. This is a tested, isolated protocol candidate in `tests-care/nfc-commit-authority-{protocol,model}.ts`, not a deployed authority, firmware or offline authorization service. It adds no app UI, public endpoint, enrollment, role, rule, billing or tag write. The five unfinished recovery files remain separate.

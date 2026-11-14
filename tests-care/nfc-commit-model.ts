@@ -12,10 +12,10 @@ export type WriteStep = { phase: "invalidate" | "payload" | "descriptor" | "comm
 export type CommitSnapshot = { version: 1; layout: MemoryLayout; before: [number, number[]][]; packet: number[]; expected: { context: Omit<SectionContext,"binding"> & {binding:number[]}; packetDigest:string }; previous: CommitSnapshot["expected"] | null; original: CommitSnapshot["expected"] | null };
 const storedPin=(e:ExpectedSection):CommitSnapshot["expected"]=>({...e,context:{...e.context,binding:[...e.context.binding]}});
 const loadedPin=(e:CommitSnapshot["expected"]):ExpectedSection=>({...e,context:{...e.context,binding:new Uint8Array(e.context.binding)}});
-const copyContext = (c: SectionContext): SectionContext => ({...c,binding:c.binding.slice()});
+const copyContext = (c: SectionContext): SectionContext => ({...c,binding:new Uint8Array(c.binding)});
 const copyExpected = (e: ExpectedSection): ExpectedSection => ({context:copyContext(e.context),packetDigest:e.packetDigest});
 const hex = (b: Uint8Array) => Array.from(b,n=>n.toString(16).padStart(2,"0")).join("");
-export async function packetDigest(bytes: Uint8Array) { return hex(new Uint8Array(await crypto.subtle.digest("SHA-256",bytes.slice()))); }
+export async function packetDigest(bytes: Uint8Array) { return hex(new Uint8Array(await crypto.subtle.digest("SHA-256",new Uint8Array(bytes)))); }
 
 function checkedLayout(value: MemoryLayout): MemoryLayout {
   const layout={...value,blocks:[...value.blocks],a:[...value.a],b:[...value.b],c:[...value.c]};
@@ -26,7 +26,7 @@ function checkedLayout(value: MemoryLayout): MemoryLayout {
 }
 function imageCopy(image: TagImage, layout: MemoryLayout): Map<number,Uint8Array> {
   const copy=new Map<number,Uint8Array>();
-  for(const block of layout.blocks){const bytes=image.get(block);if(!(bytes instanceof Uint8Array)||bytes.length!==16)throw Error("Incomplete tag read-back: every allocated block must contain exactly 16 bytes.");copy.set(block,bytes.slice());}
+  for(const block of layout.blocks){const bytes=image.get(block);if(!(bytes instanceof Uint8Array)||bytes.length!==16)throw Error("Incomplete tag read-back: every allocated block must contain exactly 16 bytes.");copy.set(block,new Uint8Array(bytes));}
   return copy;
 }
 function slot(layout: MemoryLayout, section: "a" | "b") { return layout.c.slice(section==="a"?0:3,section==="a"?3:6); }
@@ -95,7 +95,7 @@ export class PendingTagCommit {
   }
   static async prepare(input:{layout:MemoryLayout;before:TagImage;packet:Uint8Array;context:SectionContext;key:CryptoKey;previous?:ExpectedSection;original?:ExpectedSection}){
     // Capture all mutable caller input before awaiting cryptography.
-    const layout=checkedLayout(input.layout),before=imageCopy(input.before,layout),packet=input.packet.slice(),context=copyContext(input.context),previous=input.previous?copyExpected(input.previous):undefined,original=input.original?copyExpected(input.original):undefined;
+    const layout=checkedLayout(input.layout),before=imageCopy(input.before,layout),packet=new Uint8Array(input.packet),context=copyContext(input.context),previous=input.previous?copyExpected(input.previous):undefined,original=input.original?copyExpected(input.original):undefined;
     const expected={context,packetDigest:await packetDigest(packet)};validateExpected(expected);
     const payload=sectionWritePlan(packet,layout,context.section);
     await decode(packet,input.key,context,layout[`${context.section}Bytes`]);

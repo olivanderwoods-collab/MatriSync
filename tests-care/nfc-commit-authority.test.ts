@@ -33,13 +33,13 @@ async function fixture(){
   const loggerLedger=(fault?:(p:StoragePoint)=>void)=>new ProtocolLedger(loggerPath,key,id,"logger",{fault}),authorityLedger=(fault?:(p:StoragePoint)=>void)=>new ProtocolLedger(authorityPath,key,id,"authority",{fault});loggerLedger().initialize();authorityLedger().initialize();
   const state:{now:number;value:CurrentAuthority}={now,value:{enabled:true,grantToken,trust:{authority:trust.authority,scope,grantId,epoch:7}}};
   const issuer=(fault?:(p:StoragePoint)=>void)=>new CompletionAuthority({ledger:authorityLedger(fault),device:authority,clock:()=>state.now,current:()=>state.value});
-  const sign=(fault?:(p:StoragePoint)=>void)=>retainLoggerCompletion({grantToken,trust,logger,journal,operationId:"b",sectionKey:bKey,image:b.finalImage(),ledger:loggerLedger(fault)});
+  const sign=()=>retainLoggerCompletion({grantToken,trust,logger,journal,operationId:"b",sectionKey:bKey,image:b.finalImage()});
   const completion=await sign(),commitment=(await verifyCompletion(completion,grantToken,trust)).commitment;
   const challenge=()=>new ReceiverChallenge({...trust,now:state.now},receiver.keyId);
   const inspect=(session:ReceiverChallenge,freshness?:string)=>session.inspect({grantToken,completion,freshness,now:state.now,image:b.finalImage(),layout,sectionKey:bKey});
   const finalize=()=>issuer().finalize(logger.keyId,grantToken,completion);
   const fresh=(session:ReceiverChallenge)=>issuer().freshness(receiver.keyId,grantToken,completion,session.nonce);
-  return{authority,logger,receiver,scope,grantId,now,aRaw,bRaw,aKey,bKey,a,b,context,grant,grantToken,trust,envelopes,journal,key,id,loggerPath,authorityPath,loggerLedger,authorityLedger,state,issuer,sign,completion,commitment,challenge,inspect,finalize,fresh};
+  return{authority,logger,receiver,scope,grantId,now,aRaw,bRaw,aKey,bKey,a,b,context,grant,grantToken,trust,envelopes,journal,journalPath,key,id,loggerPath,authorityPath,loggerLedger,authorityLedger,state,issuer,sign,completion,commitment,challenge,inspect,finalize,fresh};
 }
 
 describe("isolated signed NFC completion, grants and receiver freshness",()=>{
@@ -96,14 +96,14 @@ describe("isolated signed NFC completion, grants and receiver freshness",()=>{
     const f=await fixture(),spy=vi.spyOn(crypto.subtle,"sign");
     try{expect(await f.sign()).toBe(f.completion);expect(spy).not.toHaveBeenCalled();}finally{spy.mockRestore();}
     const next={...f.b.expected().context,sequence:2},b2=await PendingTagCommit.prepare({layout,before:f.b.finalImage(),key:f.bKey,context:next,original:f.a.expected(),previous:f.b.expected(),packet:await prepareTravel({tripStartedAt:f.now,events:[]},f.bKey,next,layout.bBytes)});
-    await f.journal.save(f.scope,"b2",b2,"b");await f.journal.complete(f.scope,"b2",b2.finalImage(),f.bKey);
-    await expect(retainLoggerCompletion({grantToken:f.grantToken,trust:f.trust,logger:f.logger,journal:f.journal,operationId:"b2",sectionKey:f.bKey,image:b2.finalImage(),ledger:f.loggerLedger()})).rejects.toThrow(/closed/);
-    await expect(f.sign()).rejects.toThrow(/active/);
-    const data=readFileSync(f.loggerPath);for(const value of [f.completion,f.scope.uid,f.grantId,f.bRaw.toString("hex")])expect(data.includes(Buffer.from(value))).toBe(false);
+    await expect(f.journal.save(f.scope,"b2",b2,"b")).rejects.toThrow(/closed/);
+    await expect(retainLoggerCompletion({grantToken:f.grantToken,trust:f.trust,logger:f.logger,journal:f.journal,operationId:"b2",sectionKey:f.bKey,image:b2.finalImage()})).rejects.toThrow(/active/);
+    expect(await f.sign()).toBe(f.completion);
+    const data=readFileSync(f.journalPath);for(const value of [f.completion,f.scope.uid,f.grantId,f.bRaw.toString("hex")])expect(data.includes(Buffer.from(value))).toBe(false);
   });
   it("refuses an uncompleted journal operation or changed readback before logger signing",async()=>{
     const f=await fixture(),path=join(dir,`${crypto.randomUUID()}-pending.sqlite`),journal=new NfcCommitJournal(path,f.key,f.id);journal.initialize();await journal.save(f.scope,"b",f.b,null);
-    const invoke=(image=f.b.finalImage())=>retainLoggerCompletion({grantToken:f.grantToken,trust:f.trust,logger:f.logger,journal,operationId:"b",sectionKey:f.bKey,image,ledger:f.loggerLedger()});
+    const invoke=(image=f.b.finalImage())=>retainLoggerCompletion({grantToken:f.grantToken,trust:f.trust,logger:f.logger,journal,operationId:"b",sectionKey:f.bKey,image});
     await expect(invoke()).rejects.toThrow(/completed/);await journal.complete(f.scope,"b",f.b.finalImage(),f.bKey);
     const changed=f.b.finalImage();changed.get(layout.b[0])![0]^=1;await expect(invoke(changed)).rejects.toThrow(/readback/);
   });
@@ -142,12 +142,13 @@ describe("isolated signed NFC completion, grants and receiver freshness",()=>{
     expect(await f.inspect(session,proof!)).toMatchObject({checkedAt:retained?f.now:f.state.now});
   });
   it("recovers persisted logger signature after a lost response without re-signing",async()=>{
-    const f=await fixture(),path=join(dir,`${crypto.randomUUID()}-logger.sqlite`),key=randomBytes(32),id=crypto.randomUUID();
-    const ledger=(fault?:(p:StoragePoint)=>void)=>new ProtocolLedger(path,key,id,"logger",{fault});ledger().initialize();
-    const sign=(store:ProtocolLedger)=>retainLoggerCompletion({grantToken:f.grantToken,trust:f.trust,logger:f.logger,journal:f.journal,operationId:"b",sectionKey:f.bKey,image:f.b.finalImage(),ledger:store});
-    await expect(sign(ledger(p=>{if(p==="after-commit")throw Error("lost signature response");}))).rejects.toThrow(/lost/);
-    const saved=await ledger().transaction(async rows=>[...rows.values()][0]),spy=vi.spyOn(crypto.subtle,"sign");
-    try{expect(await sign(ledger())).toBe(saved);expect(spy).not.toHaveBeenCalled();}finally{spy.mockRestore();}
+    const f=await fixture(),path=join(dir,crypto.randomUUID()+"-pending.sqlite");
+    const journal=(fault?:(p:StoragePoint)=>void)=>new NfcCommitJournal(path,f.key,f.id,{fault});journal().initialize();
+    await journal().save(f.scope,"b",f.b,null);await journal().complete(f.scope,"b",f.b.finalImage(),f.bKey);
+    const sign=(store:NfcCommitJournal)=>retainLoggerCompletion({grantToken:f.grantToken,trust:f.trust,logger:f.logger,journal:store,operationId:"b",sectionKey:f.bKey,image:f.b.finalImage()});
+    await expect(sign(journal(p=>{if(p==="after-commit")throw Error("lost signature response");}))).rejects.toThrow(/lost/);
+    const saved=(await journal().restore(f.scope,"b",f.bKey)).closure!.token,spy=vi.spyOn(crypto.subtle,"sign");
+    try{expect(await sign(journal())).toBe(saved);expect(spy).not.toHaveBeenCalled();}finally{spy.mockRestore();}
   });
   it("binds freshness to one challenge, recipient and completion, with no clock extension",async()=>{
     const f=await fixture();await f.finalize();const session=f.challenge(),proof=await f.fresh(session);expect(await f.fresh(session)).toBe(proof);

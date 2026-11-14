@@ -2,9 +2,9 @@
 import type {SharingDevice} from "../src/sharing-crypto";
 import {EncryptedRecoveryDatabase,type StoragePoint} from "./recovery-sqlite";
 import {NfcCommitJournal} from "./nfc-commit-journal";
-import {inspectCommit,checkPinnedSection,type TagImage} from "./nfc-commit-model";
+import {inspectCommit,checkPinnedSection,packetDigest,type TagImage} from "./nfc-commit-model";
 import type {MemoryLayout} from "../src/nfc/layout";
-import {AUTH_DOMAIN,completionClaims,freshnessClaims,signProof,tokenDigest,verifyCompletion,verifyFreshness,verifyGrant,type Freshness,type LoggerCommitment,type Trust} from "./nfc-commit-authority-protocol";
+import {AUTH_DOMAIN,freshnessClaims,signProof,tokenDigest,verifyCompletion,verifyFreshness,type Freshness,type Trust} from "./nfc-commit-authority-protocol";
 
 // Each role gets its own encrypted database/domain and supplied custody key.
 // Values are exact original signed tokens, not material to regenerate on retry.
@@ -22,20 +22,8 @@ export class ProtocolLedger {
 const finalKey=(trust:Trust)=>JSON.stringify(["final",trust.scope.uid,trust.scope.patientId,trust.scope.referralId,trust.grantId]);
 const equal=(a:unknown,b:unknown)=>JSON.stringify(a)===JSON.stringify(b);
 
-export async function retainLoggerCompletion(input:{grantToken:string;trust:Trust;logger:SharingDevice;journal:NfcCommitJournal;operationId:string;sectionKey:CryptoKey;image:TagImage;ledger:ProtocolLedger}){
-  const {grantToken,logger,journal,operationId,sectionKey,ledger}=input,trust=structuredClone(input.trust),image=new Map([...input.image].map(([n,b])=>[n,b.slice()]));
-  const g=await verifyGrant(grantToken,trust);
-  if(logger.keyId!==g.logger.keyId)throw Error("Only the granted logger can sign completion.");
-  const restored=await journal.restore(trust.scope,operationId,sectionKey),s=restored.pending.snapshot();
-  if(restored.head!==operationId||!restored.completion||s.expected.context.section!=="b"||s.original?.packetDigest!==g.originalDigest||s.expected.context.sequence<g.minGeneration||s.expected.context.sequence>g.maxGeneration||(await restored.pending.reconcile(image,sectionKey)).status!=="confirmed-in-model")throw Error("Logger completion requires the active, completed B operation and exact readback.");
-  const claims:LoggerCommitment={grantId:g.id,grantDigest:await tokenDigest(grantToken),scope:g.scope,loggerId:g.logger.keyId,receiverId:g.receiver.keyId,originalDigest:g.originalDigest,generation:s.expected.context.sequence,packetDigest:s.expected.packetDigest,operationId,operationDigest:restored.completion.operationDigest,imageDigest:restored.completion.imageDigest};
-  return ledger.transaction(async rows=>{
-    const key=finalKey(trust),old=rows.get(key);
-    if(old){const verified=await verifyCompletion(old,grantToken,trust);if(!equal(verified.commitment,claims))throw Error("Logger already closed this grant with different bytes.");return old;}
-    const token=await signProof("completion",completionClaims(claims),logger);
-    // Check public/private signer consistency before retaining anything.
-    await verifyCompletion(token,grantToken,trust);rows.set(key,token);return token;
-  });
+export async function retainLoggerCompletion(input:{grantToken:string;trust:Trust;logger:SharingDevice;journal:NfcCommitJournal;operationId:string;sectionKey:CryptoKey;image:TagImage}){
+  return input.journal.closeLogger(input);
 }
 
 export type CurrentAuthority={enabled:boolean;grantToken:string;trust:Omit<Trust,"now">};
@@ -83,9 +71,26 @@ export class CompletionAuthority {
   }
 }
 
-// A challenge is created locally, never supplied by the tag or an incoming proof.
-// It is memory-only in this slice. A new process creates a new challenge and must
-// obtain new authority evidence; no old response can restore current status.
+export type ReceiverInput={grantToken:string;completion:string;freshness?:string;now:number;image:TagImage;layout:MemoryLayout;sectionKey:CryptoKey};
+export type ReceiverEvidence={version:1;trust:Trust;receiverId:string;challenge:string;grantToken:string;completion:string;freshness:string;acceptedAt:number;layout:MemoryLayout;image:[number,number[]][]};
+const copyReceiverInput=(input:ReceiverInput):ReceiverInput=>({...input,layout:structuredClone(input.layout),image:new Map([...input.image].map(([n,b])=>[n,new Uint8Array(b)]))});
+
+// Reusable verification does not consume a live challenge or restore freshness.
+// Historical callers must label its result as historical, never current.
+export async function verifyReceiverEvidence(e:ReceiverEvidence,sectionKey:CryptoKey){
+  if(e.version!==1||!/^[a-f0-9]{64}$/.test(e.challenge)||!Number.isSafeInteger(e.acceptedAt))throw Error("Invalid retained receiver evidence.");
+  const trust={...e.trust,now:e.acceptedAt},v=await verifyCompletion(e.completion,e.grantToken,trust);
+  if(v.grant.receiver.keyId!==e.receiverId)throw Error("Receiver is outside this grant.");
+  const proof=await verifyFreshness(e.freshness,trust,{grantId:v.grant.id,grantDigest:await tokenDigest(e.grantToken),completionDigest:await tokenDigest(e.completion),receiverId:e.receiverId,challenge:e.challenge,epoch:v.grant.epoch},e.trust.now);
+  if(e.image.length!==e.layout.blocks.length||new Set(e.image.map(([n])=>n)).size!==e.image.length||e.image.some(([n,b],i)=>n!==e.layout.blocks[i]||b.length!==16||b.some(v=>!Number.isInteger(v)||v<0||v>255)))throw Error("Invalid retained readback image.");
+  if(await packetDigest(new TextEncoder().encode(JSON.stringify(e.image)))!==v.commitment.imageDigest)throw Error("Readback image differs from signed completion.");
+  const image=new Map(e.image.map(([n,b])=>[n,new Uint8Array(b)])),decoded=await inspectCommit(image,e.layout,v.expected,sectionKey);
+  if(decoded.status!=="current")throw Error("Tag B differs from the authoritative signed completion.");
+  await checkPinnedSection(image,e.layout,{context:{...v.expected.context,section:"a",sequence:1},packetDigest:v.grant.originalDigest});
+  return{checkedAt:proof.issuedAt,expiresAt:proof.expiresAt,expected:v.expected,value:decoded.value};
+}
+
+// Always fresh in-memory challenges: historical evidence cannot resume a session.
 export class ReceiverChallenge {
   readonly #nonce=Array.from(crypto.getRandomValues(new Uint8Array(32)),n=>n.toString(16).padStart(2,"0")).join("");
   readonly #trust:Trust;
@@ -96,21 +101,21 @@ export class ReceiverChallenge {
     if(!Number.isSafeInteger(trust.now)||trust.now<0)throw Error("Trusted receiver clock required.");
   }
   get nonce(){return this.#nonce;}
-  async inspect(input:{grantToken:string;completion:string;freshness?:string;now:number;image:TagImage;layout:MemoryLayout;sectionKey:CryptoKey}){
-    const {grantToken,completion,freshness,now,sectionKey}=input,layout=structuredClone(input.layout),image=new Map([...input.image].map(([n,b])=>[n,b.slice()]));
-    const trust={...this.#trust,now},v=await verifyCompletion(completion,grantToken,trust);
-    if(v.grant.receiver.keyId!==this.#receiverId)throw Error("Receiver is outside this grant.");
-    if(!freshness)return{status:"authenticated-not-fresh" as const,reason:"Logger identity is verified, but current authority evidence is unavailable. No current clinical data returned."};
-    const proof=await verifyFreshness(freshness,trust,{grantId:v.grant.id,grantDigest:await tokenDigest(grantToken),completionDigest:await tokenDigest(completion),receiverId:this.#receiverId,challenge:this.#nonce,epoch:v.grant.epoch},this.#trust.now);
-    const evidence=await tokenDigest(freshness);
-    if(this.#acceptedDigest&&this.#acceptedDigest!==evidence)throw Error("Receiver challenge already consumed by different evidence.");
-    // A's independent reader remains available separately. This B result never
-    // promotes a digest read from Section C into a trusted expectation.
-    const decoded=await inspectCommit(image,layout,v.expected,sectionKey);
-    if(decoded.status!=="current")throw Error("Tag B differs from the authoritative signed completion.");
-    await checkPinnedSection(image,layout,{context:{...v.expected.context,section:"a",sequence:1},packetDigest:v.grant.originalDigest});
-    if(this.#acceptedDigest&&this.#acceptedDigest!==evidence)throw Error("Receiver challenge already consumed by different evidence.");
-    this.#acceptedDigest=evidence;
-    return{status:"current-at-authority-check" as const,checkedAt:proof.issuedAt,expiresAt:proof.expiresAt,expected:v.expected,value:decoded.value};
+  async capture(input:ReceiverInput){
+    const copy=copyReceiverInput(input);
+    if(!copy.freshness)throw Error("Fresh authority evidence required before retaining a receipt.");
+    const e:ReceiverEvidence={version:1,trust:structuredClone(this.#trust),receiverId:this.#receiverId,challenge:this.#nonce,grantToken:copy.grantToken,completion:copy.completion,freshness:copy.freshness,acceptedAt:copy.now,layout:copy.layout,image:copy.layout.blocks.map(n=>[n,[...(copy.image.get(n)??[])]] as [number,number[]])};
+    const result=await verifyReceiverEvidence(e,copy.sectionKey),digest=await tokenDigest(e.freshness);
+    if(this.#acceptedDigest&&this.#acceptedDigest!==digest)throw Error("Receiver challenge already consumed by different evidence.");
+    this.#acceptedDigest=digest;return{evidence:e,result};
+  }
+  async inspect(input:ReceiverInput){
+    const copy=copyReceiverInput(input);
+    if(!copy.freshness){
+      const v=await verifyCompletion(copy.completion,copy.grantToken,{...this.#trust,now:copy.now});
+      if(v.grant.receiver.keyId!==this.#receiverId)throw Error("Receiver is outside this grant.");
+      return{status:"authenticated-not-fresh" as const,reason:"Logger identity is verified, but current authority evidence is unavailable. No current clinical data returned."};
+    }
+    const {result}=await this.capture(copy);return{status:"current-at-authority-check" as const,...result};
   }
 }

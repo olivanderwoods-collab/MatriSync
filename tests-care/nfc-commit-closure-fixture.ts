@@ -1,0 +1,40 @@
+// Synthetic private material exists only for child-process crash tests, via IPC.
+import {join} from "node:path";
+import {randomBytes} from "node:crypto";
+import {generateKeyPair,exportJWK,importJWK} from "jose";
+import {newSharingDevice,publicPoint,deviceFingerprint,type PublicDevice} from "../src/sharing-crypto";
+import {memoryLayout} from "../src/nfc/layout";
+import {prepareSection,referralBinding,type SectionContext} from "../src/nfc/sections";
+import {prepareTravel} from "../src/nfc/travel";
+import {PendingTagCommit} from "./nfc-commit-model";
+import {NfcCommitJournal} from "./nfc-commit-journal";
+import {grantClaims,signProof,tokenDigest,verifyCompletion,sealKeyEnvelope,type Grant,type Trust} from "./nfc-commit-authority-protocol";
+import {ProtocolLedger,CompletionAuthority,ReceiverChallenge,retainLoggerCompletion,type CurrentAuthority} from "./nfc-commit-authority-model";
+import type {StoragePoint} from "./recovery-sqlite";
+export const layout=memoryLayout({model:"classic-1k",verifiedDataBlocks:Array.from({length:63},(_,i)=>i+1).filter(b=>b%4!==3),reservedBlocks:[]});
+const publicOnly=(d:PublicDevice):PublicDevice=>({keyId:d.keyId,encryption:d.encryption,signing:d.signing});
+export async function closureFixture(dir:string,closed=false){
+  const [authority,receiver]=await Promise.all([newSharingDevice(),newSharingDevice()]);
+  const sig=await generateKeyPair("ES256",{extractable:true}),loggerJwk=await exportJWK(sig.privateKey),signing=publicPoint(await exportJWK(sig.publicKey));
+  const logger={...await newSharingDevice(),signing,signKey:await importJWK(loggerJwk,"ES256",{extractable:false}) as CryptoKey};logger.keyId=await deviceFingerprint(logger.encryption,signing);
+  const scope={uid:"SYN-AUTH-OWNER",patientId:"SYN-AUTH-P",referralId:"SYN-AUTH-R"},grantId=crypto.randomUUID(),now=1794390000000;
+  const aRaw=randomBytes(32),bRaw=randomBytes(32),aKey=await crypto.subtle.importKey("raw",aRaw,"AES-GCM",false,["encrypt","decrypt"]),bKey=await crypto.subtle.importKey("raw",bRaw,"AES-GCM",false,["encrypt","decrypt"]);
+  const context:SectionContext={section:"a",dictionaryVersion:1,sequence:1,binding:await referralBinding(scope.patientId,scope.referralId)};
+  const a=await PendingTagCommit.prepare({layout,before:new Map(layout.blocks.map(n=>[n,new Uint8Array(16)])),context,key:aKey,packet:(await prepareSection({patientId:scope.patientId,referralId:scope.referralId,reason:"Synthetic reason",subject:"mother"},aKey,context,layout.aBytes)).packet});
+  const bc={...context,section:"b" as const},b=await PendingTagCommit.prepare({layout,before:a.finalImage(),context:bc,key:bKey,original:a.expected(),packet:await prepareTravel({tripStartedAt:now,events:[]},bKey,bc,layout.bBytes)});
+  const envelopes=await Promise.all([sealKeyEnvelope(grantId,scope,"logger","b",logger,bRaw),sealKeyEnvelope(grantId,scope,"receiver","a",receiver,aRaw),sealKeyEnvelope(grantId,scope,"receiver","b",receiver,bRaw)]);
+  const grant:Grant={id:grantId,scope,originalDigest:a.expected().packetDigest,logger:publicOnly(logger),receiver:publicOnly(receiver),minGeneration:1,maxGeneration:4,epoch:7,notBefore:now-1000,expiresAt:now+3600000,envelopes:await Promise.all(envelopes.map(async(token,i)=>({role:i===0?"logger" as const:"receiver" as const,section:i===1?"a" as const:"b" as const,keyId:i===0?logger.keyId:receiver.keyId,digest:await tokenDigest(token)})))};
+  const grantToken=await signProof("grant",grantClaims(grant),authority),trust:Trust={authority:publicOnly(authority),scope,grantId,epoch:7,now};
+  const key=randomBytes(32),id=crypto.randomUUID(),journalPath=join(dir,`${id}-pending.sqlite`),loggerPath=join(dir,`${id}-logger.sqlite`),authorityPath=join(dir,`${id}-authority.sqlite`);
+  const journal=new NfcCommitJournal(journalPath,key,id);journal.initialize();await journal.save(scope,"a",a,null);await journal.complete(scope,"a",a.finalImage(),aKey);await journal.save(scope,"b",b,"a");await journal.complete(scope,"b",b.finalImage(),bKey);
+  const loggerLedger=(fault?:(p:StoragePoint)=>void)=>new ProtocolLedger(loggerPath,key,id,"logger",{fault}),authorityLedger=(fault?:(p:StoragePoint)=>void)=>new ProtocolLedger(authorityPath,key,id,"authority",{fault});loggerLedger().initialize();authorityLedger().initialize();
+  const state:{now:number;value:CurrentAuthority}={now,value:{enabled:true,grantToken,trust:{authority:trust.authority,scope,grantId,epoch:7}}};
+  const issuer=(fault?:(p:StoragePoint)=>void)=>new CompletionAuthority({ledger:authorityLedger(fault),device:authority,clock:()=>state.now,current:()=>state.value});
+  const sign=()=>retainLoggerCompletion({grantToken,trust,logger,journal,operationId:"b",sectionKey:bKey,image:b.finalImage()});
+  const completion=closed?await sign():"",commitment=closed?(await verifyCompletion(completion,grantToken,trust)).commitment:null;
+  const challenge=()=>new ReceiverChallenge({...trust,now:state.now},receiver.keyId);
+  const inspect=(session:ReceiverChallenge,freshness?:string)=>session.inspect({grantToken,completion,freshness,now:state.now,image:b.finalImage(),layout,sectionKey:bKey});
+  const finalize=()=>issuer().finalize(logger.keyId,grantToken,completion);
+  const fresh=(session:ReceiverChallenge)=>issuer().freshness(receiver.keyId,grantToken,completion,session.nonce);
+  return{authority,logger,loggerJwk,receiver,scope,grantId,now,aRaw,bRaw,aKey,bKey,a,b,context,grant,grantToken,trust,envelopes,journal,journalPath,key,id,loggerPath,authorityPath,loggerLedger,authorityLedger,state,issuer,sign,completion,commitment,challenge,inspect,finalize,fresh};
+}
